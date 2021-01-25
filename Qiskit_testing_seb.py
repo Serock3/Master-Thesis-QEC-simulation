@@ -57,6 +57,18 @@ simulator = Aer.get_backend('statevector_simulator')
 # Execute and get counts
 result = execute(circ, simulator).result()
 statevector = result.get_statevector(circ)
+#%%
+circ = QuantumCircuit(2)
+circ.h(0)
+circ.cx(0, 1)
+
+# Select the UnitarySimulator from the Aer provider
+simulator = Aer.get_backend('unitary_simulator')
+
+# Execute and get counts
+result = execute(circ, simulator).result()
+unitary = result.get_unitary(circ)
+print("Circuit unitary:\n", unitary)
 plot_state_city(statevector, title='Bell state post-measurement')
 # %% Arbitrary initialization
 import math
@@ -113,37 +125,37 @@ from qiskit.ignis.verification.topological_codes import circuits
 
 #%% Kontrollera kod från stabilizer_code
 #%%
-# Note that some gates might be redundant, haven't checked
-def encode_input( circuit, qbReg ):
+
+# Not that this does not consider our setup
+def encode_input( qbReg ):
     '''Encode the input into logical 0 and 1
     This assumes that the 0:th qubit is the
     original state |psi> = a|0> + b|1>'''
-    
-    circuit.h( qbReg[3] )
-    circuit.cz( qbReg[3], qbReg[1] )
-    circuit.cz( qbReg[3], qbReg[2] )
-    circuit.cx( qbReg[3], qbReg[0] )   
+    encoding_circuit = QuantumCircuit( qbReg )
 
-    circuit.h( qbReg[2] )
-    circuit.cx( qbReg[2], qbReg[0] )
-    circuit.cz( qbReg[2], qbReg[3] )
-    circuit.cz( qbReg[2], qbReg[4] )
-    
-    circuit.h( qbReg[1] )
-    circuit.cz( qbReg[1], qbReg[0] )
-    circuit.cx( qbReg[1], qbReg[3] )
-    circuit.cz( qbReg[1], qbReg[4] )
-    
-    circuit.h( qbReg[4] )
-    circuit.cz( qbReg[4], qbReg[2] )
-    circuit.cz( qbReg[4], qbReg[3] )
-    circuit.cx( qbReg[4], qbReg[1] )
-    
-    circuit.barrier( qbReg )
-    return
+    encoding_circuit.h( qbReg[3] )
+    encoding_circuit.cz( qbReg[3], qbReg[1] )
+    encoding_circuit.cz( qbReg[3], qbReg[2] )
+    encoding_circuit.cx( qbReg[3], qbReg[0] )   
 
-# Define our stabilizers
-def measure_stabilizer( circuit, qbReg, anReg, clReg, i ):
+    encoding_circuit.h( qbReg[2] )
+    encoding_circuit.cx( qbReg[2], qbReg[0] )
+    encoding_circuit.cz( qbReg[2], qbReg[3] )
+    encoding_circuit.cz( qbReg[2], qbReg[4] )
+    
+    encoding_circuit.h( qbReg[1] )
+    encoding_circuit.cz( qbReg[1], qbReg[0] )
+    encoding_circuit.cx( qbReg[1], qbReg[3] )
+    encoding_circuit.cz( qbReg[1], qbReg[4] )
+    
+    encoding_circuit.h( qbReg[4] )
+    encoding_circuit.cz( qbReg[4], qbReg[2] )
+    encoding_circuit.cz( qbReg[4], qbReg[3] )
+    encoding_circuit.cx( qbReg[4], qbReg[1] )
+    
+    return encoding_circuit
+
+def measure_stabilizer( qbReg, anReg, clReg, i ):
     '''Function for adding stabilizer measurements to a circuit.
     Note that a measurement of X is done by using Hadamard before
     and after. Input i specifies the stabilizer to measure:
@@ -156,61 +168,129 @@ def measure_stabilizer( circuit, qbReg, anReg, clReg, i ):
     if not isinstance(i, int):
         raise error('i must be an integer')
     
+    stab_circuit = QuantumCircuit( qbReg, anReg, clReg )
+
     # Generate indexes
     index = np.mod( i + np.array([0, 1, 2, 3]), 5 ) 
     
     # Measure stabilizers
-    circuit.h( qbReg[ index[0] ] )
-    circuit.h( anReg[0] )
-    circuit.cz( anReg[0], qbReg[ index[0] ] )
-    circuit.h( qbReg[ index[0] ] ) 
+    stab_circuit.h( qbReg[ index[0] ] )
+    stab_circuit.h( anReg[0] )
+    stab_circuit.cz( anReg[0], qbReg[ index[0] ] )
+    stab_circuit.h( qbReg[ index[0] ] ) 
     
-    circuit.cz( anReg[0], qbReg[ index[1] ] )
+    stab_circuit.cz( anReg[0], qbReg[ index[1] ] )
 
-    circuit.cz( anReg[0], qbReg[ index[2] ] )
+    stab_circuit.cz( anReg[0], qbReg[ index[2] ] )
         
-    circuit.h( qbReg[ index[3] ] )
-    circuit.cz( anReg[0], qbReg[ index[3] ] )
-    circuit.h( anReg[0] )
-    circuit.h( qbReg[ index[3] ] ) 
+    stab_circuit.h( qbReg[ index[3] ] )
+    stab_circuit.cz( anReg[0], qbReg[ index[3] ] )
+    stab_circuit.h( anReg[0] )
+    stab_circuit.h( qbReg[ index[3] ] ) 
         
-    circuit.measure( anReg[0], clReg[i] )
-    circuit.reset( anReg[0] )
-    return
+    stab_circuit.measure( anReg[0], clReg[i] )
+    stab_circuit.reset( anReg[0] )
+    return stab_circuit
 
-def run_stabilizer( circuit, qbReg, anReg, clReg ):
-    measure_stabilizer( circuit, qbReg, anReg, clReg, 0 )
-    measure_stabilizer( circuit, qbReg, anReg, clReg, 1 )
-    measure_stabilizer( circuit, qbReg, anReg, clReg, 2 )
-    measure_stabilizer( circuit, qbReg, anReg, clReg, 3 )
-    return
+def run_stabilizer( qbReg, anReg, clReg ):
+    stab_circuit = QuantumCircuit( qbReg, anReg, clReg )
+    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 0 )
+    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 1 )
+    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 2 )
+    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 3 )
+    return stab_circuit
 
 # Correct possible errors
-def recovery_scheme( circuit, qbReg, clReg ):
+def recovery_scheme( qbReg, clReg ):
 
-    circuit.x(qbReg[1]).c_if(clReg, 1)
-    circuit.z(qbReg[4]).c_if(clReg, 2)
-    circuit.x(qbReg[2]).c_if(clReg, 3)
-    circuit.z(qbReg[2]).c_if(clReg, 4)
-    circuit.z(qbReg[0]).c_if(clReg, 5)
-    circuit.x(qbReg[3]).c_if(clReg, 6)
-    circuit.x(qbReg[2]).c_if(clReg, 7)
-    circuit.z(qbReg[2]).c_if(clReg, 7)
-    circuit.x(qbReg[0]).c_if(clReg, 8)
-    circuit.z(qbReg[3]).c_if(clReg, 9)
-    circuit.z(qbReg[1]).c_if(clReg, 10)
-    circuit.x(qbReg[1]).c_if(clReg, 11)
-    circuit.z(qbReg[1]).c_if(clReg, 11)
-    circuit.x(qbReg[4]).c_if(clReg, 12)
-    circuit.x(qbReg[0]).c_if(clReg, 13)
-    circuit.z(qbReg[0]).c_if(clReg, 13)
-    circuit.x(qbReg[4]).c_if(clReg, 14)
-    circuit.z(qbReg[4]).c_if(clReg, 14)
-    circuit.x(qbReg[3]).c_if(clReg, 15)
-    circuit.z(qbReg[3]).c_if(clReg, 15)
+    recovery_circuit = QuantumCircuit( qbReg, clReg )
+    recovery_circuit.x(qbReg[1]).c_if(clReg, 1)
+    recovery_circuit.z(qbReg[4]).c_if(clReg, 2)
+    recovery_circuit.x(qbReg[2]).c_if(clReg, 3)
+    recovery_circuit.z(qbReg[2]).c_if(clReg, 4)
+    recovery_circuit.z(qbReg[0]).c_if(clReg, 5)
+    recovery_circuit.x(qbReg[3]).c_if(clReg, 6)
+    recovery_circuit.x(qbReg[2]).c_if(clReg, 7)
+    recovery_circuit.z(qbReg[2]).c_if(clReg, 7)
+    recovery_circuit.x(qbReg[0]).c_if(clReg, 8)
+    recovery_circuit.z(qbReg[3]).c_if(clReg, 9)
+    recovery_circuit.z(qbReg[1]).c_if(clReg, 10)
+    recovery_circuit.x(qbReg[1]).c_if(clReg, 11)
+    recovery_circuit.z(qbReg[1]).c_if(clReg, 11)
+    recovery_circuit.x(qbReg[4]).c_if(clReg, 12)
+    recovery_circuit.x(qbReg[0]).c_if(clReg, 13)
+    recovery_circuit.z(qbReg[0]).c_if(clReg, 13)
+    recovery_circuit.x(qbReg[4]).c_if(clReg, 14)
+    recovery_circuit.z(qbReg[4]).c_if(clReg, 14)
+    recovery_circuit.x(qbReg[3]).c_if(clReg, 15)
+    recovery_circuit.z(qbReg[3]).c_if(clReg, 15)
 
-    return
-    
+    return recovery_circuit
+
+def logical_states():
+    logical_0 = np.zeros(2**5)
+    logical_0[0b00000]=1/4
+    logical_0[0b10010]=1/4
+    logical_0[0b01001]=1/4
+    logical_0[0b10100]=1/4
+    logical_0[0b01010]=1/4
+    logical_0[0b11011]=-1/4
+    logical_0[0b00110]=-1/4
+    logical_0[0b11000]=-1/4
+    logical_0[0b11101]=-1/4
+    logical_0[0b00011]=-1/4
+    logical_0[0b11110]=-1/4
+    logical_0[0b01111]=-1/4
+    logical_0[0b10001]=-1/4
+    logical_0[0b01100]=-1/4
+    logical_0[0b10111]=-1/4
+    logical_0[0b00101]=1/4
+
+    logical_1 = np.zeros(2**5)
+    logical_1[0b11111]=1/4
+    logical_1[0b01101]=1/4
+    logical_1[0b10110]=1/4
+    logical_1[0b01011]=1/4
+    logical_1[0b10101]=1/4
+    logical_1[0b00100]=-1/4
+    logical_1[0b11001]=-1/4
+    logical_1[0b00111]=-1/4
+    logical_1[0b00010]=-1/4
+    logical_1[0b11100]=-1/4
+    logical_1[0b00001]=-1/4
+    logical_1[0b10000]=-1/4
+    logical_1[0b01110]=-1/4
+    logical_1[0b10011]=-1/4
+    logical_1[0b01000]=-1/4
+    logical_1[0b11010]=1/4
+
+    # Add two ancillas in |0>
+    an0 = np.zeros(2**2)
+    an0[0] = 1
+
+    logical_1 = np.kron(logical_1, an0)
+    logical_0 = np.kron(logical_0, an0)
+    return [logical_0, logical_1]
+
+def noise_model():
+    # Example error probabilities
+    p_reset = 0.0000000
+    p_meas = 0.00
+    p_gate1 = 1.00
+
+    # QuantumError objects
+    error_reset = pauli_error([('X', p_reset), ('I', 1 - p_reset)])
+    error_meas = pauli_error([('X',p_meas), ('I', 1 - p_meas)])
+    error_gate1 = pauli_error([('X',p_gate1), ('I', 1 - p_gate1)])
+    error_gate2 = error_gate1.tensor(error_gate1)
+
+    # Add errors to noise model
+    noise_bit_flip = NoiseModel()
+    noise_bit_flip.add_all_qubit_quantum_error(error_reset, "reset")
+    noise_bit_flip.add_all_qubit_quantum_error(error_meas, "measure")
+    noise_bit_flip.add_all_qubit_quantum_error(error_gate1, ["u1", "u2", "u3", "x"])
+#    noise_bit_flip.add_all_qubit_quantum_error(error_gate2, ["cx"])
+    return noise_bit_flip
 
 # %% Define our registers and circuit
 qb = QuantumRegister(5, 'code_qubit')     # The 5 qubits to encode the state in
@@ -277,45 +357,53 @@ encode_input( circuit, qb )
 result = execute(circuit, Aer.get_backend('statevector_simulator')).result()
 statevector = result.get_statevector()
 print('Fidelity of encoded |1>_L',state_fidelity(logical_1,statevector))
-#%%
-# Add errors manually
-# (Nothing tried here yet)
-
-circuit = QuantumCircuit( cr, readout, qb,an)
-encode_input( circuit, qb )
-# Measure stabilizers
-measure_stabilizer( circuit, qb, an, cr, 0 )
-measure_stabilizer( circuit, qb, an, cr, 1 )
-measure_stabilizer( circuit, qb, an, cr, 2 )
-measure_stabilizer( circuit, qb, an, cr, 3 )
-
-# Readout of the encoded state
-circuit.measure( qb, readout )
-
-counts = execute(circuit, Aer.get_backend('qasm_simulator')).result().get_counts()
-print(counts)
-
-circuit.draw(output='mpl') # If it does not work, simply remove mpl: circuit.draw()
-plot_histogram(counts)
-# All stabilizers should give 0 (meaning '0000' for all states) unless error has been added.
 
 # %% Transpiler
 from qiskit.compiler import transpile
 from qiskit.transpiler import PassManager,CouplingMap,Layout
 from qiskit.visualization import plot_circuit_layout
 
-circuit = QuantumCircuit( cr, readout, qb,an )
-encode_input( circuit, qb )
-# run_stabilizer(circuit,qb,an,cr)
-
+#%% Encoding circuit
+circuit = QuantumCircuit( cr, readout, qb )
+circuit += encode_input( qb )
+# circuit += run_stabilizer(qb,an,cr)
+print('Gates: ', circuit.count_ops())
+print('Depth: ', circuit.depth())
 circuit.draw(output='mpl')
+#%% Full circuit
+circuit = QuantumCircuit( cr, readout, an, qb )
 
+# Prepare the input
+circuit.x( qb[0] ) # As an example, start in |1>
+#circuit.snapshot_statevector('snapshot_label')
+
+# Encode the state
+circuit += encode_input( qb ) 
+# circuit.snapshot_statevector('post_encoding')
+
+# Add errors manually
+circuit.rx( np.pi, qb[3] )
+circuit.z( qb[3] )
+
+# Measure stabilizers
+circuit += run_stabilizer( qb, an, cr )
+
+# Correct the error
+circuit += recovery_scheme( qb, cr )
+
+#run_stabilizer( circuit, qb, an, cr )
+# Readout of the encoded state
+# circuit.snapshot_statevector('pre_measure')
+circuit.measure( qb, readout )
+print('Gates: ', transpiled_circuit.count_ops())
+print('depth: ', circuit.depth())
+circuit.draw(output='mpl')
+#%% Set up device properties
 basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap','cz']
 couplinglist=[[0, 1],[0,6],[1,6],[2,3],[2,6],[3,6],[4,5],[4,6],[5,6]]
 reverse_couplinglist = [[y,x] for [x,y] in couplinglist]
 coupling_map = CouplingMap(couplinglist=couplinglist,description='A hexagoal 7qb code with two ancillas')
 coupling_map.draw()
-#%%
 layout = Layout(
 {qb[0]: 0,
  qb[1]: 1,
@@ -324,39 +412,120 @@ layout = Layout(
  qb[4]: 4,
  an[0]: 5,
  an[1]: 6})
-optimization_level=2
-transpiled_circuit = transpile(circuit,coupling_map=coupling_map,basis_gates=basis_gates,optimization_level=optimization_level,initial_layout=layout)
-print('depth: ', transpiled_circuit.depth())
+optimization_level=0
+transpiled_circuit = transpile(circuit,coupling_map=coupling_map,basis_gates=basis_gates,optimization_level=optimization_level)
+print('Final depth: ', transpiled_circuit.depth())
+print('Final num gates = ', transpiled_circuit.count_ops())
 # plot_circuit_layout(transpiled_circuit,backend=coupling_map)
 
 # %%
-depth = 100
+import warnings
+
+depth = 10000
+routing_method = 'sabre' # basic lookahead stochastic sabre
+initial_layout = None
+layout_method = 'sabre' # trivial 'dense', 'noise_adaptive' sabre
+translation_method = None # 'unroller',  translator , synthesis
+optimization_level=3
 for i in range(100):
-    transpiled_circuit_tmp = transpile(circuit,coupling_map=coupling_map,basis_gates=basis_gates,optimization_level=optimization_level,initial_layout=layout)
+    with warnings.catch_warnings(): # sabre causes deprication warning, this will ignore them
+        warnings.simplefilter("ignore")
+        transpiled_circuit_tmp = transpile(circuit,coupling_map=coupling_map,basis_gates=basis_gates,optimization_level=optimization_level,initial_layout=initial_layout,layout_method=layout_method, routing_method=routing_method,translation_method=translation_method)
     print('depth: ', transpiled_circuit_tmp.depth())
     if transpiled_circuit_tmp.depth()<depth:
         depth = transpiled_circuit_tmp.depth()
         transpiled_circuit = transpiled_circuit_tmp
-print(depth)
-
+print('Final depth: ', transpiled_circuit.depth())
+print('Final gates = ', transpiled_circuit.count_ops())
 transpiled_circuit.draw(output='mpl')
 # %%
-# %% Tesing EquivalenceLibrary
+import logging
+
+logging.basicConfig()
+logging.getLogger('qiskit.transpiler').setLevel(logging.INFO)
+logging.getLogger('qiskit.transpiler').setLevel(0)
+
+# %% Testing EquivalenceLibrary
 from qiskit.circuit import EquivalenceLibrary
-from  qiskit.circuit.library import iswap
+from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZGate
+from qiskit.circuit.equivalence_library import StandardEquivalenceLibrary, SessionEquivalenceLibrary
 
-eq = EquivalenceLibrary()
-eq.has_entry(iswap)
+sel = SessionEquivalenceLibrary
+sel.has_entry(iSwapGate())
+# pil_img = sel.draw()
+# pil_img.save('SessionEquivalenceLibrary.png')
+# %% Adding custom equivalence
+# SwapGate
 
+q = QuantumRegister(2, 'q')
+def_swap = QuantumCircuit(q)
+for inst, qargs, cargs in [
+        (iSwapGate(), [q[0], q[1]], []),
+        (CZGate(), [q[0], q[1]], []),
+        (SGate().inverse(), [q[1]], []),
+        (SGate().inverse(), [q[0]], [])
+]:
+    def_swap.append(inst, qargs, cargs)
+sel.add_equivalence(SwapGate(), def_swap)
+sel.get_entry(SwapGate())[0].draw()
+
+# # iSwapGate
+# q = QuantumRegister(2, 'q')
+# def_iswap = QuantumCircuit(q)
+# for inst, qargs, cargs in [
+#         (SwapGate(), [q[0], q[1]], []),
+#         (CZGate(), [q[0], q[1]], []),
+#         (SGate(), [q[1]], []),
+#         (SGate(), [q[0]], [])
+# ]:
+#     def_iswap.append(inst, qargs, cargs)
+# sel.add_equivalence(iSwapGate(), def_iswap)
+
+
+# %%
+from IPython.display import display
+from qiskit.transpiler import TransformationPass
+from qiskit.converters import dag_to_circuit
+def callback_func(**kwargs):
+    pass_ = kwargs['pass_']
+    dag = kwargs['dag']
+    time = kwargs['time']
+    property_set = kwargs['property_set']
+    count = kwargs['count']
+
+    if isinstance(pass_,TransformationPass):
+        circuit_tmp = dag_to_circuit(dag)
+        print('pass namne: ',pass_.name())
+        display(circuit_tmp.draw(output='mpl'))
+
+#%% Modiy and draw passmanager
+from qiskit.transpiler.preset_passmanagers\
+    import level_0_pass_manager,level_1_pass_manager,level_2_pass_manager,level_3_pass_manager
+
+from qiskit.transpiler.passmanager_config import PassManagerConfig
+pm = level_0_pass_manager(PassManagerConfig()) # the drawing functionality doesn't work if coupling_map is specified
+pm.draw()
+
+# pm.passes()
+# pm.remove(1) #remove 'RemoveResetInZeroState'
+# pm.draw()
+
+# pm.replace() # Byt mot ett annat pass
+
+# %%
+from qiskit.transpiler import passes
+[pass_ for pass_ in dir(passes) if pass_[0].isupper()]
+from qiskit.transpiler.passes import BasisTranslator
+from qiskit.transpiler.passes import UnrollCustomDefinitions
+# %%
+pm = level_0_pass_manager(PassManagerConfig(coupling_map=coupling_map,basis_gates=basis_gates))
+print(pm.passes()[-3],'\n')
+pm.replace(-3,[UnrollCustomDefinitions(sel, basis_gates),
+                   BasisTranslator(sel, basis_gates)])
+print(pm.passes()[-3])
 #%%
-circ = QuantumCircuit(2)
-circ.h(0)
-circ.cx(0, 1)
-
-# Select the UnitarySimulator from the Aer provider
-simulator = Aer.get_backend('unitary_simulator')
-
-# Execute and get counts
-result = execute(circ, simulator).result()
-unitary = result.get_unitary(circ)
-print("Circuit unitary:\n", unitary)
+print('before transpilation ')
+display(circuit.draw(output='mpl'))
+pm.run(circuit,callback=callback_func)
+pm.passes()
+#%%
