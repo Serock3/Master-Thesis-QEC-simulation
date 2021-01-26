@@ -139,10 +139,11 @@ def encode_input( circuit, qbReg ):
     circuit.cz( qbReg[4], qbReg[3] )
     circuit.cx( qbReg[4], qbReg[1] )
     
+    circuit.barrier( qbReg )
     return
 
 # Define our stabilizers
-def measure_stabilizer( circuit, qbReg, anReg, clReg, i:int ):
+def measure_stabilizer( circuit, qbReg, anReg, clReg, i ):
     '''Function for adding stabilizer measurements to a circuit.
     Note that a measurement of X is done by using Hadamard before
     and after. Input i specifies the stabilizer to measure:
@@ -160,25 +161,60 @@ def measure_stabilizer( circuit, qbReg, anReg, clReg, i:int ):
     
     # Measure stabilizers
     circuit.h( qbReg[ index[0] ] )
-    circuit.cx( qbReg[ index[0] ], anReg[i] )
+    circuit.h( anReg[0] )
+    circuit.cz( anReg[0], qbReg[ index[0] ] )
     circuit.h( qbReg[ index[0] ] ) 
-        
-    circuit.cx( qbReg[ index[1] ], anReg[i] )
-        
-    circuit.cx( qbReg[ index[2] ], anReg[i] )
+    
+    circuit.cz( anReg[0], qbReg[ index[1] ] )
+
+    circuit.cz( anReg[0], qbReg[ index[2] ] )
         
     circuit.h( qbReg[ index[3] ] )
-    circuit.cx( qbReg[ index[3] ], anReg[i] )
-    circuit.h( qbReg[ index[3] ])
+    circuit.cz( anReg[0], qbReg[ index[3] ] )
+    circuit.h( anReg[0] )
+    circuit.h( qbReg[ index[3] ] ) 
         
-    circuit.measure( anReg[i], clReg[i])
-    
+    circuit.measure( anReg[0], clReg[i] )
+    circuit.reset( anReg[0] )
+    return
+
+def run_stabilizer( circuit, qbReg, anReg, clReg ):
+    measure_stabilizer( circuit, qbReg, anReg, clReg, 0 )
+    measure_stabilizer( circuit, qbReg, anReg, clReg, 1 )
+    measure_stabilizer( circuit, qbReg, anReg, clReg, 2 )
+    measure_stabilizer( circuit, qbReg, anReg, clReg, 3 )
+    return
+
+# Correct possible errors
+def recovery_scheme( circuit, qbReg, clReg ):
+
+    circuit.x(qbReg[1]).c_if(clReg, 1)
+    circuit.z(qbReg[4]).c_if(clReg, 2)
+    circuit.x(qbReg[2]).c_if(clReg, 3)
+    circuit.z(qbReg[2]).c_if(clReg, 4)
+    circuit.z(qbReg[0]).c_if(clReg, 5)
+    circuit.x(qbReg[3]).c_if(clReg, 6)
+    circuit.x(qbReg[2]).c_if(clReg, 7)
+    circuit.z(qbReg[2]).c_if(clReg, 7)
+    circuit.x(qbReg[0]).c_if(clReg, 8)
+    circuit.z(qbReg[3]).c_if(clReg, 9)
+    circuit.z(qbReg[1]).c_if(clReg, 10)
+    circuit.x(qbReg[1]).c_if(clReg, 11)
+    circuit.z(qbReg[1]).c_if(clReg, 11)
+    circuit.x(qbReg[4]).c_if(clReg, 12)
+    circuit.x(qbReg[0]).c_if(clReg, 13)
+    circuit.z(qbReg[0]).c_if(clReg, 13)
+    circuit.x(qbReg[4]).c_if(clReg, 14)
+    circuit.z(qbReg[4]).c_if(clReg, 14)
+    circuit.x(qbReg[3]).c_if(clReg, 15)
+    circuit.z(qbReg[3]).c_if(clReg, 15)
+
     return
     
 
 # %% Define our registers and circuit
 qb = QuantumRegister(5, 'code_qubit')     # The 5 qubits to encode the state in
-an = QuantumRegister(4, 'ancilla_qubit')  # The two ancilla qubits (one of them is unused)
+an = QuantumRegister(2, 'ancilla_qubit')  # The two ancilla qubits (one of them is unused)
 cr = ClassicalRegister(4, 'syndrome_bit') # Classical register for registering the syndromes
 readout = ClassicalRegister(5, 'readout') # Readout of the final state at the end for statistics
 # %% Test the encoding
@@ -245,6 +281,8 @@ print('Fidelity of encoded |1>_L',state_fidelity(logical_1,statevector))
 # Add errors manually
 # (Nothing tried here yet)
 
+circuit = QuantumCircuit( cr, readout, qb,an)
+encode_input( circuit, qb )
 # Measure stabilizers
 measure_stabilizer( circuit, qb, an, cr, 0 )
 measure_stabilizer( circuit, qb, an, cr, 1 )
@@ -260,4 +298,65 @@ print(counts)
 circuit.draw(output='mpl') # If it does not work, simply remove mpl: circuit.draw()
 plot_histogram(counts)
 # All stabilizers should give 0 (meaning '0000' for all states) unless error has been added.
+
+# %% Transpiler
+from qiskit.compiler import transpile
+from qiskit.transpiler import PassManager,CouplingMap,Layout
+from qiskit.visualization import plot_circuit_layout
+
+circuit = QuantumCircuit( cr, readout, qb,an )
+encode_input( circuit, qb )
+# run_stabilizer(circuit,qb,an,cr)
+
+circuit.draw(output='mpl')
+
+basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap','cz']
+couplinglist=[[0, 1],[0,6],[1,6],[2,3],[2,6],[3,6],[4,5],[4,6],[5,6]]
+reverse_couplinglist = [[y,x] for [x,y] in couplinglist]
+coupling_map = CouplingMap(couplinglist=couplinglist,description='A hexagoal 7qb code with two ancillas')
+coupling_map.draw()
+#%%
+layout = Layout(
+{qb[0]: 0,
+ qb[1]: 1,
+ qb[2]: 2,
+ qb[3]: 3,
+ qb[4]: 4,
+ an[0]: 5,
+ an[1]: 6})
+optimization_level=2
+transpiled_circuit = transpile(circuit,coupling_map=coupling_map,basis_gates=basis_gates,optimization_level=optimization_level,initial_layout=layout)
+print('depth: ', transpiled_circuit.depth())
+# plot_circuit_layout(transpiled_circuit,backend=coupling_map)
+
 # %%
+depth = 100
+for i in range(100):
+    transpiled_circuit_tmp = transpile(circuit,coupling_map=coupling_map,basis_gates=basis_gates,optimization_level=optimization_level,initial_layout=layout)
+    print('depth: ', transpiled_circuit_tmp.depth())
+    if transpiled_circuit_tmp.depth()<depth:
+        depth = transpiled_circuit_tmp.depth()
+        transpiled_circuit = transpiled_circuit_tmp
+print(depth)
+
+transpiled_circuit.draw(output='mpl')
+# %%
+# %% Tesing EquivalenceLibrary
+from qiskit.circuit import EquivalenceLibrary
+from  qiskit.circuit.library import iswap
+
+eq = EquivalenceLibrary()
+eq.has_entry(iswap)
+
+#%%
+circ = QuantumCircuit(2)
+circ.h(0)
+circ.cx(0, 1)
+
+# Select the UnitarySimulator from the Aer provider
+simulator = Aer.get_backend('unitary_simulator')
+
+# Execute and get counts
+result = execute(circ, simulator).result()
+unitary = result.get_unitary(circ)
+print("Circuit unitary:\n", unitary)
