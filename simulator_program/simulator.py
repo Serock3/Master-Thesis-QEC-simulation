@@ -1,25 +1,15 @@
-# Import modules
+# %% Import modules
 import numpy as np
-#from qiskit import(
-#    QuantumCircuit,
-#    execute,
-#    Aer,
-#    BasicAer,
-#    QuantumRegister,
-#    ClassicalRegister
-#    )
 from qiskit import *
 from qiskit.visualization import plot_histogram
 
-
-# Import from Qiskit Aer noise module
-from qiskit.providers.aer.noise import NoiseModel
-from qiskit.providers.aer.noise import QuantumError, ReadoutError
-from qiskit.providers.aer.noise import pauli_error
-from qiskit.providers.aer.noise import depolarizing_error
-
 from qiskit.quantum_info import state_fidelity
 from qiskit.providers.aer.extensions.snapshot_statevector import *
+
+# Import our own files
+from custom_noise_models import pauli_noise_model
+from custom_transpiler import transpile_circuit
+
 # %% Defining useful functions
 
 # Not that this does not consider our setup
@@ -51,6 +41,9 @@ def encode_input( qbReg ):
     
     return encoding_circuit
 
+
+
+
 def measure_stabilizer( qbReg, anReg, clReg, i ):
     '''Function for adding stabilizer measurements to a circuit.
     Note that a measurement of X is done by using Hadamard before
@@ -71,22 +64,25 @@ def measure_stabilizer( qbReg, anReg, clReg, i ):
     
     # Measure stabilizers
     stab_circuit.h( qbReg[ index[0] ] )
-    stab_circuit.h( anReg[0] )
-    stab_circuit.cz( anReg[0], qbReg[ index[0] ] )
+    stab_circuit.h( anReg[1] )
+    stab_circuit.cz( anReg[1], qbReg[ index[0] ] )
     stab_circuit.h( qbReg[ index[0] ] ) 
     
-    stab_circuit.cz( anReg[0], qbReg[ index[1] ] )
+    stab_circuit.cz( anReg[1], qbReg[ index[1] ] )
 
-    stab_circuit.cz( anReg[0], qbReg[ index[2] ] )
+    stab_circuit.cz( anReg[1], qbReg[ index[2] ] )
         
     stab_circuit.h( qbReg[ index[3] ] )
-    stab_circuit.cz( anReg[0], qbReg[ index[3] ] )
-    stab_circuit.h( anReg[0] )
+    stab_circuit.cz( anReg[1], qbReg[ index[3] ] )
+    stab_circuit.h( anReg[1] )
     stab_circuit.h( qbReg[ index[3] ] ) 
         
     stab_circuit.measure( anReg[0], clReg[i] )
     stab_circuit.reset( anReg[0] )
     return stab_circuit
+
+
+
 
 def run_stabilizer( qbReg, anReg, clReg ):
     stab_circuit = QuantumCircuit( qbReg, anReg, clReg )
@@ -95,6 +91,9 @@ def run_stabilizer( qbReg, anReg, clReg ):
     stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 2 )
     stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 3 )
     return stab_circuit
+
+
+
 
 # Correct possible errors
 def recovery_scheme( qbReg, clReg ):
@@ -122,6 +121,9 @@ def recovery_scheme( qbReg, clReg ):
     recovery_circuit.z(qbReg[3]).c_if(clReg, 15)
 
     return recovery_circuit
+
+
+
 
 def logical_states():
     logical_0 = np.zeros(2**5)
@@ -162,31 +164,15 @@ def logical_states():
 
     # Add two ancillas in |0>
     an0 = np.zeros(2**2)
-    an0[0] = 1
+    an0[0] = 1.0
 
-    logical_1 = np.kron(logical_1, an0)
-    logical_0 = np.kron(logical_0, an0)
+    #logical_1 = np.kron(logical_1, an0)
+    #logical_0 = np.kron(logical_0, an0)
+
+    logical_0 = np.kron(an0, logical_0)
+    logical_1 = np.kron(an0, logical_1)    
     return [logical_0, logical_1]
 
-def noise_model():
-    # Example error probabilities
-    p_reset = 0.0000000
-    p_meas = 0.00
-    p_gate1 = 1.00
-
-    # QuantumError objects
-    error_reset = pauli_error([('X', p_reset), ('I', 1 - p_reset)])
-    error_meas = pauli_error([('X',p_meas), ('I', 1 - p_meas)])
-    error_gate1 = pauli_error([('X',p_gate1), ('I', 1 - p_gate1)])
-    error_gate2 = error_gate1.tensor(error_gate1)
-
-    # Add errors to noise model
-    noise_bit_flip = NoiseModel()
-    noise_bit_flip.add_all_qubit_quantum_error(error_reset, "reset")
-    noise_bit_flip.add_all_qubit_quantum_error(error_meas, "measure")
-    noise_bit_flip.add_all_qubit_quantum_error(error_gate1, ["u1", "u2", "u3", "x"])
-#    noise_bit_flip.add_all_qubit_quantum_error(error_gate2, ["cx"])
-    return noise_bit_flip
 
 # %% Define our registers and circuit
 qb = QuantumRegister(5, 'code_qubit')     # The 5 qubits to encode the state in
@@ -196,48 +182,57 @@ readout = ClassicalRegister(5, 'readout') # Readout of the final state at the en
 
 # %% Running the quantum circuit
 
-
 circuit = QuantumCircuit( cr, readout, an, qb )
 
 # Prepare the input
 circuit.x( qb[0] ) # As an example, start in |1>
-#circuit.snapshot_statevector('snapshot_label')
 
 # Encode the state
 circuit += encode_input( qb ) 
 circuit.snapshot_statevector('post_encoding')
-
-# Add errors manually
-circuit.rx( np.pi, qb[3] )
-circuit.z( qb[3] )
 
 # Measure stabilizers
 circuit += run_stabilizer( qb, an, cr )
 
 # Correct the error
 circuit += recovery_scheme( qb, cr )
-
+#circuit.reset( an[0] )
 #run_stabilizer( circuit, qb, an, cr )
 # Readout of the encoded state
+# Measure at the end of the run
 circuit.snapshot_statevector('pre_measure')
 circuit.measure( qb, readout )
 circuit.snapshot_statevector('post_measure')
 
-noise = noise_model()
+noise = pauli_noise_model()
 
-results = execute(circuit, Aer.get_backend('qasm_simulator'), noise_model=noise, shots=1000).result()
+
+# %% Transpiler
+transpiled_circuit = transpile_circuit( circuit, qb, an )
+
+# Run the circuit
+results = execute(
+    transpiled_circuit, 
+    Aer.get_backend('qasm_simulator'), 
+    noise_model=noise, 
+    shots=1000
+    ).result()
 counts = results.get_counts()
 
 # Get the state vectors
 state_vectors = results.data()['snapshots']['statevector']
-sv_post_encoding = state_vectors['post_encoding'][1]
-sv_pre_measure = state_vectors['pre_measure'][1]
-sv_post_measure = state_vectors['post_measure'][1]
+sv_post_encoding = state_vectors['post_encoding'][0]
+sv_pre_measure = state_vectors['pre_measure'][0]
+sv_post_measure = state_vectors['post_measure'][0]
 
-#print(sv_post_encoding.shape)
 logical = logical_states()
-print('Fidelity of encoded |1>_L',state_fidelity(logical[1],sv_pre_measure))
-print('Fidelity of encoded |0>_L',state_fidelity(logical[0],sv_pre_measure))
+print('Fidelity of encoded |1>_L',state_fidelity(logical[1],sv_post_encoding))
+print('Fidelity of encoded |0>_L',state_fidelity(logical[0],sv_post_encoding))
 #circuit.draw(output='mpl') # If it does not work, simply remove mpl: circuit.draw()
-#plot_histogram(counts)
-print(counts)
+
+#print(counts)
+#plot_histogram(counts)A
+#circuit.draw(output='mpl')
+#print(sv_post_encoding.shape)
+print(logical[1])
+# %%
