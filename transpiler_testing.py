@@ -407,8 +407,8 @@ run_stabilizer( circuit, qb, an, cr )
 #circuit += run_stabilizer( qb, an, cr )
 circuit.measure( qb, readout )
 
-
-basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap','cz', 'h']
+optimization_level=2
+basis_gates = ['id', 'u1', 'u2', 'u3', 'swap','cz', 'h', 'cx']
 couplinglist=[[0, 1],[0,6],[1,6],[2,3],[2,6],[3,6],[4,5],[4,6],[5,6]]
 reverse_couplinglist = [[y,x] for [x,y] in couplinglist]
 coupling_map = CouplingMap(couplinglist=couplinglist,description='A hexagoal 7qb code with two ancillas')
@@ -443,5 +443,6 @@ print('Fidelity of encoded |0>_L',state_fidelity(logical[0],test))
 print('Fidelity of encoded |1>_L',state_fidelity(logical[1],test))
 print(counts)
 transpiled_circuit.draw(output='mpl')
-circuit.draw(output='mpl')
+#circuit.draw(output='mpl')
 #plot_histogram(counts)
+cr.qasm()

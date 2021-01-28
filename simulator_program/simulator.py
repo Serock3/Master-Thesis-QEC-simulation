@@ -44,7 +44,7 @@ def encode_input( qbReg ):
 
 
 
-def measure_stabilizer( qbReg, anReg, clReg, i ):
+def measure_stabilizer( qbReg, anReg, clReg, i, reset=True ):
     '''Function for adding stabilizer measurements to a circuit.
     Note that a measurement of X is done by using Hadamard before
     and after. Input i specifies the stabilizer to measure:
@@ -77,48 +77,76 @@ def measure_stabilizer( qbReg, anReg, clReg, i ):
     stab_circuit.h( anReg[1] )
     stab_circuit.h( qbReg[ index[3] ] ) 
         
-    stab_circuit.measure( anReg[0], clReg[i] )
-    stab_circuit.reset( anReg[0] )
+    stab_circuit.measure( anReg[1], clReg[i] )
+    if reset:
+        stab_circuit.reset( anReg[1] )
+
     return stab_circuit
 
 
 
 
-def run_stabilizer( qbReg, anReg, clReg ):
+def run_stabilizer( qbReg, anReg, clReg, reset=True ):
     stab_circuit = QuantumCircuit( qbReg, anReg, clReg )
-    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 0 )
-    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 1 )
-    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 2 )
-    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 3 )
+    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 0, reset )
+    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 1, reset )
+    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 2, reset )
+    stab_circuit += measure_stabilizer( qbReg, anReg, clReg, 3, reset )
     return stab_circuit
 
 
 
 
 # Correct possible errors
-def recovery_scheme( qbReg, clReg ):
+def recovery_scheme( qbReg, clReg, reset=True ):
 
     recovery_circuit = QuantumCircuit( qbReg, clReg )
-    recovery_circuit.x(qbReg[1]).c_if(clReg, 1)
-    recovery_circuit.z(qbReg[4]).c_if(clReg, 2)
-    recovery_circuit.x(qbReg[2]).c_if(clReg, 3)
-    recovery_circuit.z(qbReg[2]).c_if(clReg, 4)
-    recovery_circuit.z(qbReg[0]).c_if(clReg, 5)
-    recovery_circuit.x(qbReg[3]).c_if(clReg, 6)
-    recovery_circuit.x(qbReg[2]).c_if(clReg, 7)
-    recovery_circuit.z(qbReg[2]).c_if(clReg, 7)
-    recovery_circuit.x(qbReg[0]).c_if(clReg, 8)
-    recovery_circuit.z(qbReg[3]).c_if(clReg, 9)
-    recovery_circuit.z(qbReg[1]).c_if(clReg, 10)
-    recovery_circuit.x(qbReg[1]).c_if(clReg, 11)
-    recovery_circuit.z(qbReg[1]).c_if(clReg, 11)
-    recovery_circuit.x(qbReg[4]).c_if(clReg, 12)
-    recovery_circuit.x(qbReg[0]).c_if(clReg, 13)
-    recovery_circuit.z(qbReg[0]).c_if(clReg, 13)
-    recovery_circuit.x(qbReg[4]).c_if(clReg, 14)
-    recovery_circuit.z(qbReg[4]).c_if(clReg, 14)
-    recovery_circuit.x(qbReg[3]).c_if(clReg, 15)
-    recovery_circuit.z(qbReg[3]).c_if(clReg, 15)
+
+    # If the ancilla is reset to |0> between measurements
+    if reset: 
+        recovery_circuit.x(qbReg[1]).c_if(clReg, 1)
+        recovery_circuit.z(qbReg[4]).c_if(clReg, 2)
+        recovery_circuit.x(qbReg[2]).c_if(clReg, 3)
+        recovery_circuit.z(qbReg[2]).c_if(clReg, 4)
+        recovery_circuit.z(qbReg[0]).c_if(clReg, 5)
+        recovery_circuit.x(qbReg[3]).c_if(clReg, 6)
+        recovery_circuit.x(qbReg[2]).c_if(clReg, 7)
+        recovery_circuit.z(qbReg[2]).c_if(clReg, 7)
+        recovery_circuit.x(qbReg[0]).c_if(clReg, 8)
+        recovery_circuit.z(qbReg[3]).c_if(clReg, 9)
+        recovery_circuit.z(qbReg[1]).c_if(clReg, 10)
+        recovery_circuit.x(qbReg[1]).c_if(clReg, 11)
+        recovery_circuit.z(qbReg[1]).c_if(clReg, 11)
+        recovery_circuit.x(qbReg[4]).c_if(clReg, 12)
+        recovery_circuit.x(qbReg[0]).c_if(clReg, 13)
+        recovery_circuit.z(qbReg[0]).c_if(clReg, 13)
+        recovery_circuit.x(qbReg[4]).c_if(clReg, 14)
+        recovery_circuit.z(qbReg[4]).c_if(clReg, 14)
+        recovery_circuit.x(qbReg[3]).c_if(clReg, 15)
+        recovery_circuit.z(qbReg[3]).c_if(clReg, 15)
+
+    # If the ancilla is NOT reset between measurements
+    else:
+        recovery_circuit.x(qbReg[2]).c_if(clReg, 1)
+        recovery_circuit.x(qbReg[3]).c_if(clReg, 2)
+        recovery_circuit.z(qbReg[0]).c_if(clReg, 3)
+        recovery_circuit.x(qbReg[4]).c_if(clReg, 4)
+        recovery_circuit.z(qbReg[3]).c_if(clReg, 5)
+        recovery_circuit.x(qbReg[3]).c_if(clReg, 5)
+        recovery_circuit.z(qbReg[1]).c_if(clReg, 6)
+        recovery_circuit.z(qbReg[3]).c_if(clReg, 7)
+        recovery_circuit.x(qbReg[0]).c_if(clReg, 8)
+        recovery_circuit.z(qbReg[1]).c_if(clReg, 9)
+        recovery_circuit.x(qbReg[1]).c_if(clReg, 9)
+        recovery_circuit.z(qbReg[4]).c_if(clReg, 10)
+        recovery_circuit.x(qbReg[4]).c_if(clReg, 10)
+        recovery_circuit.z(qbReg[0]).c_if(clReg, 11)
+        recovery_circuit.x(qbReg[0]).c_if(clReg, 11)
+        recovery_circuit.z(qbReg[2]).c_if(clReg, 12)
+        recovery_circuit.z(qbReg[2]).c_if(clReg, 13)
+        recovery_circuit.x(qbReg[2]).c_if(clReg, 13)
+        recovery_circuit.z(qbReg[4]).c_if(clReg, 14)
+        recovery_circuit.x(qbReg[1]).c_if(clReg, 15)
 
     return recovery_circuit
 
@@ -166,11 +194,11 @@ def logical_states():
     an0 = np.zeros(2**2)
     an0[0] = 1.0
 
-    #logical_1 = np.kron(logical_1, an0)
-    #logical_0 = np.kron(logical_0, an0)
+    logical_1 = np.kron(logical_1, an0)
+    logical_0 = np.kron(logical_0, an0)
 
-    logical_0 = np.kron(an0, logical_0)
-    logical_1 = np.kron(an0, logical_1)    
+    #logical_0 = np.kron(an0, logical_0)
+    #logical_1 = np.kron(an0, logical_1)    
     return [logical_0, logical_1]
 
 
@@ -182,57 +210,141 @@ readout = ClassicalRegister(5, 'readout') # Readout of the final state at the en
 
 # %% Running the quantum circuit
 
-circuit = QuantumCircuit( cr, readout, an, qb )
+def define_circuit(n_cycles):
+    '''Creates the entire circuit and returns it
+    as an output. Input is the number of stabilizer
+    cycles to perform'''
+    # Define our registers
+    qb = QuantumRegister(5, 'code_qubit')     # The 5 qubits to encode the state in
+    an = QuantumRegister(2, 'ancilla_qubit')  # The two ancilla qubits (one of them is unused)
+    cr = ClassicalRegister(4, 'syndrome_bit') # Classical register for registering the syndromes
+    readout = ClassicalRegister(5, 'readout') # Readout of the final state at the end for statistics
 
-# Prepare the input
-circuit.x( qb[0] ) # As an example, start in |1>
+    
+    circuit = QuantumCircuit( cr, readout, an, qb )
 
-# Encode the state
-circuit += encode_input( qb ) 
-circuit.snapshot_statevector('post_encoding')
+    # Prepare the input
+    circuit.x( qb[0] ) # As an example, start in |1>
 
-# Measure stabilizers
-circuit += run_stabilizer( qb, an, cr )
-
-# Correct the error
-circuit += recovery_scheme( qb, cr )
-#circuit.reset( an[0] )
-#run_stabilizer( circuit, qb, an, cr )
-# Readout of the encoded state
-# Measure at the end of the run
-circuit.snapshot_statevector('pre_measure')
-circuit.measure( qb, readout )
-circuit.snapshot_statevector('post_measure')
-
-noise = pauli_noise_model()
+    # Encode the state
+    circuit += encode_input( qb ) 
+    circuit.snapshot_statevector('post_encoding')
 
 
-# %% Transpiler
-transpiled_circuit = transpile_circuit( circuit, qb, an )
+    # Stabilizers
+    for i in range(n_cycles):
+        circuit += run_stabilizer( qb, an, cr )
+        circuit += recovery_scheme( qb, cr )
+        circuit.snapshot_statevector('stabilizer_'+ str(i) )
 
-# Run the circuit
+
+    # Readout of the encoded state
+    # Measure at the end of the run
+    circuit.measure( qb, readout )
+    circuit.snapshot_statevector('post_measure')
+
+
+
+
+    # % Transpiler
+    transpiled_circuit = transpile_circuit( circuit, qb, an )
+
+    return circuit # CHANGE TO TRANSPILED CIRCUIT
+
+
+# %% Run the circuit
+n_cycles = 20
+circuit = define_circuit(n_cycles)
+
+# Noise model, no input gives no noise
+noise = pauli_noise_model(0.001, 0.00, 0.0)
+
+n_shots = 2000
 results = execute(
-    transpiled_circuit, 
+    circuit, # NOT RUNNING THE TRANSPILED CIRCUIT AT THE MOMENT
     Aer.get_backend('qasm_simulator'), 
     noise_model=noise, 
-    shots=1000
+    shots=n_shots
     ).result()
+
+
+# %% Extract data from simulations
+
 counts = results.get_counts()
 
 # Get the state vectors
 state_vectors = results.data()['snapshots']['statevector']
-sv_post_encoding = state_vectors['post_encoding'][0]
-sv_pre_measure = state_vectors['pre_measure'][0]
-sv_post_measure = state_vectors['post_measure'][0]
+sv_post_encoding = state_vectors['post_encoding']
+sv_post_measure = state_vectors['post_measure']
 
-logical = logical_states()
-print('Fidelity of encoded |1>_L',state_fidelity(logical[1],sv_post_encoding))
-print('Fidelity of encoded |0>_L',state_fidelity(logical[0],sv_post_encoding))
+# Numpy arrays to store data in (Maybe save as file later?)
+
+logical_state = np.zeros([2, n_shots, n_cycles+1])
+
+sv_stabilizer = np.zeros([128, n_shots, n_cycles])
+
+# A slow nested for-loop to gather all state vectors and fidelities
+print('Running statistics...')
+logical = logical_states() # Get the two logical states
+for i in range(n_shots):
+
+    logical_state[:,i,0] = [state_fidelity(logical[0],sv_post_encoding[i]),
+                            state_fidelity(logical[1],sv_post_encoding[i]) ]
+    for j in range(n_cycles):
+
+        sv_stabilizer[:,i,j] = state_vectors['stabilizer_' + str(j) ][i]
+
+        logical_state[:,i,j+1] = [state_fidelity(logical[0],sv_stabilizer[:,i,j]),
+                                  state_fidelity(logical[1],sv_stabilizer[:,i,j]) ]
+
+
+# Probabilities of remaining in correct state
+preserved_state_count = np.zeros(n_cycles+1)
+for i in range(n_shots):
+
+    state_is_preserved=True
+    if logical_state[1,i,0] > 0.95:
+        preserved_state_count[0] +=1.
+    else:
+        state_is_preserved=False
+
+    for j in range(n_cycles):
+        if state_is_preserved:
+
+            if logical_state[1,i,j+1] > 0.95:
+                preserved_state_count[j+1] +=1.
+            else:
+                state_is_preserved=False
+
+preserved_state_count /= n_shots
+
+# %% Plotting
+import matplotlib.pyplot as plt
+import seaborn as sns
+# For figures
+sns.set_context('talk', rc={"lines.linewidth": 2.5})
+default_colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 
+                  'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:cyan']
+
+x = np.sum( logical_state[1,:,:], 0) /(n_shots+1)
+fig = plt.figure( figsize=[10,6] )
+plt.plot(x, marker='o', label=r'$p_{error}$=')
+plt.xticks(ticks=range(n_cycles+1))
+plt.xlabel('Number of cycles')
+plt.title('Average fidelity across stabilizer cycles')
+plt.legend()
+
+# %
+fig = plt.figure( figsize=[10,6] )
+plt.plot(preserved_state_count, marker='o', label=r'$p_{error}$=')
+plt.xticks(ticks=range(n_cycles+1))
+plt.xlabel('Number of cycles')
+plt.title('Probability of remaining in original state')
+plt.legend()
+#%%
 #circuit.draw(output='mpl') # If it does not work, simply remove mpl: circuit.draw()
 
-#print(counts)
-#plot_histogram(counts)A
+print(counts)
+#plot_histogram(counts)
 #circuit.draw(output='mpl')
-#print(sv_post_encoding.shape)
-print(logical[1])
-# %%
+

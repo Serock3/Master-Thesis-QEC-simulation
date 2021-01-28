@@ -4,13 +4,8 @@ from qiskit.providers.aer.noise import QuantumError, ReadoutError
 from qiskit.providers.aer.noise import pauli_error
 from qiskit.providers.aer.noise import depolarizing_error
 
-def pauli_noise_model():
-    '''Testing around with some Pauli noise'''
-
-    # Example error probabilities
-    p_reset = 0.00
-    p_meas = 0.00
-    p_gate1 = 0.00
+def pauli_noise_model(p_gate1=0.0, p_meas=0.0, p_reset=0.0):
+    '''Testing around with some Bit-flip noise'''
 
     # QuantumError objects
     error_reset = pauli_error([('X', p_reset), ('I', 1 - p_reset)])
@@ -22,6 +17,8 @@ def pauli_noise_model():
     noise_bit_flip = NoiseModel()
     noise_bit_flip.add_all_qubit_quantum_error(error_reset, "reset")
     noise_bit_flip.add_all_qubit_quantum_error(error_meas, "measure")
-    noise_bit_flip.add_all_qubit_quantum_error(error_gate1, ["u1", "u2", "u3", "x"])
-#    noise_bit_flip.add_all_qubit_quantum_error(error_gate2, ["cx"])
+    noise_bit_flip.add_all_qubit_quantum_error(error_gate1,
+        ["u1", "u2", "u3", "x", "z", "h"])
+    noise_bit_flip.add_all_qubit_quantum_error(error_gate2, ["cx", "cz", "swap"])
+    
     return noise_bit_flip
