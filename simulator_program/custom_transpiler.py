@@ -37,6 +37,7 @@ def transpile_circuit(circuit, qb, an):
 
     return transpiled_circuit
 
+
 def shortest_transpile_from_distribution(circuit, repeats=40, print_depths=True, **kwargs):
     depth = 10000
     for i in range(repeats):
@@ -51,26 +52,16 @@ def shortest_transpile_from_distribution(circuit, repeats=40, print_depths=True,
     return transpiled_circuit
 
 
+basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap', 'cz']
+couplinglist = [[0, 1], [0, 6], [1, 6], [2, 3],
+                [2, 6], [3, 6], [4, 5], [4, 6], [5, 6]]
+reverse_couplinglist = [[y, x] for [x, y] in couplinglist]
+coupling_map = CouplingMap(
+    couplinglist=couplinglist, description='A hexagoal 7qb code with two ancillas')
 
-def get_WAQCT_device_properties():
-    """Returns a dict with device properties of the WAQCT QC to be used for transpilation. 
-    """
-    basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap', 'cz']
-    couplinglist = [[0, 1], [0, 6], [1, 6], [2, 3],
-                    [2, 6], [3, 6], [4, 5], [4, 6], [5, 6]]
-    reverse_couplinglist = [[y, x] for [x, y] in couplinglist]
-    coupling_map = CouplingMap(
-        couplinglist=couplinglist, description='A hexagoal 7qb code with two ancillas')
-    # layout = Layout(
-    # {qb[0]: 0,
-    # qb[1]: 1,
-    # qb[2]: 2,
-    # qb[3]: 3,
-    # qb[4]: 4,
-    # an[0]: 5,
-    # an[1]: 6})
-    return {"basis_gates": basis_gates, "coupling_map": coupling_map}
-
+# Dict with device properties of the WAQCT QC to be used for transpilation.
+WAQCT_device_properties = {
+    "basis_gates": basis_gates, "coupling_map": coupling_map}
 
 def _add_custom_device_equivalences():
     """ Ads custom gate equivalences to the SessionEquivalenceLibrary for transpilation
