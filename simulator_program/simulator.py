@@ -1,4 +1,6 @@
 # %% Import modules
+import pickle
+from qiskit.quantum_info import purity
 from numpy.core.fromnumeric import repeat
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -200,24 +202,14 @@ def logical_states():
     return [logical_0, logical_1]
 
 
-# %% Define our registers and circuit
-qb = QuantumRegister(5, 'code_qubit')     # The 5 qubits to encode the state in
-# The two ancilla qubits (one of them is unused)
-an = QuantumRegister(2, 'ancilla_qubit')
-# Classical register for registering the syndromes
-cr = ClassicalRegister(4, 'syndrome_bit')
-# Readout of the final state at the end for statistics
-readout = ClassicalRegister(5, 'readout')
-
-# %% Running the quantum circuit
-
-
-def define_circuit(n_cycles):
+def define_circuit(n_cycles, snapshot_type='density_matrix'):
     '''Creates the entire circuit and returns it
     as an output. Input is the number of stabilizer
     cycles to perform'''
-    # Define our registers
+
+    # TODO: Transpile each segment seperated by a barrer or snapshop seperately and combine afterwards
     # TODO: Change the ancilla reg to use AncillaRegister()
+    # Define the registers
     # The 5 qubits to encode the state in
     qb = QuantumRegister(5, 'code_qubit')
     # The two ancilla qubits (one of them is unused)
@@ -234,23 +226,42 @@ def define_circuit(n_cycles):
 
     # Encode the state
     circuit += encode_input(qb)
-    circuit.snapshot_statevector('post_encoding')
+    circuit.snapshot('post_encoding', snapshot_type=snapshot_type)
 
     # Stabilizers
     for i in range(n_cycles):
         circuit += run_stabilizer(qb, an, cr, reset=False)
         circuit += recovery_scheme(qb, cr, reset=False)
-        circuit.snapshot_statevector('stabilizer_' + str(i))
+        circuit.snapshot('stabilizer_' + str(i), snapshot_type=snapshot_type)
 
     # Readout of the encoded state
     # Measure at the end of the run
     circuit.measure(qb, readout)
-    circuit.snapshot_statevector('post_measure')
+    circuit.snapshot('post_measure', snapshot_type=snapshot_type)
 
     return circuit
 
 
-def transpile_circuit(circuit):
+def get_logical_0(transpiled_circuit, snapshot_type):
+    ''' Run the actual ciruit and get the statevector after encoding
+        This is a bit problematic for several reasons so that's why I'm trying to avoid it
+    '''
+    results = execute(
+        transpiled_circuit,  # NOT RUNNING THE TRANSPILED CIRCUIT AT THE MOMENT
+        Aer.get_backend('qasm_simulator'),
+        noise_model=None,
+        shots=1
+    ).result()
+
+    # Get the state vectors
+    state_vectors = results.data()['snapshots'][snapshot_type]
+    sv_post_encoding = state_vectors['post_encoding'][0]
+    if snapshot_type == 'density_matrix':
+        sv_post_encoding = sv_post_encoding['value']
+    return sv_post_encoding
+
+
+def transpile_circuit(circuit, optimization_level=2, repeats=1):
     # % Transpiler
     routing_method = 'sabre'  # basic lookahead stochastic sabre
     # initial_layout = {qb[0]: 0,
@@ -270,13 +281,11 @@ def transpile_circuit(circuit):
     initial_layout = None  # Overwriting the above layout
     layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
     translation_method = None  # 'unroller',  translator , synthesis
-    optimization_level = 0
-    repeats = 1
     transpiled_circuit = shortest_transpile_from_distribution(circuit, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
-                                                              layout_method=layout_method, translation_method=translation_method,
-                                                              optimization_level=optimization_level,
-    **{'basis_gates': ['id', 'u1', 'u2', 'u3', 'swap', 'cz','CNOT']})
-    # , **WAQCT_device_properties
+                                                              # ,coupling_map = WAQCT_device_properties['coupling_map'])
+                                                              # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
+                                                              layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WAQCT_device_properties)
+
     print('Final depth = ', transpiled_circuit.depth())
     print('Final gates = ', transpiled_circuit.count_ops())
     # display(transpiled_circuit.draw(output='mpl'))
@@ -284,236 +293,135 @@ def transpile_circuit(circuit):
     return transpiled_circuit  # CHANGE TO TRANSPILED CIRCUIT
 
 
-# %% Create the circuit
-n_cycles = 0
+# %% Create circuit
+optimization_level = 3
+repeats = 30
+n_cycles = 20
+snapshot_type = 'statevector'  #'density_matrix'  # 
+circuit = define_circuit(n_cycles, snapshot_type=snapshot_type)
 
-circuit = QuantumCircuit(cr, readout, an, qb)
-circuit += encode_input(qb)
-circuit.snapshot_statevector('post_encoding')
-
-# circuit = define_circuit(0)
-transpiled_circuit = transpile_circuit(circuit)
+transpiled_circuit = transpile_circuit(
+    circuit, optimization_level=optimization_level, repeats=repeats)
 transpiled_circuit._layout
-
-# TODO: Save compiled circuit (using e.g. pickle, and load if resired)
-# import pickle
-# with open('circuit.dat', 'wb') as transpiled_circuit_file:
-#     pickle.dump(transpiled_circuit, transpiled_circuit_file)
-
-# with open('circuit.dat', 'rb') as transpiled_circuit_file:
-#     transpiled_circuit = pickle.load(transpiled_circuit_file)
-# %% Delete this when the bug is found
-from qiskit.transpiler.passmanager_config import PassManagerConfig
-from qiskit.transpiler.preset_passmanagers\
-    import level_0_pass_manager, level_1_pass_manager, level_2_pass_manager, level_3_pass_manager
-from qiskit.transpiler import passes
-[pass_ for pass_ in dir(passes) if pass_[0].isupper()]
-from qiskit.transpiler.passes import BasisTranslator
-from qiskit.transpiler.passes import UnrollCustomDefinitions
-from IPython.display import display
-from qiskit.transpiler import TransformationPass
-from qiskit.converters import dag_to_circuit
-
-routing_method = 'sabre'  # basic lookahead stochastic sabre
-# initial_layout = {qb[0]: 0,
-#                   qb[1]: 1,
-#                   qb[2]: 2,
-#                   qb[3]: 3,
-#                   qb[4]: 4,
-#                   an[0]: 5,
-#                   an[1]: 6}
-# initial_layout = {an[0]: 0,
-#                   an[1]: 1,
-#                   qb[0]: 2,
-#                   qb[1]: 3,
-#                   qb[2]: 4,
-#                   qb[3]: 5,
-#                   qb[4]: 6}
-initial_layout = None  # Overwriting the above layout
-layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
-translation_method = None
-optimization_level = 0
-pm = level_0_pass_manager(PassManagerConfig(routing_method=routing_method, initial_layout=initial_layout,
-                                            layout_method=layout_method, translation_method=translation_method))  # the drawing functionality doesn't work if coupling_map is specified
-pm.draw()
-
-def callback_func(**kwargs):
-    pass_ = kwargs['pass_']
-    dag = kwargs['dag']
-    time = kwargs['time']
-    property_set = kwargs['property_set']
-    count = kwargs['count']
-
-    if isinstance(pass_,TransformationPass):
-        circuit_tmp = dag_to_circuit(dag)
-        print('pass namne: ',pass_.name())
-        display(circuit_tmp.draw(output='mpl'))
-print('before transpilation ')
-display(circuit.draw(output='mpl'))
-pm.run(circuit,callback=callback_func)
-pm.passes()
-# %% Extract logical 0 and 1
-# Get the two logical states before transpilation (and hence permutated qubits)
 logical = logical_states()
 
+logical_0_transp = get_logical_0(
+    transpiled_circuit, snapshot_type=snapshot_type)
+print('Traspiled 0 fidelity ', state_fidelity(logical_0_transp, logical[0]))
 
-def get_logical_states_v1(transpiled_circuit):
-    ''' Run the actual ciruit and get the statevector after encoding
-        This is a bit problematic for several reasons so that's why I'm trying to avoid it
-    '''
-    results = execute(
-        transpiled_circuit,  # NOT RUNNING THE TRANSPILED CIRCUIT AT THE MOMENT
-        Aer.get_backend('qasm_simulator'),
-        noise_model=None,
-        shots=1
-    ).result()
+# Saves the compiled circuie
+if True:
+    with open('transpiled_circuit.dat', 'wb') as transpiled_circuit_file:
+        pickle.dump(transpiled_circuit, transpiled_circuit_file)
+# %% (Load and) run the circuit
+if transpiled_circuit is None:
+    with open('transpiled_circuit.dat', 'rb') as transpiled_circuit_file:
+        transpiled_circuit = pickle.load(transpiled_circuit_file)
 
-    # Get the state vectors
-    state_vectors = results.data()['snapshots']['statevector']
-    sv_post_encoding = state_vectors['post_encoding']
-    return sv_post_encoding[0]
-
-
-def get_logical_states_v2(transpiled_circuit):
-    ''' Get the permutation from transpiled_circuit._layout and attempt to redo it
-     after encoding using the initialize method, by permuting the qubits in the second argument
-    see: https://github.com/Qiskit/qiskit-tutorials/blob/master/tutorials/circuits/3_summary_of_quantum_operations.ipynb
-    '''
-    circuit_log0 = QuantumCircuit(*transpiled_circuit._layout.get_registers())
-    circuit_log0.initialize(
-        logical[0], [transpiled_circuit._layout[i] for i in range(7)])
-    results = execute(
-        circuit_log0,  # NOT RUNNING THE TRANSPILED CIRCUIT AT THE MOMENT
-        Aer.get_backend('statevector_simulator'),
-    ).result()
-    return results.get_statevector(circuit_log0)
-
-
-def get_logical_states_v3(transpiled_circuit):
-    ''' Same as v3 but creates new regusters instead of getting them from
-    transpiled_circuit._layout.get_registers()
-    '''
-    # Get analytical encoded state (with permutated qubits)
-    qb = QuantumRegister(5, 'code_qubit')
-    # The two ancilla qubits (one of them is unused)
-    an = QuantumRegister(2, 'ancilla_qubit')
-
-    circuit_log0 = QuantumCircuit(an, qb)
-    circuit_log0.initialize(
-        logical[0], [transpiled_circuit._layout[i] for i in range(7)])
-    results = execute(
-        circuit_log0,  # NOT RUNNING THE TRANSPILED CIRCUIT AT THE MOMENT
-        Aer.get_backend('statevector_simulator'),
-    ).result()
-    return results.get_statevector(circuit_log0)
-
-
-def get_logical_states_v4(transpiled_circuit):
-    ''' Get the permutation from transpiled_circuit._layout and attempt to redo 
-    it after encoding using Permutation()
-    '''
-    from qiskit.circuit.library import Permutation
-    # Get analytical encoded state (with permutated qubits)
-    qb = QuantumRegister(5, 'code_qubit')
-    # The two ancilla qubits (one of them is unused)
-    an = QuantumRegister(2, 'ancilla_qubit')
-
-    circuit_log0 = QuantumCircuit(an, qb)
-    circuit_log0 += encode_input(qb)
-    circuit_log0 += Permutation(7, [transpiled_circuit._layout[key]
-                                    for key in circuit.qubits])
-    results = execute(
-        circuit_log0,  # NOT RUNNING THE TRANSPILED CIRCUIT AT THE MOMENT
-        Aer.get_backend('statevector_simulator'),
-    ).result()
-    return results.get_statevector(circuit_log0)
-
-
-def get_logical_states_v5(transpiled_circuit):
-    ''' Run the actual ciruit and get the statevector after encoding
-        This is a bit problematic for several reasons so that's why I'm trying to avoid it
-    '''
-    results = execute(
-        transpiled_circuit,  # NOT RUNNING THE TRANSPILED CIRCUIT AT THE MOMENT
-        Aer.get_backend('statevector_simulator'),
-        noise_model=None,
-        shots=1
-    ).result()
-
-    # Get the state vectors
-    state_vectors = results.data()['snapshots']['statevector']
-    sv_post_encoding = state_vectors['post_encoding']
-    return results.get_statevector(transpiled_circuit)
-
-
-print('unpermutated', np.where(logical[0] != 0)[0])  # unpermutated zero
-log0_v1 = get_logical_states_v1(transpiled_circuit)
-print('v1', np.where(log0_v1 != 0)[0])  # This should be the
-log0_v5 = get_logical_states_v5(transpiled_circuit)
-print('v5', np.where(log0_v5 != 0)[0])
-log0_v2 = get_logical_states_v2(transpiled_circuit)
-log0_v3 = get_logical_states_v3(transpiled_circuit)
-log0_v4 = get_logical_states_v4(transpiled_circuit)
-
-
-# Print which indices are non-zero, to quickly see if the state is correct
-
-
-
-print('v2', np.where(log0_v2 != 0)[0])  # Doesn't give the same as v1 !?
-# Gives the same as v2 (as it should), but still not right?
-print('v3', np.where(log0_v3 != 0)[0])
-print('v4', np.where(log0_v4 != 0)[0])  # Doesn't work at all for some reason
-
-
-state_fidelity(log0_v1, log0_v2)
-
-
-# %% Run the circuit
-# Noise model, no input gives no noise
 noise = pauli_noise_model(0.001, 0.00, 0.0)
 
-n_shots = 2000
-results = execute(
-    circuit,  # NOT RUNNING THE TRANSPILED CIRCUIT AT THE MOMENT
+n_shots = 1000
+results_noisy = execute(
+    transpiled_circuit,
     Aer.get_backend('qasm_simulator'),
     noise_model=noise,
     shots=n_shots
 ).result()
 
+results_ideal = execute(
+    transpiled_circuit,
+    Aer.get_backend('qasm_simulator'),
+    noise_model=None,
+    shots=1
+).result()
+# Extract data from simulations
 
-# % Extract data from simulations
 
-counts = results.get_counts()
+def _get_fidelities_mat(results_noisy, results_ideal):
+    state_vectors_noisy = results_noisy.data()['snapshots']['density_matrix']
+    state_vectors_ideal = results_ideal.data()['snapshots']['density_matrix']
 
-# Get the state vectors
-state_vectors = results.data()['snapshots']['statevector']
-sv_post_encoding = state_vectors['post_encoding']
-sv_post_measure = state_vectors['post_measure']
+    running_fidelity = np.zeros([n_cycles+1])
+    running_fidelity[0] = state_fidelity(state_vectors_ideal['post_encoding'][0]['value'],
+                                         state_vectors_noisy['post_encoding'][0]['value'])
+    print('Purity of encoded state = ', purity(
+        state_vectors_noisy['post_encoding'][0]['value']))
+    for j in range(n_cycles):
+        running_fidelity[j+1] = state_fidelity(state_vectors_ideal['stabilizer_' + str(j)][0]['value'],
+                                               state_vectors_noisy['stabilizer_' + str(j)][0]['value'])
+    return running_fidelity
+
+
+def _get_fidelities_vec(results_noisy, results_ideal):
+    # Get the state vectors
+    state_vectors_noisy = results_noisy.data()['snapshots']['statevector']
+    state_vectors_ideal = results_ideal.data()['snapshots']['statevector']
+
+    running_fidelity = np.zeros([n_shots, n_cycles+1])
+
+    for i in range(n_shots):  # n_shots
+        running_fidelity[i, 0] = state_fidelity(
+            state_vectors_ideal['post_encoding'][0], state_vectors_noisy['post_encoding'][i])
+        for j in range(n_cycles):
+            running_fidelity[i, j+1] = state_fidelity(
+                state_vectors_ideal['stabilizer_' + str(j)][0], state_vectors_noisy['stabilizer_' + str(j)][i])
+    return np.sum(running_fidelity, 0) / (n_shots+1)
+
+
+def get_fidelities(results_noisy, results_ideal, snapshot_type):
+    # logical0 = logical_0_transp  # logical[0]  #
+    if snapshot_type == 'density_matrix':
+        return _get_fidelities_mat(results_noisy, results_ideal)
+    return _get_fidelities_vec(results_noisy, results_ideal)
+
+
+logical_state = get_fidelities(
+    results_noisy, results_ideal, snapshot_type=snapshot_type)
+
+# Plotting
+sns.set_context('talk', rc={"lines.linewidth": 2.5})
+default_colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red',
+                  'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:cyan']
+
+fig = plt.figure(figsize=[10, 6])
+plt.plot(logical_state, marker='o', label=r'$p_{error}$=')
+plt.xticks(ticks=range(n_cycles+1))
+plt.xlabel('Number of cycles')
+plt.title('Average fidelity across stabilizer cycles')
+plt.legend()
+plt.show()
+
+
+# %% Demonstrate how density matrices avoid the issue of permutations
+state_vectors_ideal = results_ideal.data()['snapshots']['density_matrix']
+
+running_fidelity = np.zeros([n_cycles+1])
+running_fidelity[0] = state_fidelity(logical_0_transp,
+                                     state_vectors_ideal['post_encoding'][0]['value'])
+for j in range(n_cycles):
+    running_fidelity[j+1] = state_fidelity(logical_0_transp,
+                                           state_vectors_ideal['stabilizer_' + str(j)][0]['value'])
+print('Running fidelity without noise ', running_fidelity)
+print('It is unity since transpiled snapshots of density matrices are not permuted')
+# %%
+# circuit.draw(output='mpl') # If it does not work, simply remove mpl: circuit.draw()
+counts = results_noisy.get_counts()
+print(counts)
+# plot_histogram(counts)
+# circuit.draw(output='mpl')
+
+# %%
+
+
 # for i in range(n_shots):
 #     for j in range(n_cycles):
 #         print('shot= ',i,', cycle = ',j,', norm = ',np.linalg.norm(state_vectors['stabilizer_' + str(j)][i]))
 
 # Numpy arrays to store data in (Maybe save as file later?)
 
-logical_state = np.zeros([2, n_shots, n_cycles+1])
-
 # sv_stabilizer = np.zeros([128, n_shots, n_cycles])
-logical = [get_logical_states_v2(
-    transpiled_circuit), get_logical_states_v2(transpiled_circuit)]
+
 # A slow nested for-loop to gather all state vectors and fidelities
-print('Running statistics...')
-for i in range(n_shots):
-
-    logical_state[:, i, 0] = [state_fidelity(logical[0], sv_post_encoding[i]),
-                              state_fidelity(logical[1], sv_post_encoding[i])]
-    for j in range(n_cycles):
-
-        # sv_stabilizer[:, i, j] = state_vectors['stabilizer_' + str(j)][i]
-
-        logical_state[:, i, j+1] = [state_fidelity(logical[0], state_vectors['stabilizer_' + str(j)][i]),
-                                    state_fidelity(logical[1], state_vectors['stabilizer_' + str(j)][i])]
-
 
 # Probabilities of remaining in correct state
 # preserved_state_count = np.zeros(n_cycles+1)
@@ -534,21 +442,6 @@ for i in range(n_shots):
 #                 state_is_preserved = False
 
 # preserved_state_count /= n_shots
-
-# %% Plotting
-# For figures
-sns.set_context('talk', rc={"lines.linewidth": 2.5})
-default_colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red',
-                  'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:cyan']
-
-x = np.sum(logical_state[0, :, :], 0) / (n_shots+1)
-fig = plt.figure(figsize=[10, 6])
-plt.plot(x, marker='o', label=r'$p_{error}$=')
-plt.xticks(ticks=range(n_cycles+1))
-plt.xlabel('Number of cycles')
-plt.title('Average fidelity across stabilizer cycles')
-plt.legend()
-plt.show()
 # %
 # fig = plt.figure(figsize=[10, 6])
 # plt.plot(preserved_state_count, marker='o', label=r'$p_{error}$=')
@@ -556,9 +449,3 @@ plt.show()
 # plt.xlabel('Number of cycles')
 # plt.title('Probability of remaining in original state')
 # plt.legend()
-# %%
-# circuit.draw(output='mpl') # If it does not work, simply remove mpl: circuit.draw()
-
-print(counts)
-# plot_histogram(counts)
-# circuit.draw(output='mpl')

@@ -79,6 +79,6 @@ def _add_custom_device_equivalences():
         def_swap.append(inst, qargs, cargs)
     SessionEquivalenceLibrary.add_equivalence(SwapGate(), def_swap)
 
-
+# TODO: Curently not functioning? 
 # This function will automatically run the first time you import this file
 # _add_custom_device_equivalences()
