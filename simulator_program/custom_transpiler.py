@@ -81,4 +81,4 @@ def _add_custom_device_equivalences():
 
 
 # This function will automatically run the first time you import this file
-_add_custom_device_equivalences()
+# _add_custom_device_equivalences()

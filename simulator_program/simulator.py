@@ -253,22 +253,30 @@ def define_circuit(n_cycles):
 def transpile_circuit(circuit):
     # % Transpiler
     routing_method = 'sabre'  # basic lookahead stochastic sabre
-    initial_layout = {qb[0]: 0,
-                      qb[1]: 1,
-                      qb[2]: 2,
-                      qb[3]: 3,
-                      qb[4]: 4,
-                      an[0]: 5,
-                      an[1]: 6}
+    # initial_layout = {qb[0]: 0,
+    #                   qb[1]: 1,
+    #                   qb[2]: 2,
+    #                   qb[3]: 3,
+    #                   qb[4]: 4,
+    #                   an[0]: 5,
+    #                   an[1]: 6}
+    # initial_layout = {an[0]: 0,
+    #                   an[1]: 1,
+    #                   qb[0]: 2,
+    #                   qb[1]: 3,
+    #                   qb[2]: 4,
+    #                   qb[3]: 5,
+    #                   qb[4]: 6}
     initial_layout = None  # Overwriting the above layout
     layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
     translation_method = None  # 'unroller',  translator , synthesis
-    optimization_level = 3
-    repeats = 10
+    optimization_level = 0
+    repeats = 1
     transpiled_circuit = shortest_transpile_from_distribution(circuit, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
                                                               layout_method=layout_method, translation_method=translation_method,
-                                                              optimization_level=optimization_level, **WAQCT_device_properties)
-
+                                                              optimization_level=optimization_level,
+    **{'basis_gates': ['id', 'u1', 'u2', 'u3', 'swap', 'cz','CNOT']})
+    # , **WAQCT_device_properties
     print('Final depth = ', transpiled_circuit.depth())
     print('Final gates = ', transpiled_circuit.count_ops())
     # display(transpiled_circuit.draw(output='mpl'))
@@ -277,8 +285,13 @@ def transpile_circuit(circuit):
 
 
 # %% Create the circuit
-n_cycles = 10
-circuit = define_circuit(n_cycles)
+n_cycles = 0
+
+circuit = QuantumCircuit(cr, readout, an, qb)
+circuit += encode_input(qb)
+circuit.snapshot_statevector('post_encoding')
+
+# circuit = define_circuit(0)
 transpiled_circuit = transpile_circuit(circuit)
 transpiled_circuit._layout
 
@@ -289,10 +302,60 @@ transpiled_circuit._layout
 
 # with open('circuit.dat', 'rb') as transpiled_circuit_file:
 #     transpiled_circuit = pickle.load(transpiled_circuit_file)
+# %% Delete this when the bug is found
+from qiskit.transpiler.passmanager_config import PassManagerConfig
+from qiskit.transpiler.preset_passmanagers\
+    import level_0_pass_manager, level_1_pass_manager, level_2_pass_manager, level_3_pass_manager
+from qiskit.transpiler import passes
+[pass_ for pass_ in dir(passes) if pass_[0].isupper()]
+from qiskit.transpiler.passes import BasisTranslator
+from qiskit.transpiler.passes import UnrollCustomDefinitions
+from IPython.display import display
+from qiskit.transpiler import TransformationPass
+from qiskit.converters import dag_to_circuit
 
+routing_method = 'sabre'  # basic lookahead stochastic sabre
+# initial_layout = {qb[0]: 0,
+#                   qb[1]: 1,
+#                   qb[2]: 2,
+#                   qb[3]: 3,
+#                   qb[4]: 4,
+#                   an[0]: 5,
+#                   an[1]: 6}
+# initial_layout = {an[0]: 0,
+#                   an[1]: 1,
+#                   qb[0]: 2,
+#                   qb[1]: 3,
+#                   qb[2]: 4,
+#                   qb[3]: 5,
+#                   qb[4]: 6}
+initial_layout = None  # Overwriting the above layout
+layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
+translation_method = None
+optimization_level = 0
+pm = level_0_pass_manager(PassManagerConfig(routing_method=routing_method, initial_layout=initial_layout,
+                                            layout_method=layout_method, translation_method=translation_method))  # the drawing functionality doesn't work if coupling_map is specified
+pm.draw()
+
+def callback_func(**kwargs):
+    pass_ = kwargs['pass_']
+    dag = kwargs['dag']
+    time = kwargs['time']
+    property_set = kwargs['property_set']
+    count = kwargs['count']
+
+    if isinstance(pass_,TransformationPass):
+        circuit_tmp = dag_to_circuit(dag)
+        print('pass namne: ',pass_.name())
+        display(circuit_tmp.draw(output='mpl'))
+print('before transpilation ')
+display(circuit.draw(output='mpl'))
+pm.run(circuit,callback=callback_func)
+pm.passes()
 # %% Extract logical 0 and 1
 # Get the two logical states before transpilation (and hence permutated qubits)
 logical = logical_states()
+
 
 def get_logical_states_v1(transpiled_circuit):
     ''' Run the actual ciruit and get the statevector after encoding
@@ -366,17 +429,42 @@ def get_logical_states_v4(transpiled_circuit):
     return results.get_statevector(circuit_log0)
 
 
+def get_logical_states_v5(transpiled_circuit):
+    ''' Run the actual ciruit and get the statevector after encoding
+        This is a bit problematic for several reasons so that's why I'm trying to avoid it
+    '''
+    results = execute(
+        transpiled_circuit,  # NOT RUNNING THE TRANSPILED CIRCUIT AT THE MOMENT
+        Aer.get_backend('statevector_simulator'),
+        noise_model=None,
+        shots=1
+    ).result()
+
+    # Get the state vectors
+    state_vectors = results.data()['snapshots']['statevector']
+    sv_post_encoding = state_vectors['post_encoding']
+    return results.get_statevector(transpiled_circuit)
+
+
+print('unpermutated', np.where(logical[0] != 0)[0])  # unpermutated zero
 log0_v1 = get_logical_states_v1(transpiled_circuit)
+print('v1', np.where(log0_v1 != 0)[0])  # This should be the
+log0_v5 = get_logical_states_v5(transpiled_circuit)
+print('v5', np.where(log0_v5 != 0)[0])
 log0_v2 = get_logical_states_v2(transpiled_circuit)
 log0_v3 = get_logical_states_v3(transpiled_circuit)
 log0_v4 = get_logical_states_v4(transpiled_circuit)
 
+
 # Print which indices are non-zero, to quickly see if the state is correct
-print('unpermutated',np.where(logical[0] != 0)[0])  # unpermutated zero
-print('v1',np.where(log0_v1 != 0)[0]) # This should be the 
-print('v2',np.where(log0_v2 != 0)[0]) # Doesn't give the same as v1 !?
-print('v3',np.where(log0_v3 != 0)[0]) # Gives the same as v2 (as it should), but still not right?
-print('v4',np.where(log0_v4 != 0)[0])  # Doesn't work at all for some reason
+
+
+
+print('v2', np.where(log0_v2 != 0)[0])  # Doesn't give the same as v1 !?
+# Gives the same as v2 (as it should), but still not right?
+print('v3', np.where(log0_v3 != 0)[0])
+print('v4', np.where(log0_v4 != 0)[0])  # Doesn't work at all for some reason
+
 
 state_fidelity(log0_v1, log0_v2)
 
@@ -411,7 +499,8 @@ sv_post_measure = state_vectors['post_measure']
 logical_state = np.zeros([2, n_shots, n_cycles+1])
 
 # sv_stabilizer = np.zeros([128, n_shots, n_cycles])
-logical = [get_logical_states_v2(transpiled_circuit), get_logical_states_v2(transpiled_circuit)]
+logical = [get_logical_states_v2(
+    transpiled_circuit), get_logical_states_v2(transpiled_circuit)]
 # A slow nested for-loop to gather all state vectors and fidelities
 print('Running statistics...')
 for i in range(n_shots):
