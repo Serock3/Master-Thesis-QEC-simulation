@@ -1,120 +1,52 @@
-# Import modules
+# %% Import modules
 import numpy as np
-from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, AncillaRegister, execute, Aer
-
-# Run a single stabilizer
-def measure_stabilizer(qbReg, anReg, clReg, i, reset=True):
-    '''Function for adding stabilizer measurements to a circuit.
-    Note that a measurement of X is done by using Hadamard before
-    and after. Input i specifies the stabilizer to measure:
-        i=0: XZZXI
-        i=1: IXZZX
-        i=2: XIXZZ
-        i=3: ZXIXZ
-    Other inputs are the circuit as well as the required registers'''
-
-    if not isinstance(i, int):
-        raise error('i must be an integer')
-
-    stab_circuit = QuantumCircuit(qbReg, anReg, clReg)#, flagReg)
-
-    # Generate indexes
-    index = np.mod(i + np.array([0, 1, 2, 3]), 5)
-
-    # Measure stabilizers
-    stab_circuit.h(anReg[1])
-    stab_circuit.h(qbReg[index[0]])
-    stab_circuit.cz(anReg[1], qbReg[index[0]])
-    stab_circuit.h(qbReg[index[0]])
-
-    stab_circuit.cz(anReg[1], qbReg[index[1]])
-
-    stab_circuit.cz(anReg[1], qbReg[index[2]])
-
-    stab_circuit.h(qbReg[index[3]])
-    stab_circuit.cz(anReg[1], qbReg[index[3]])
-    stab_circuit.h(qbReg[index[3]])
-    stab_circuit.h(anReg[1])
-
-    stab_circuit.measure(anReg[1], clReg[i])
-    if reset:
-        stab_circuit.reset(anReg[1])
-
-    return stab_circuit
-
-
-# Old stabilizer cycle without flags
-def run_stabilizer(qbReg, anReg, clReg, flagReg, reset=True):
-    stab_circuit = QuantumCircuit(qbReg, anReg, clReg, flagReg)
-    stab_circuit += measure_stabilizer(qbReg, anReg, clReg, flagReg, 0, reset)
-    stab_circuit += measure_stabilizer(qbReg, anReg, clReg, flagReg, 1, reset)
-    stab_circuit += measure_stabilizer(qbReg, anReg, clReg, flagReg, 2, reset)
-    stab_circuit += measure_stabilizer(qbReg, anReg, clReg, flagReg, 3, reset)
-    return stab_circuit
-
-
-# Correct possible errors
-def recovery_scheme(qbReg, clReg, reset=True):
-
-    recovery_circuit = QuantumCircuit(qbReg, clReg)
-
-    # If the ancilla is reset to |0> between measurements
-    if reset:
-        recovery_circuit.x(qbReg[1]).c_if(clReg, 1)
-        recovery_circuit.z(qbReg[4]).c_if(clReg, 2)
-        recovery_circuit.x(qbReg[2]).c_if(clReg, 3)
-        recovery_circuit.z(qbReg[2]).c_if(clReg, 4)
-        recovery_circuit.z(qbReg[0]).c_if(clReg, 5)
-        recovery_circuit.x(qbReg[3]).c_if(clReg, 6)
-        recovery_circuit.x(qbReg[2]).c_if(clReg, 7)
-        recovery_circuit.z(qbReg[2]).c_if(clReg, 7)
-        recovery_circuit.x(qbReg[0]).c_if(clReg, 8)
-        recovery_circuit.z(qbReg[3]).c_if(clReg, 9)
-        recovery_circuit.z(qbReg[1]).c_if(clReg, 10)
-        recovery_circuit.x(qbReg[1]).c_if(clReg, 11)
-        recovery_circuit.z(qbReg[1]).c_if(clReg, 11)
-        recovery_circuit.x(qbReg[4]).c_if(clReg, 12)
-        recovery_circuit.x(qbReg[0]).c_if(clReg, 13)
-        recovery_circuit.z(qbReg[0]).c_if(clReg, 13)
-        recovery_circuit.x(qbReg[4]).c_if(clReg, 14)
-        recovery_circuit.z(qbReg[4]).c_if(clReg, 14)
-        recovery_circuit.x(qbReg[3]).c_if(clReg, 15)
-        recovery_circuit.z(qbReg[3]).c_if(clReg, 15)
-
-    # If the ancilla is NOT reset between measurements
-    else:
-        recovery_circuit.x(qbReg[2]).c_if(clReg, 1)
-        recovery_circuit.x(qbReg[3]).c_if(clReg, 2)
-        recovery_circuit.z(qbReg[0]).c_if(clReg, 3)
-        recovery_circuit.x(qbReg[4]).c_if(clReg, 4)
-        recovery_circuit.z(qbReg[3]).c_if(clReg, 5)
-        recovery_circuit.x(qbReg[3]).c_if(clReg, 5)
-        recovery_circuit.z(qbReg[1]).c_if(clReg, 6)
-        recovery_circuit.z(qbReg[3]).c_if(clReg, 7)
-        recovery_circuit.x(qbReg[0]).c_if(clReg, 8)
-        recovery_circuit.z(qbReg[1]).c_if(clReg, 9)
-        recovery_circuit.x(qbReg[1]).c_if(clReg, 9)
-        recovery_circuit.z(qbReg[4]).c_if(clReg, 10)
-        recovery_circuit.x(qbReg[4]).c_if(clReg, 10)
-        recovery_circuit.z(qbReg[0]).c_if(clReg, 11)
-        recovery_circuit.x(qbReg[0]).c_if(clReg, 11)
-        recovery_circuit.z(qbReg[2]).c_if(clReg, 12)
-        recovery_circuit.z(qbReg[2]).c_if(clReg, 13)
-        recovery_circuit.x(qbReg[2]).c_if(clReg, 13)
-        recovery_circuit.z(qbReg[4]).c_if(clReg, 14)
-        recovery_circuit.x(qbReg[1]).c_if(clReg, 15)
-
-    return recovery_circuit
-
-# %% New Stabilizer
-def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):#, flagReg
+from qiskit import (QuantumCircuit,
+                    QuantumRegister, 
+                    ClassicalRegister, 
+                    AncillaRegister, 
+                    execute, 
+                    Aer
+                    )
+                    
+# %% All flagged stabilizers
+def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):
     '''Runs the one cycle of the [[5,1,3]] code 
-    with two ancillas as described in the article '''
+    with two ancillas as described in the article.
+    This includes the recovery from any detected errors.
+    
+    Currently, it requires reset=True to appropriately
+    correct errors'''
+
+    # Define the circuit
+    circ = QuantumCircuit(qbReg, anReg, clReg)
+
+    ## === Step 1: XZZXI ===
+    circ += flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True)
+    circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
+    circ += full_recovery_XZZXI(qbReg, clReg)
+
+    ## === Step 2: IXZZX ===
+    circ += flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True)
+    circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
+    circ += full_recovery_IXZZX( qbReg, clReg )
+
+    ## === Step 3: XIXZZ ===
+    circ += flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True)
+    circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
+    circ += full_recovery_XIXZZ( qbReg, clReg )
+    
+    ## === Step 4: ZXIXZ ===
+    circ += flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True)
+    circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
+    circ += full_recovery_ZXIXZ( qbReg, clReg )
+
+    return circ
+
+
+def flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True):
 
     # Create a circuit
-    circ = QuantumCircuit(qbReg, anReg, clReg)#, flagReg)
-
-    ## ===Step 1: Run XZZXI with flag===
+    circ = QuantumCircuit(qbReg, anReg, clReg)
 
     # X
     circ.h( qbReg[0] ) # X
@@ -128,7 +60,7 @@ def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):#, flagReg
 
     # Z
     circ.cz(anReg[1], qbReg[1])
-    
+
     # Z
     circ.cz( anReg[1], qbReg[2] )
 
@@ -148,30 +80,13 @@ def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):#, flagReg
     if reset:
         circ.reset(anReg[1])
         circ.reset(anReg[0])
-    
-    # Run the stabilizers
-    circ += measure_stabilizer(qbReg, anReg, clReg, 0, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 1, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 2, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 3, reset=True)
 
-    # Temporary recovery
-    circ.y(qbReg[2]).c_if(clReg, 1+16)
-    circ.x(qbReg[3]).c_if(clReg, 1+16)
-    circ.z(qbReg[2]).c_if(clReg, 2+16)
-    circ.x(qbReg[3]).c_if(clReg, 2+16)
-    circ.x(qbReg[1]).c_if(clReg, 3+16)
-    circ.z(qbReg[2]).c_if(clReg, 3+16)
-    circ.x(qbReg[3]).c_if(clReg, 3+16)
-    circ.x(qbReg[2]).c_if(clReg, 5+16)
-    circ.x(qbReg[3]).c_if(clReg, 5+16)
-    circ.x(qbReg[3]).c_if(clReg, 6+16)
-    circ.x(qbReg[0]).c_if(clReg, 8+16) # This seems equivalent with IZZXI
-    circ.y(qbReg[1]).c_if(clReg, 9+16)
-    circ.z(qbReg[2]).c_if(clReg, 9+16)
-    circ.x(qbReg[3]).c_if(clReg, 9+16)
+    return circ
 
-    ## ===Step 2: Run IXZZX with flag===
+def flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True):
+
+    # Create a circuit
+    circ = QuantumCircuit(qbReg, anReg, clReg)
 
     # X
     circ.h( qbReg[1] ) # X
@@ -205,29 +120,13 @@ def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):#, flagReg
     if reset:
         circ.reset(anReg[1])
         circ.reset(anReg[0])
-    
-    # Run the stabilizers
-    circ += measure_stabilizer(qbReg, anReg, clReg, 0, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 1, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 2, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 3, reset=True)
 
-    # Temporary recovery 2
-    circ.x( qbReg[1] ).c_if( clReg, 1+16 )
-    circ.x( qbReg[1] ).c_if( clReg, 2+16 )
-    circ.x( qbReg[2] ).c_if( clReg, 2+16 )
-    circ.y( qbReg[3] ).c_if( clReg, 3+16 )
-    circ.x( qbReg[4] ).c_if( clReg, 3+16 )
-    circ.z( qbReg[3] ).c_if( clReg, 5+16 )
-    circ.x( qbReg[4] ).c_if( clReg, 5+16 )
-    circ.x( qbReg[0] ).c_if( clReg, 6+16 )
-    circ.y( qbReg[4] ).c_if( clReg, 6+16 )
-    circ.x( qbReg[3] ).c_if( clReg,10+16 )
-    circ.x( qbReg[4] ).c_if( clReg,10+16 )
-    circ.x( qbReg[4] ).c_if( clReg,12+16 )
+    return circ
 
-    
-    ## ===Step 3: Run XIXZZ with flag===
+def flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True):
+
+    # Create a circuit
+    circ = QuantumCircuit(qbReg, anReg, clReg)
 
     # X
     circ.h( qbReg[0] ) # X
@@ -261,30 +160,13 @@ def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):#, flagReg
     if reset:
         circ.reset(anReg[1])
         circ.reset(anReg[0])
-    
-    # Run the stabilizers
-    circ += measure_stabilizer(qbReg, anReg, clReg, 0, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 1, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 2, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 3, reset=True)
 
-    # Temporary recovery 3
-    circ.x( qbReg[1] ).c_if( clReg, 2+16)
-    circ.x( qbReg[2] ).c_if( clReg, 2+16)
-    circ.x( qbReg[3] ).c_if( clReg, 4+16)
-    circ.z( qbReg[4] ).c_if( clReg, 4+16)
+    return circ
 
-    circ.x( qbReg[0] ).c_if( clReg, 8+16) # Seems equivalent with IZZXI
-    circ.x( qbReg[0] ).c_if( clReg, 11+16)
-    circ.x( qbReg[2] ).c_if( clReg, 11+16)
-    circ.x( qbReg[4] ).c_if( clReg, 12+16)
-    circ.z( qbReg[0] ).c_if( clReg, 13+16)
-    circ.z( qbReg[2] ).c_if( clReg, 13+16)
-    circ.x( qbReg[4] ).c_if( clReg, 13+16)
-    circ.x( qbReg[2] ).c_if( clReg, 15+16)
-    circ.x( qbReg[4] ).c_if( clReg, 15+16)
+def flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True):
 
-    ## ===Step 4: Run ZXIXZ with flag===
+    # Create a circuit
+    circ = QuantumCircuit(qbReg, anReg, clReg)
 
     # Z
     circ.h( anReg[1] )
@@ -319,28 +201,291 @@ def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):#, flagReg
         circ.reset(anReg[1])
         circ.reset(anReg[0])
     
-    # Run the stabilizers
-    circ += measure_stabilizer(qbReg, anReg, clReg, 0, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 1, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 2, reset=True)
-    circ += measure_stabilizer(qbReg, anReg, clReg, 3, reset=True)
+    return circ
 
-    # Temporary recovery 4
+    # %% All unflagged stabilizers
+
+# %% All unflagged stabilizers
+def unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True):
+    '''Runs all four stabilizers without flags'''
+    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ += unflagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset)
+    circ += unflagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset)
+    circ += unflagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset)
+    circ += unflagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset)
+    return circ
+
+def unflagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True):
+
+    # Create a circuit
+    circ = QuantumCircuit(qbReg, anReg, clReg)
+
+    # X
+    circ.h( qbReg[0] ) # X
+    circ.h( anReg[1] )
+    circ.cz( anReg[1], qbReg[0] )
+    circ.h( qbReg[0] )       
+
+    # Z
+    circ.cz(anReg[1], qbReg[1])
+
+    # Z
+    circ.cz( anReg[1], qbReg[2] )
+
+    # X
+    circ.h(qbReg[3])
+    circ.cz(anReg[1], qbReg[3])
+    circ.h(anReg[1])
+    circ.h(qbReg[3])
+
+    # Measure
+    circ.measure(anReg[1], clReg[0])
+    if reset:
+        circ.reset(anReg[1])
+
+    return circ
+
+def unflagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True):
+
+    # Create a circuit
+    circ = QuantumCircuit(qbReg, anReg, clReg)
+
+    # X
+    circ.h( qbReg[1] ) # X
+    circ.h( anReg[1] )
+    circ.cz( anReg[1], qbReg[1] )
+    circ.h( qbReg[1] )   
+
+    # Z
+    circ.cz( anReg[1], qbReg[2] )
+
+    # Z
+    circ.cz( anReg[1], qbReg[3] ) 
+
+    # X
+    circ.h(qbReg[4])
+    circ.cz(anReg[1], qbReg[4])
+    circ.h(anReg[1])
+    circ.h(qbReg[4])
+
+    # Measure
+    circ.measure(anReg[1], clReg[1])
+    if reset:
+        circ.reset(anReg[1])
+
+    return circ
+
+def unflagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True):
+
+    # Create a circuit
+    circ = QuantumCircuit(qbReg, anReg, clReg)
+
+    # X
+    circ.h( anReg[1] )
+    circ.h( qbReg[0] ) # X
+    circ.cz( anReg[1], qbReg[0] )
+    circ.h( qbReg[0] )      
+
+    # X
+    circ.h( qbReg[2] ) # X
+    circ.cz( anReg[1], qbReg[2] )
+    circ.h( qbReg[2] )
+
+    # Z
+    circ.cz( anReg[1], qbReg[3] )
+
+    # Z
+    circ.cz( anReg[1], qbReg[4] )
+    circ.h(anReg[1])
+
+    # Measure
+    circ.measure(anReg[1], clReg[2])
+    if reset:
+        circ.reset(anReg[1])
+
+    return circ
+
+def unflagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True):
+
+    # Create a circuit
+    circ = QuantumCircuit(qbReg, anReg, clReg)
+
+    # Z
+    circ.h( anReg[1] )
+    circ.cz( anReg[1], qbReg[0] )
+
+    # X
+    circ.h( qbReg[1] ) # X
+    circ.cz( anReg[1], qbReg[1] )
+    circ.h( qbReg[1] )
+
+    # X
+    circ.h( qbReg[3] ) # X
+    circ.cz( anReg[1], qbReg[3] )
+    circ.h( qbReg[3] )
+    
+    # Z
+    circ.cz( anReg[1], qbReg[4] )
+    circ.h(anReg[1])
+
+    # Measure
+    circ.measure(anReg[1], clReg[3])
+    if reset:
+        circ.reset(anReg[1])
+    
+    return circ
+
+
+# %% All recoveries
+def unflagged_recovery(qbReg, clReg, reset=True):
+    '''Lookup table for recovery from a
+    single qubit error on code qubits'''
+
+    circ = QuantumCircuit(qbReg, clReg)
+
+    # If the ancilla is reset to |0> between measurements
+    if reset:
+        circ.x(qbReg[1]).c_if(clReg, 1)
+        circ.z(qbReg[4]).c_if(clReg, 2)
+        circ.x(qbReg[2]).c_if(clReg, 3)
+        circ.z(qbReg[2]).c_if(clReg, 4)
+        circ.z(qbReg[0]).c_if(clReg, 5)
+        circ.x(qbReg[3]).c_if(clReg, 6)
+        circ.x(qbReg[2]).c_if(clReg, 7)
+        circ.z(qbReg[2]).c_if(clReg, 7)
+        circ.x(qbReg[0]).c_if(clReg, 8)
+        circ.z(qbReg[3]).c_if(clReg, 9)
+        circ.z(qbReg[1]).c_if(clReg, 10)
+        circ.x(qbReg[1]).c_if(clReg, 11)
+        circ.z(qbReg[1]).c_if(clReg, 11)
+        circ.x(qbReg[4]).c_if(clReg, 12)
+        circ.x(qbReg[0]).c_if(clReg, 13)
+        circ.z(qbReg[0]).c_if(clReg, 13)
+        circ.x(qbReg[4]).c_if(clReg, 14)
+        circ.z(qbReg[4]).c_if(clReg, 14)
+        circ.x(qbReg[3]).c_if(clReg, 15)
+        circ.z(qbReg[3]).c_if(clReg, 15)
+
+    # If the ancilla is NOT reset between measurements
+    else:
+        circ.x(qbReg[2]).c_if(clReg, 1)
+        circ.x(qbReg[3]).c_if(clReg, 2)
+        circ.z(qbReg[0]).c_if(clReg, 3)
+        circ.x(qbReg[4]).c_if(clReg, 4)
+        circ.z(qbReg[3]).c_if(clReg, 5)
+        circ.x(qbReg[3]).c_if(clReg, 5)
+        circ.z(qbReg[1]).c_if(clReg, 6)
+        circ.z(qbReg[3]).c_if(clReg, 7)
+        circ.x(qbReg[0]).c_if(clReg, 8)
+        circ.z(qbReg[1]).c_if(clReg, 9)
+        circ.x(qbReg[1]).c_if(clReg, 9)
+        circ.z(qbReg[4]).c_if(clReg, 10)
+        circ.x(qbReg[4]).c_if(clReg, 10)
+        circ.z(qbReg[0]).c_if(clReg, 11)
+        circ.x(qbReg[0]).c_if(clReg, 11)
+        circ.z(qbReg[2]).c_if(clReg, 12)
+        circ.z(qbReg[2]).c_if(clReg, 13)
+        circ.x(qbReg[2]).c_if(clReg, 13)
+        circ.z(qbReg[4]).c_if(clReg, 14)
+        circ.x(qbReg[1]).c_if(clReg, 15)
+
+    return circ
+
+def full_recovery_XZZXI( qbReg, clReg ):
+
+    circ = QuantumCircuit(qbReg, clReg)
+
+    # Unflagged recovery
+    circ += unflagged_recovery(qbReg, clReg, reset=True)
+
+    # Flagged recovery
+    circ.y(qbReg[2]).c_if(clReg, 1+16)
+    circ.x(qbReg[3]).c_if(clReg, 1+16)
+    circ.z(qbReg[2]).c_if(clReg, 2+16)
+    circ.x(qbReg[3]).c_if(clReg, 2+16)
+    circ.x(qbReg[1]).c_if(clReg, 3+16)
+    circ.z(qbReg[2]).c_if(clReg, 3+16)
+    circ.x(qbReg[3]).c_if(clReg, 3+16)
+    circ.x(qbReg[2]).c_if(clReg, 5+16)
+    circ.x(qbReg[3]).c_if(clReg, 5+16)
+    circ.x(qbReg[3]).c_if(clReg, 6+16)
+    circ.x(qbReg[0]).c_if(clReg, 8+16) # This seems equivalent with IZZXI
+    circ.y(qbReg[1]).c_if(clReg, 9+16)
+    circ.z(qbReg[2]).c_if(clReg, 9+16)
+    circ.x(qbReg[3]).c_if(clReg, 9+16)
+
+    return circ
+
+def full_recovery_IXZZX( qbReg, clReg ):
+
+    circ = QuantumCircuit(qbReg, clReg)
+
+    # Unflagged recovery
+    circ += unflagged_recovery(qbReg, clReg, reset=True)
+
+    # Flagged recovery
+    circ.x( qbReg[1] ).c_if( clReg, 1+16 )
     circ.x( qbReg[1] ).c_if( clReg, 2+16 )
     circ.x( qbReg[2] ).c_if( clReg, 2+16 )
-    circ.x( qbReg[3] ).c_if( clReg, 4+16 )
-    circ.z( qbReg[4] ).c_if( clReg, 4+16 )
-    circ.x( qbReg[2] ).c_if( clReg, 5+16 )
-    circ.x( qbReg[3] ).c_if( clReg, 5+16 )
-    circ.x( qbReg[0] ).c_if( clReg, 11+16 )
-    circ.x( qbReg[2] ).c_if( clReg, 11+16 )
-    circ.z( qbReg[0] ).c_if( clReg, 13+16 )
-    circ.z( qbReg[2] ).c_if( clReg, 13+16 )
-    circ.x( qbReg[4] ).c_if( clReg, 13+16 )
-    circ.x( qbReg[0] ).c_if( clReg, 14+16 )
-    circ.z( qbReg[2] ).c_if( clReg, 14+16 )
-    circ.z( qbReg[4] ).c_if( clReg, 14+16 )
-    circ.x( qbReg[2] ).c_if( clReg, 15+16 )
-    circ.x( qbReg[4] ).c_if( clReg, 15+16 )
+    circ.y( qbReg[3] ).c_if( clReg, 3+16 )
+    circ.x( qbReg[4] ).c_if( clReg, 3+16 )
+    circ.z( qbReg[3] ).c_if( clReg, 5+16 )
+    circ.x( qbReg[4] ).c_if( clReg, 5+16 )
+    circ.x( qbReg[0] ).c_if( clReg, 6+16 )
+    circ.y( qbReg[4] ).c_if( clReg, 6+16 )
+    circ.x( qbReg[3] ).c_if( clReg,10+16 )
+    circ.x( qbReg[4] ).c_if( clReg,10+16 )
+    circ.x( qbReg[4] ).c_if( clReg,12+16 )
+
+    return circ
+
+def full_recovery_XIXZZ( qbReg, clReg ):
+
+    circ = QuantumCircuit(qbReg, clReg)
+
+    # Unflagged recovery
+    circ += unflagged_recovery(qbReg, clReg, reset=True)
+
+    # Flagged recovery
+    circ.x( qbReg[1] ).c_if( clReg, 2+16)
+    circ.x( qbReg[2] ).c_if( clReg, 2+16)
+    circ.x( qbReg[3] ).c_if( clReg, 4+16)
+    circ.z( qbReg[4] ).c_if( clReg, 4+16)
+    circ.x( qbReg[0] ).c_if( clReg, 8+16) # Seems equivalent with IZZXI
+    circ.x( qbReg[0] ).c_if( clReg, 11+16)
+    circ.x( qbReg[2] ).c_if( clReg, 11+16)
+    circ.x( qbReg[4] ).c_if( clReg, 12+16)
+    circ.z( qbReg[0] ).c_if( clReg, 13+16)
+    circ.z( qbReg[2] ).c_if( clReg, 13+16)
+    circ.x( qbReg[4] ).c_if( clReg, 13+16)
+    circ.x( qbReg[2] ).c_if( clReg, 15+16)
+    circ.x( qbReg[4] ).c_if( clReg, 15+16)
+
+    return circ
+
+def full_recovery_ZXIXZ( qbReg, clReg ):
+
+    circ = QuantumCircuit(qbReg, clReg)
+
+    # Unflagged recovery
+    circ += unflagged_recovery(qbReg, clReg, reset=True)
+
+    # Flagged recovery
+    circ.x( qbReg[1] ).c_if( clReg, 2+16)
+    circ.x( qbReg[2] ).c_if( clReg, 2+16)
+    circ.x( qbReg[3] ).c_if( clReg, 4+16)
+    circ.z( qbReg[4] ).c_if( clReg, 4+16)
+    circ.x( qbReg[2] ).c_if( clReg, 5+16)
+    circ.x( qbReg[3] ).c_if( clReg, 5+16)
+    circ.x( qbReg[0] ).c_if( clReg, 11+16)
+    circ.x( qbReg[2] ).c_if( clReg, 11+16)
+    circ.z( qbReg[0] ).c_if( clReg, 13+16)
+    circ.z( qbReg[2] ).c_if( clReg, 13+16)
+    circ.x( qbReg[4] ).c_if( clReg, 13+16)
+    circ.x( qbReg[0] ).c_if( clReg, 14+16)
+    circ.z( qbReg[2] ).c_if( clReg, 14+16)
+    circ.z( qbReg[4] ).c_if( clReg, 14+16)
+    circ.x( qbReg[2] ).c_if( clReg, 15+16)
+    circ.x( qbReg[4] ).c_if( clReg, 15+16)
 
     return circ
