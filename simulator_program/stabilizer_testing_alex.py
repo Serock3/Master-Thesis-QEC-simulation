@@ -1,4 +1,4 @@
-# Import modules
+# %% Import modules
 import numpy as np
 from qiskit import (QuantumCircuit,
                     QuantumRegister, 
@@ -8,117 +8,15 @@ from qiskit import (QuantumCircuit,
                     Aer
                     )
 
-# %% OLD FUNCTIONS
-# Run a single stabilizer
-def measure_stabilizer(qbReg, anReg, clReg, i, reset=True):
-    '''OLD FUNCTION replaced by unflagged_stabilizer_XZZXI,
-    unflagged_stabilizer_IXZZX, unflagged_stabilizer_XIXZZ,
-    unflagged_stabilizer_ZXIXZ for the respective stabilizers.
-    
-    Function for adding stabilizer measurements to a circuit.
-    Note that a measurement of X is done by using Hadamard before
-    and after. Input i specifies the stabilizer to measure:
-        i=0: XZZXI
-        i=1: IXZZX
-        i=2: XIXZZ
-        i=3: ZXIXZ
-    Other inputs are the circuit as well as the required registers'''
+# Import our own files
+from custom_noise_models import pauli_noise_model
+from custom_transpiler import shortest_transpile_from_distribution, WAQCT_device_properties
+#from stabilizers import (flagged_stabilizer_cycle, unflagged_stabilizer_all)
 
-    if not isinstance(i, int):
-        raise error('i must be an integer')
-
-    stab_circuit = QuantumCircuit(qbReg, anReg, clReg)
-
-    # Generate indexes
-    index = np.mod(i + np.array([0, 1, 2, 3]), 5)
-
-    # Measure stabilizers
-    stab_circuit.h(anReg[1])
-    stab_circuit.h(qbReg[index[0]])
-    stab_circuit.cz(anReg[1], qbReg[index[0]])
-    stab_circuit.h(qbReg[index[0]])
-
-    stab_circuit.cz(anReg[1], qbReg[index[1]])
-
-    stab_circuit.cz(anReg[1], qbReg[index[2]])
-
-    stab_circuit.h(qbReg[index[3]])
-    stab_circuit.cz(anReg[1], qbReg[index[3]])
-    stab_circuit.h(qbReg[index[3]])
-    stab_circuit.h(anReg[1])
-
-    stab_circuit.measure(anReg[1], clReg[i])
-    if reset:
-        stab_circuit.reset(anReg[1])
-
-    return stab_circuit
-
-# Old stabilizer cycle without flags
-def run_stabilizer(qbReg, anReg, clReg, reset=True):
-    '''OLD FUNCTION, replaced by unflagged_stabilizer_all'''
-    stab_circuit = QuantumCircuit(qbReg, anReg, clReg)
-    stab_circuit += measure_stabilizer(qbReg, anReg, clReg, 0, reset)
-    stab_circuit += measure_stabilizer(qbReg, anReg, clReg, 1, reset)
-    stab_circuit += measure_stabilizer(qbReg, anReg, clReg, 2, reset)
-    stab_circuit += measure_stabilizer(qbReg, anReg, clReg, 3, reset)
-    return stab_circuit
-
-# Correct possible errors
-def recovery_scheme(qbReg, clReg, reset=True):
-    '''OLD FUNCTION, replaced by unflagged_recovery'''
-    recovery_circuit = QuantumCircuit(qbReg, clReg)
-
-    # If the ancilla is reset to |0> between measurements
-    if reset:
-        recovery_circuit.x(qbReg[1]).c_if(clReg, 1)
-        recovery_circuit.z(qbReg[4]).c_if(clReg, 2)
-        recovery_circuit.x(qbReg[2]).c_if(clReg, 3)
-        recovery_circuit.z(qbReg[2]).c_if(clReg, 4)
-        recovery_circuit.z(qbReg[0]).c_if(clReg, 5)
-        recovery_circuit.x(qbReg[3]).c_if(clReg, 6)
-        recovery_circuit.x(qbReg[2]).c_if(clReg, 7)
-        recovery_circuit.z(qbReg[2]).c_if(clReg, 7)
-        recovery_circuit.x(qbReg[0]).c_if(clReg, 8)
-        recovery_circuit.z(qbReg[3]).c_if(clReg, 9)
-        recovery_circuit.z(qbReg[1]).c_if(clReg, 10)
-        recovery_circuit.x(qbReg[1]).c_if(clReg, 11)
-        recovery_circuit.z(qbReg[1]).c_if(clReg, 11)
-        recovery_circuit.x(qbReg[4]).c_if(clReg, 12)
-        recovery_circuit.x(qbReg[0]).c_if(clReg, 13)
-        recovery_circuit.z(qbReg[0]).c_if(clReg, 13)
-        recovery_circuit.x(qbReg[4]).c_if(clReg, 14)
-        recovery_circuit.z(qbReg[4]).c_if(clReg, 14)
-        recovery_circuit.x(qbReg[3]).c_if(clReg, 15)
-        recovery_circuit.z(qbReg[3]).c_if(clReg, 15)
-
-    # If the ancilla is NOT reset between measurements
-    else:
-        recovery_circuit.x(qbReg[2]).c_if(clReg, 1)
-        recovery_circuit.x(qbReg[3]).c_if(clReg, 2)
-        recovery_circuit.z(qbReg[0]).c_if(clReg, 3)
-        recovery_circuit.x(qbReg[4]).c_if(clReg, 4)
-        recovery_circuit.z(qbReg[3]).c_if(clReg, 5)
-        recovery_circuit.x(qbReg[3]).c_if(clReg, 5)
-        recovery_circuit.z(qbReg[1]).c_if(clReg, 6)
-        recovery_circuit.z(qbReg[3]).c_if(clReg, 7)
-        recovery_circuit.x(qbReg[0]).c_if(clReg, 8)
-        recovery_circuit.z(qbReg[1]).c_if(clReg, 9)
-        recovery_circuit.x(qbReg[1]).c_if(clReg, 9)
-        recovery_circuit.z(qbReg[4]).c_if(clReg, 10)
-        recovery_circuit.x(qbReg[4]).c_if(clReg, 10)
-        recovery_circuit.z(qbReg[0]).c_if(clReg, 11)
-        recovery_circuit.x(qbReg[0]).c_if(clReg, 11)
-        recovery_circuit.z(qbReg[2]).c_if(clReg, 12)
-        recovery_circuit.z(qbReg[2]).c_if(clReg, 13)
-        recovery_circuit.x(qbReg[2]).c_if(clReg, 13)
-        recovery_circuit.z(qbReg[4]).c_if(clReg, 14)
-        recovery_circuit.x(qbReg[1]).c_if(clReg, 15)
-
-    return recovery_circuit
 # %% NEW FUNCTIONS
 def unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True):
     '''Runs all four stabilizers without flags'''
-    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ = create_empty_circuit(qbReg, anReg, clReg)
     circ += unflagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset)
     circ += unflagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset)
     circ += unflagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset)
@@ -179,8 +77,8 @@ def unflagged_recovery(qbReg, clReg, reset=True):
 
     return circ
 
-# %% New Stabilizer
-def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):
+# %% All flagged stabilizers
+def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True, recovery=True):
     '''Runs the one cycle of the [[5,1,3]] code 
     with two ancillas as described in the article.
     This includes the recovery from any detected errors.
@@ -189,164 +87,38 @@ def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):
     correct errors'''
 
     # Define the circuit
-    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ = create_empty_circuit(qbReg, anReg, clReg)
 
     ## === Step 1: XZZXI ===
     circ += flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
-    circ += full_recovery_XZZXI(qbReg, clReg)
+    if recovery:
+        circ += full_recovery_XZZXI(qbReg, clReg)
 
     ## === Step 2: IXZZX ===
     circ += flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
-    circ += full_recovery_IXZZX( qbReg, clReg )
+    if recovery:
+        circ += full_recovery_IXZZX( qbReg, clReg )
 
     ## === Step 3: XIXZZ ===
     circ += flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
-    circ += full_recovery_XIXZZ( qbReg, clReg )
+    if recovery:
+        circ += full_recovery_XIXZZ( qbReg, clReg )
     
     ## === Step 4: ZXIXZ ===
     circ += flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
-    circ += full_recovery_ZXIXZ( qbReg, clReg )
+    if recovery:
+        circ += full_recovery_ZXIXZ( qbReg, clReg )
 
     return circ
 
-
-# %%
-
-from qiskit import *
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-from qiskit.visualization import plot_histogram
-from qiskit.quantum_info import state_fidelity
-from qiskit.providers.aer.extensions.snapshot_statevector import *
-
-# Defining useful functions
-# Note that this does not consider our setup
-def logical_states():
-    logical_0 = np.zeros(2**5)
-    logical_0[0b00000] = 1/4
-    logical_0[0b10010] = 1/4
-    logical_0[0b01001] = 1/4
-    logical_0[0b10100] = 1/4
-    logical_0[0b01010] = 1/4
-    logical_0[0b11011] = -1/4
-    logical_0[0b00110] = -1/4
-    logical_0[0b11000] = -1/4
-    logical_0[0b11101] = -1/4
-    logical_0[0b00011] = -1/4
-    logical_0[0b11110] = -1/4
-    logical_0[0b01111] = -1/4
-    logical_0[0b10001] = -1/4
-    logical_0[0b01100] = -1/4
-    logical_0[0b10111] = -1/4
-    logical_0[0b00101] = 1/4
-
-    logical_1 = np.zeros(2**5)
-    logical_1[0b11111] = 1/4
-    logical_1[0b01101] = 1/4
-    logical_1[0b10110] = 1/4
-    logical_1[0b01011] = 1/4
-    logical_1[0b10101] = 1/4
-    logical_1[0b00100] = -1/4
-    logical_1[0b11001] = -1/4
-    logical_1[0b00111] = -1/4
-    logical_1[0b00010] = -1/4
-    logical_1[0b11100] = -1/4
-    logical_1[0b00001] = -1/4
-    logical_1[0b10000] = -1/4
-    logical_1[0b01110] = -1/4
-    logical_1[0b10011] = -1/4
-    logical_1[0b01000] = -1/4
-    logical_1[0b11010] = 1/4
-
-    # Add two ancillas in |0>
-    an0 = np.zeros(2**2)
-    an0[0] = 1.0
-
-    logical_1 = np.kron(logical_1, an0)
-    logical_0 = np.kron(logical_0, an0)
-
-    return [logical_0, logical_1]
-
-def encode_input(qbReg):
-    '''Encode the input into logical 0 and 1
-    This assumes that the 0:th qubit is the
-    original state |psi> = a|0> + b|1>'''
-    encoding_circuit = QuantumCircuit(qbReg)
-
-    encoding_circuit.h(qbReg[3])
-    encoding_circuit.cz(qbReg[3], qbReg[1])
-    encoding_circuit.cz(qbReg[3], qbReg[2])
-    encoding_circuit.cx(qbReg[3], qbReg[0])
-
-    encoding_circuit.h(qbReg[2])
-    encoding_circuit.cx(qbReg[2], qbReg[0])
-    encoding_circuit.cz(qbReg[2], qbReg[3])
-    encoding_circuit.cz(qbReg[2], qbReg[4])
-
-    encoding_circuit.h(qbReg[1])
-    encoding_circuit.cz(qbReg[1], qbReg[0])
-    encoding_circuit.cx(qbReg[1], qbReg[3])
-    encoding_circuit.cz(qbReg[1], qbReg[4])
-
-    encoding_circuit.h(qbReg[4])
-    encoding_circuit.cz(qbReg[4], qbReg[2])
-    encoding_circuit.cz(qbReg[4], qbReg[3])
-    encoding_circuit.cx(qbReg[4], qbReg[1])
-
-    return encoding_circuit
-# %%
-# Running the quantum circuit
-
-def define_circuit(n_cycles):
-    '''Creates the entire circuit and returns it
-    as an output. Input is the number of stabilizer
-    cycles to perform'''
-    # Define our registers
-
-    qb = QuantumRegister(5, 'code_qubit')
-    an = QuantumRegister(2, 'ancilla_qubit')
-    cr = ClassicalRegister(5, 'syndrome_bit')
-    readout = ClassicalRegister(5, 'readout')
-
-    circuit = QuantumCircuit(cr, readout, an, qb)
-
-    # Prepare the input
-    circuit.x(qb[0])  # As an example, start in |1>
-
-    # Encode the state
-    circuit += encode_input(qb)
-    circuit.snapshot_statevector('post_encoding')
-
-    # Random error
-    #circuit.z( qb[1] )
-    #circuit.x( qb[3] )
-
-    # Stabilizers
-    for i in range(n_cycles):
-        circuit += flagged_stabilizer_cycle( qb, an, cr, reset=True )
-    #    circuit += run_stabilizer(qb, an, cr, flag, reset=True)
-    #    circuit += recovery_scheme(qb, cr, reset=True)
-        circuit.snapshot_statevector('stabilizer')
-
-    # Readout of the encoded state
-    # Measure at the end of the run
-    circuit.measure(qb, readout)
-    circuit.snapshot_statevector('post_measure')
-
-    return circuit
-
-
-
-# %% All flagged stabilizers
-def flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True):
+def flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True, n_cycles=0):
 
     # Create a circuit
-    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ = create_empty_circuit(qbReg, anReg, clReg)
 
     # X
     circ.h( qbReg[0] ) # X
@@ -374,19 +146,31 @@ def flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True):
     circ.h(qbReg[3])
 
     # Measure
-    circ.measure(anReg[1], clReg[0])
-    circ.h(anReg[0])
-    circ.measure(anReg[0], clReg[4])
-    if reset:
-        circ.reset(anReg[1])
-        circ.reset(anReg[0])
+    if isinstance(clReg, list):
+        flag_register = clReg[1]
+        ancilla_msmnt_register = clReg[2]
+
+        circ.measure(anReg[1], ancilla_msmnt_register[n_cycles][0])
+        circ.h(anReg[0])
+        circ.measure(anReg[0], flag_register[n_cycles][0])
+        if reset:
+            circ.reset(anReg[1])
+            circ.reset(anReg[0])
+
+    else:
+        circ.measure(anReg[1], clReg[0])
+        circ.h(anReg[0])
+        circ.measure(anReg[0], clReg[4])
+        if reset:
+            circ.reset(anReg[1])
+            circ.reset(anReg[0])
 
     return circ
 
 def flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True):
 
     # Create a circuit
-    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ = create_empty_circuit(qbReg, anReg, clReg)
 
     # X
     circ.h( qbReg[1] ) # X
@@ -426,7 +210,7 @@ def flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True):
 def flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True):
 
     # Create a circuit
-    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ = create_empty_circuit(qbReg, anReg, clReg)
 
     # X
     circ.h( qbReg[0] ) # X
@@ -466,7 +250,7 @@ def flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True):
 def flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True):
 
     # Create a circuit
-    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ = create_empty_circuit(qbReg, anReg, clReg)
 
     # Z
     circ.h( anReg[1] )
@@ -504,11 +288,10 @@ def flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True):
     return circ
 
 # %% All unflagged stabilizers
-
 def unflagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True):
 
     # Create a circuit
-    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ = create_empty_circuit(qbReg, anReg, clReg)
 
     # X
     circ.h( qbReg[0] ) # X
@@ -538,7 +321,7 @@ def unflagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True):
 def unflagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True):
 
     # Create a circuit
-    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ = create_empty_circuit(qbReg, anReg, clReg)
 
     # X
     circ.h( qbReg[1] ) # X
@@ -568,7 +351,7 @@ def unflagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True):
 def unflagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True):
 
     # Create a circuit
-    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ = create_empty_circuit(qbReg, anReg, clReg)
 
     # X
     circ.h( anReg[1] )
@@ -599,7 +382,7 @@ def unflagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True):
 def unflagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True):
 
     # Create a circuit
-    circ = QuantumCircuit(qbReg, anReg, clReg)
+    circ = create_empty_circuit(qbReg, anReg, clReg)
 
     # Z
     circ.h( anReg[1] )
@@ -726,7 +509,180 @@ def full_recovery_ZXIXZ( qbReg, clReg ):
 
     return circ
 
-# %% TESTING THE PROCEDURE
+
+# %% Import modules for testing
+
+from qiskit import *
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from qiskit.visualization import plot_histogram
+from qiskit.quantum_info import state_fidelity
+from qiskit.providers.aer.extensions.snapshot_statevector import *
+
+# Import our own files
+from custom_noise_models import pauli_noise_model
+
+# Defining useful functions
+# Note that this does not consider our setup
+def logical_states():
+    logical_0 = np.zeros(2**5)
+    logical_0[0b00000] = 1/4
+    logical_0[0b10010] = 1/4
+    logical_0[0b01001] = 1/4
+    logical_0[0b10100] = 1/4
+    logical_0[0b01010] = 1/4
+    logical_0[0b11011] = -1/4
+    logical_0[0b00110] = -1/4
+    logical_0[0b11000] = -1/4
+    logical_0[0b11101] = -1/4
+    logical_0[0b00011] = -1/4
+    logical_0[0b11110] = -1/4
+    logical_0[0b01111] = -1/4
+    logical_0[0b10001] = -1/4
+    logical_0[0b01100] = -1/4
+    logical_0[0b10111] = -1/4
+    logical_0[0b00101] = 1/4
+
+    logical_1 = np.zeros(2**5)
+    logical_1[0b11111] = 1/4
+    logical_1[0b01101] = 1/4
+    logical_1[0b10110] = 1/4
+    logical_1[0b01011] = 1/4
+    logical_1[0b10101] = 1/4
+    logical_1[0b00100] = -1/4
+    logical_1[0b11001] = -1/4
+    logical_1[0b00111] = -1/4
+    logical_1[0b00010] = -1/4
+    logical_1[0b11100] = -1/4
+    logical_1[0b00001] = -1/4
+    logical_1[0b10000] = -1/4
+    logical_1[0b01110] = -1/4
+    logical_1[0b10011] = -1/4
+    logical_1[0b01000] = -1/4
+    logical_1[0b11010] = 1/4
+
+    # Add two ancillas in |0>
+    an0 = np.zeros(2**2)
+    an0[0] = 1.0
+
+    logical_1 = np.kron(logical_1, an0)
+    logical_0 = np.kron(logical_0, an0)
+
+    return [logical_0, logical_1]
+
+def encode_input(qbReg):
+    '''Encode the input into logical 0 and 1
+    This assumes that the 0:th qubit is the
+    original state |psi> = a|0> + b|1>'''
+    encoding_circuit = QuantumCircuit(qbReg)
+
+    encoding_circuit.h(qbReg[3])
+    encoding_circuit.cz(qbReg[3], qbReg[1])
+    encoding_circuit.cz(qbReg[3], qbReg[2])
+    encoding_circuit.cx(qbReg[3], qbReg[0])
+
+    encoding_circuit.h(qbReg[2])
+    encoding_circuit.cx(qbReg[2], qbReg[0])
+    encoding_circuit.cz(qbReg[2], qbReg[3])
+    encoding_circuit.cz(qbReg[2], qbReg[4])
+
+    encoding_circuit.h(qbReg[1])
+    encoding_circuit.cz(qbReg[1], qbReg[0])
+    encoding_circuit.cx(qbReg[1], qbReg[3])
+    encoding_circuit.cz(qbReg[1], qbReg[4])
+
+    encoding_circuit.h(qbReg[4])
+    encoding_circuit.cz(qbReg[4], qbReg[2])
+    encoding_circuit.cz(qbReg[4], qbReg[3])
+    encoding_circuit.cx(qbReg[4], qbReg[1])
+
+    return encoding_circuit
+
+def get_classical_register(n_cycles):
+    '''Generate lists of classical registers for
+    storing all measurement data for the flagged
+    error correction code'''
+
+
+    # List of registers for each iteration of the conditional
+    # step of 'all four unflagged stabilizers'
+    syndrome_register = [
+        [ ClassicalRegister( 4, 'syndrome_cycle_' +str(i) +'_step_' +str(j)) 
+        for j in range(4) ] for i in range(n_cycles) ]
+
+    # List of registers for each step in the flagged stabilizer cycle
+    flag_register = [ 
+        [ ClassicalRegister( 1, 'flag_cycle_' +str(i) +'_step_' +str(j))
+        for j in range(4) ] for i in range(n_cycles) ]
+
+    # List of registers for the single stabilizer run with flag
+    ancilla_msmnt_register = [
+        [ ClassicalRegister( 1, 'ancilla_cycle_' +str(i) +'_step_' +str(j))
+        for j in range(4) ] for i in range(n_cycles) ]
+
+    return [syndrome_register, flag_register, ancilla_msmnt_register]
+
+def create_empty_circuit(qbReg, anReg, clReg):
+    if isinstance(clReg, list):
+        circ = QuantumCircuit(qbReg, anReg)
+        for reg_type in clReg:
+            for reg_index in reg_type:
+                for reg in reg_index:
+                    circ.add_register( reg )
+    else:
+        circ = QuantumCircuit(qbReg, anReg, clReg)
+
+    return circ
+
+# %% Running the quantum circuit 
+def define_circuit(n_cycles, flag=True):
+    '''Creates the entire circuit and returns it
+    as an output. Input is the number of stabilizer
+    cycles to perform'''
+    # Define our registers
+
+    qb = QuantumRegister(5, 'code_qubit')
+    an = AncillaRegister(2, 'ancilla_qubit')
+    #cr = ClassicalRegister(5, 'syndrome_bit')
+    cr = get_classical_register(1)
+    readout = ClassicalRegister(5, 'readout')
+
+    #circuit = QuantumCircuit(cr, readout, an, qb)
+    circuit = create_empty_circuit(qb, an, cr)
+    circuit.add_register(readout)
+
+    # Prepare the input
+    circuit.x(qb[0])  # As an example, start in |1>
+
+    # Encode the state
+    circuit += encode_input(qb)
+    circuit.snapshot_statevector('post_encoding')
+
+    # Random error
+    #circuit.z( qb[1] )
+    #circuit.x( qb[3] )
+
+    # Stabilizers
+    for i in range(n_cycles):
+        if flag:
+            circuit += flagged_stabilizer_cycle( qb, an, cr, reset=True )
+            circuit.snapshot_statevector('stabilizer_' + str(i))
+        else:
+            circuit += unflagged_stabilizer_all( qb, an, cr, reset=True )
+            circuit += unflagged_recovery(qb, cr, reset=True)
+            circuit.snapshot_statevector('stabilizer_' + str(i))
+        
+
+    # Readout of the encoded state
+    # Measure at the end of the run
+    circuit.measure(qb, readout)
+    circuit.snapshot_statevector('post_measure')
+
+    return circuit
+
+
+# %% Simple testing with a single cycle
 
 # Create the circuit
 n_cycles = 1
@@ -742,10 +698,10 @@ results = execute(
 
 # Analyze results
 logical = logical_states()
-sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer'][0]
+sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][0]
 fid = 0
 for i in range(10):
-    fid += state_fidelity(logical[1], results.data()['snapshots']['statevector']['stabilizer'][i])
+    fid += state_fidelity(logical[1], results.data()['snapshots']['statevector']['stabilizer_0'][i])
 
 print('Average fidelity:')
 print(fid/10)
@@ -754,3 +710,99 @@ print(fid/10)
 counts = results.get_counts()
 plot_histogram( counts )
 #circuit.draw(output='mpl')
+
+# %% Comparison between flagged and unflagged
+
+n_cycles = 10
+flagged_circuit = define_circuit( n_cycles, flag=True )
+unflagged_circuit = define_circuit( n_cycles, flag=False )
+noise = pauli_noise_model(0.001, 0.00, 0.0)
+n_shots = 2000
+
+results_flag_ideal = execute(
+    flagged_circuit,  
+    Aer.get_backend('qasm_simulator'),
+    noise_model=None,
+    shots=n_shots
+).result()
+
+results_flag_noise = execute(
+    flagged_circuit,  
+    Aer.get_backend('qasm_simulator'),
+    noise_model=noise,
+    shots=n_shots
+).result()
+
+results_ideal = execute(
+    unflagged_circuit,  
+    Aer.get_backend('qasm_simulator'),
+    noise_model=None,
+    shots=n_shots
+).result()
+
+results_noise = execute(
+    unflagged_circuit,  
+    Aer.get_backend('qasm_simulator'),
+    noise_model=noise,
+    shots=n_shots
+).result()
+
+logical_state = get_fidelities(
+    results_noisy=results_noise, results_ideal=results_ideal, snapshot_type='statevector')
+logical_state_flag = get_fidelities(
+    results_noisy=results_flag_noise, results_ideal=results_flag_ideal, snapshot_type='statevector')
+
+
+# Plotting
+sns.set_context('talk', rc={"lines.linewidth": 2.5})
+default_colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red',
+                  'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:cyan']
+
+fig = plt.figure(figsize=[10, 6])
+plt.plot(logical_state, marker='o', label=r'Regular')
+plt.plot(logical_state_flag, marker='o', label=r'Flagged')
+
+plt.xticks(ticks=range(n_cycles+1))
+plt.xlabel('Number of cycles')
+plt.title('Average fidelity across stabilizer cycles')
+plt.legend()
+plt.show()
+
+# %%
+def _get_fidelities_mat(results_noisy, results_ideal):
+    state_vectors_noisy = results_noisy.data()['snapshots']['density_matrix']
+    state_vectors_ideal = results_ideal.data()['snapshots']['density_matrix']
+
+    running_fidelity = np.zeros([n_cycles+1])
+    running_fidelity[0] = state_fidelity(state_vectors_ideal['post_encoding'][0]['value'],
+                                         state_vectors_noisy['post_encoding'][0]['value'])
+    print('Purity of encoded state = ', purity(
+        state_vectors_noisy['post_encoding'][0]['value']))
+    for j in range(n_cycles):
+        running_fidelity[j+1] = state_fidelity(state_vectors_ideal['stabilizer_' + str(j)][0]['value'],
+                                               state_vectors_noisy['stabilizer_' + str(j)][0]['value'])
+    return running_fidelity
+
+
+def _get_fidelities_vec(results_noisy, results_ideal):
+    # Get the state vectors
+    state_vectors_noisy = results_noisy.data()['snapshots']['statevector']
+    state_vectors_ideal = results_ideal.data()['snapshots']['statevector']
+
+    running_fidelity = np.zeros([n_shots, n_cycles+1])
+
+    for i in range(n_shots):  # n_shots
+        running_fidelity[i, 0] = state_fidelity(
+            state_vectors_ideal['post_encoding'][0], state_vectors_noisy['post_encoding'][i])
+        for j in range(n_cycles):
+            running_fidelity[i, j+1] = state_fidelity(
+                state_vectors_ideal['stabilizer_' + str(j)][0], state_vectors_noisy['stabilizer_' + str(j)][i])
+    return np.sum(running_fidelity, 0) / (n_shots+1)
+
+
+def get_fidelities(results_noisy, results_ideal, snapshot_type):
+    # logical0 = logical_0_transp  # logical[0]  #
+    if snapshot_type == 'density_matrix':
+        return _get_fidelities_mat(results_noisy, results_ideal)
+    return _get_fidelities_vec(results_noisy, results_ideal)
+

@@ -7,9 +7,34 @@ from qiskit import (QuantumCircuit,
                     execute, 
                     Aer
                     )
-                    
+
+# %% Generate registers for storing ALL measurements
+def get_classical_register(n_cycles):
+    '''Generate lists of classical registers for
+    storing all measurement data for the flagged
+    error correction code'''
+
+
+    # List of registers for each iteration of the conditional
+    # step of 'all four unflagged stabilizers'
+    syndrome_register = [
+        [ ClassicalRegister( 4, 'syndrome_cycle_' +str(i) +'_step_' +str(j)) 
+        for j in range(4) ] for i in range(n_cycles) ]
+
+    # List of registers for each step in the flagged stabilizer cycle
+    flag_register = [ 
+        [ ClassicalRegister( 1, 'flag_cycle_' +str(i) +'_step_' +str(j))
+        for j in range(4) ] for i in range(n_cycles) ]
+
+    # List of registers for the single stabilizer run with flag
+    ancilla_msmnt_register = [
+        [ ClassicalRegister( 1, 'ancilla_cycle_' +str(i) +'_step_' +str(j))
+        for j in range(4) ] for i in range(n_cycles) ]
+
+    return syndrome_register, flag_register, ancilla_msmnt_register
+
 # %% All flagged stabilizers
-def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):
+def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True, recovery=True):
     '''Runs the one cycle of the [[5,1,3]] code 
     with two ancillas as described in the article.
     This includes the recovery from any detected errors.
@@ -23,22 +48,26 @@ def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True):
     ## === Step 1: XZZXI ===
     circ += flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
-    circ += full_recovery_XZZXI(qbReg, clReg)
+    if recovery:
+        circ += full_recovery_XZZXI(qbReg, clReg)
 
     ## === Step 2: IXZZX ===
     circ += flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
-    circ += full_recovery_IXZZX( qbReg, clReg )
+    if recovery:
+        circ += full_recovery_IXZZX( qbReg, clReg )
 
     ## === Step 3: XIXZZ ===
     circ += flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
-    circ += full_recovery_XIXZZ( qbReg, clReg )
+    if recovery:
+        circ += full_recovery_XIXZZ( qbReg, clReg )
     
     ## === Step 4: ZXIXZ ===
     circ += flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
-    circ += full_recovery_ZXIXZ( qbReg, clReg )
+    if recovery:
+        circ += full_recovery_ZXIXZ( qbReg, clReg )
 
     return circ
 
