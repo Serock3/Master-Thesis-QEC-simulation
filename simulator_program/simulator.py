@@ -294,9 +294,9 @@ def transpile_circuit(circuit, optimization_level=2, repeats=1):
 
 
 # %% Create circuit
-optimization_level = 3
-repeats = 30
-n_cycles = 20
+optimization_level = 2
+repeats = 3
+n_cycles = 0
 snapshot_type = 'statevector'  #'density_matrix'  # 
 circuit = define_circuit(n_cycles, snapshot_type=snapshot_type)
 
@@ -314,7 +314,7 @@ if True:
     with open('transpiled_circuit.dat', 'wb') as transpiled_circuit_file:
         pickle.dump(transpiled_circuit, transpiled_circuit_file)
 # %% (Load and) run the circuit
-if transpiled_circuit is None:
+if 'transpiled_circuit' not in locals():
     with open('transpiled_circuit.dat', 'rb') as transpiled_circuit_file:
         transpiled_circuit = pickle.load(transpiled_circuit_file)
 
