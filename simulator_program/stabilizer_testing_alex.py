@@ -14,13 +14,13 @@ from custom_transpiler import shortest_transpile_from_distribution, WAQCT_device
 #from stabilizers import (flagged_stabilizer_cycle, unflagged_stabilizer_all)
 
 # %% NEW FUNCTIONS
-def unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True):
+def unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True, current_cycle=0, current_step=0):
     '''Runs all four stabilizers without flags'''
     circ = create_empty_circuit(qbReg, anReg, clReg)
-    circ += unflagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset)
-    circ += unflagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset)
-    circ += unflagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset)
-    circ += unflagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset)
+    circ += unflagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset, current_cycle, current_step)
+    circ += unflagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset, current_cycle, current_step)
+    circ += unflagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset, current_cycle, current_step)
+    circ += unflagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset, current_cycle, current_step)
     return circ
 
 def unflagged_recovery(qbReg, clReg, reset=True):
@@ -78,7 +78,7 @@ def unflagged_recovery(qbReg, clReg, reset=True):
     return circ
 
 # %% All flagged stabilizers
-def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True, recovery=True):
+def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True, recovery=True, current_cycle=0):
     '''Runs the one cycle of the [[5,1,3]] code 
     with two ancillas as described in the article.
     This includes the recovery from any detected errors.
@@ -90,32 +90,36 @@ def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True, recovery=True):
     circ = create_empty_circuit(qbReg, anReg, clReg)
 
     ## === Step 1: XZZXI ===
-    circ += flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True)
-    circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
+    circ += flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=reset)
+    circ += unflagged_stabilizer_all(qbReg, anReg, clReg, 
+        reset=reset, current_cycle=current_cycle, current_step=0) # To be made conditional
     if recovery:
         circ += full_recovery_XZZXI(qbReg, clReg)
 
     ## === Step 2: IXZZX ===
-    circ += flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True)
-    circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
+    circ += flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=reset)
+    circ += unflagged_stabilizer_all(qbReg, anReg, clReg,
+        reset=reset, current_cycle=current_cycle, current_step=1) # To be made conditional
     if recovery:
         circ += full_recovery_IXZZX( qbReg, clReg )
 
     ## === Step 3: XIXZZ ===
-    circ += flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True)
-    circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
+    circ += flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=reset)
+    circ += unflagged_stabilizer_all(qbReg, anReg, clReg,
+        reset=reset, current_cycle=current_cycle, current_step=2) # To be made conditional
     if recovery:
         circ += full_recovery_XIXZZ( qbReg, clReg )
     
     ## === Step 4: ZXIXZ ===
-    circ += flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True)
-    circ += unflagged_stabilizer_all(qbReg, anReg, clReg, reset=True) # To be made conditional
+    circ += flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=reset)
+    circ += unflagged_stabilizer_all(qbReg, anReg, clReg,
+        reset=reset, current_cycle=current_cycle, current_step=3) # To be made conditional
     if recovery:
         circ += full_recovery_ZXIXZ( qbReg, clReg )
 
     return circ
 
-def flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True, n_cycles=0):
+def flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True, current_cycle=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -150,24 +154,23 @@ def flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True, n_cycles=0):
         flag_register = clReg[1]
         ancilla_msmnt_register = clReg[2]
 
-        circ.measure(anReg[1], ancilla_msmnt_register[n_cycles][0])
+        circ.measure(anReg[1], ancilla_msmnt_register[current_cycle][0])
         circ.h(anReg[0])
-        circ.measure(anReg[0], flag_register[n_cycles][0])
-        if reset:
-            circ.reset(anReg[1])
-            circ.reset(anReg[0])
+        circ.measure(anReg[0], flag_register[current_cycle][0])
 
     else:
         circ.measure(anReg[1], clReg[0])
         circ.h(anReg[0])
         circ.measure(anReg[0], clReg[4])
-        if reset:
-            circ.reset(anReg[1])
-            circ.reset(anReg[0])
 
+    # Reset
+    if reset:
+        circ.reset(anReg[1])
+        circ.reset(anReg[0])
+    
     return circ
 
-def flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True):
+def flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True, current_cycle=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -198,16 +201,29 @@ def flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True):
     circ.h(qbReg[4])
 
     # Measure
-    circ.measure(anReg[1], clReg[1])
-    circ.h(anReg[0])
-    circ.measure(anReg[0], clReg[4])
+    if isinstance(clReg, list):
+        flag_register = clReg[1]
+        ancilla_msmnt_register = clReg[2]
+
+        circ.measure(anReg[1], ancilla_msmnt_register[current_cycle][1])
+        circ.h(anReg[0])
+        circ.measure(anReg[0], flag_register[current_cycle][1])
+
+    else:
+        circ.measure(anReg[1], clReg[1])
+        circ.h(anReg[0])
+        circ.measure(anReg[0], clReg[4])
+
+    # Reset
     if reset:
         circ.reset(anReg[1])
         circ.reset(anReg[0])
+    
+    return circ
 
     return circ
 
-def flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True):
+def flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True, current_cycle=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -238,16 +254,29 @@ def flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True):
     circ.h(anReg[1])
 
     # Measure
-    circ.measure(anReg[1], clReg[2])
-    circ.h(anReg[0])
-    circ.measure(anReg[0], clReg[4])
+    if isinstance(clReg, list):
+        flag_register = clReg[1]
+        ancilla_msmnt_register = clReg[2]
+
+        circ.measure(anReg[1], ancilla_msmnt_register[current_cycle][2])
+        circ.h(anReg[0])
+        circ.measure(anReg[0], flag_register[current_cycle][2])
+
+    else:
+        circ.measure(anReg[1], clReg[2])
+        circ.h(anReg[0])
+        circ.measure(anReg[0], clReg[4])
+
+    # Reset
     if reset:
         circ.reset(anReg[1])
         circ.reset(anReg[0])
+    
+    return circ
 
     return circ
 
-def flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True):
+def flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True, current_cycle=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -278,17 +307,30 @@ def flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True):
     circ.h(anReg[1])
 
     # Measure
-    circ.measure(anReg[1], clReg[3])
-    circ.h(anReg[0])
-    circ.measure(anReg[0], clReg[4])
+    if isinstance(clReg, list):
+        flag_register = clReg[1]
+        ancilla_msmnt_register = clReg[2]
+
+        circ.measure(anReg[1], ancilla_msmnt_register[current_cycle][3])
+        circ.h(anReg[0])
+        circ.measure(anReg[0], flag_register[current_cycle][3])
+
+    else:
+        circ.measure(anReg[1], clReg[3])
+        circ.h(anReg[0])
+        circ.measure(anReg[0], clReg[4])
+
+    # Reset
     if reset:
         circ.reset(anReg[1])
         circ.reset(anReg[0])
     
     return circ
+    
+    return circ
 
 # %% All unflagged stabilizers
-def unflagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True):
+def unflagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True, current_cycle=0, current_step=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -312,13 +354,19 @@ def unflagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True):
     circ.h(qbReg[3])
 
     # Measure
-    circ.measure(anReg[1], clReg[0])
+    if isinstance(clReg, list):
+        syndrome_register = clReg[0]
+        circ.measure( anReg[1], syndrome_register[current_cycle][current_step][0] )
+    else:
+        circ.measure(anReg[1], clReg[0])
+    
+    # Reset
     if reset:
         circ.reset(anReg[1])
 
     return circ
 
-def unflagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True):
+def unflagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True, current_cycle=0, current_step=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -342,13 +390,19 @@ def unflagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True):
     circ.h(qbReg[4])
 
     # Measure
-    circ.measure(anReg[1], clReg[1])
+    if isinstance(clReg, list):
+        syndrome_register = clReg[0]
+        circ.measure( anReg[1], syndrome_register[current_cycle][current_step][1] )
+    else:
+        circ.measure(anReg[1], clReg[1])
+    
+    # Reset
     if reset:
         circ.reset(anReg[1])
 
     return circ
 
-def unflagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True):
+def unflagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True, current_cycle=0, current_step=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -372,14 +426,20 @@ def unflagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True):
     circ.h(anReg[1])
 
     # Measure
-    circ.measure(anReg[1], clReg[2])
+    if isinstance(clReg, list):
+        syndrome_register = clReg[0]
+        circ.measure( anReg[1], syndrome_register[current_cycle][current_step][2] )
+    else:
+        circ.measure(anReg[1], clReg[2])
+    
+    # Reset
     if reset:
         circ.reset(anReg[1])
 
 
     return circ
 
-def unflagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True):
+def unflagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True, current_cycle=0, current_step=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -403,7 +463,13 @@ def unflagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True):
     circ.h(anReg[1])
 
     # Measure
-    circ.measure(anReg[1], clReg[3])
+    if isinstance(clReg, list):
+        syndrome_register = clReg[0]
+        circ.measure( anReg[1], syndrome_register[current_cycle][current_step][3] )
+    else:
+        circ.measure(anReg[1], clReg[3])
+    
+    # Reset
     if reset:
         circ.reset(anReg[1])
     
@@ -645,7 +711,7 @@ def define_circuit(n_cycles, flag=True):
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
     #cr = ClassicalRegister(5, 'syndrome_bit')
-    cr = get_classical_register(1)
+    cr = get_classical_register(n_cycles)
     readout = ClassicalRegister(5, 'readout')
 
     #circuit = QuantumCircuit(cr, readout, an, qb)
@@ -666,7 +732,8 @@ def define_circuit(n_cycles, flag=True):
     # Stabilizers
     for i in range(n_cycles):
         if flag:
-            circuit += flagged_stabilizer_cycle( qb, an, cr, reset=True )
+            circuit += flagged_stabilizer_cycle( qb, an, cr, reset=True, recovery=False,
+                current_cycle=i )
             circuit.snapshot_statevector('stabilizer_' + str(i))
         else:
             circuit += unflagged_stabilizer_all( qb, an, cr, reset=True )
@@ -701,7 +768,13 @@ logical = logical_states()
 sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][0]
 fid = 0
 for i in range(10):
-    fid += state_fidelity(logical[1], results.data()['snapshots']['statevector']['stabilizer_0'][i])
+    sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][i]
+
+    log1 = logical[1][np.arange(128,step=4)]
+    #sv_test = sv_post_encoding[np.arange(128,step=4)]
+    sv_test = sv_post_encoding[0:32]
+    fid += state_fidelity(log1, sv_test)
+    #fid += state_fidelity(logical[1], results.data()['snapshots']['statevector']['stabilizer_0'][i])
 
 print('Average fidelity:')
 print(fid/10)
@@ -711,6 +784,15 @@ counts = results.get_counts()
 plot_histogram( counts )
 #circuit.draw(output='mpl')
 
+# %%
+print(sv_post_encoding.shape)
+sv_real = sv_post_encoding.real
+print(np.linalg.norm(sv_real))
+for i in range(128):
+    sv_real[i] = round(sv_real[i], 2)
+print(sv_real[0:3])
+print(logical[1])
+print(log1)
 # %% Comparison between flagged and unflagged
 
 n_cycles = 10
