@@ -7,7 +7,7 @@ from qiskit import (QuantumCircuit,
                     execute, 
                     Aer
                     )
-
+#234567890123456789012345678901234567890123456789012345678901234567890123456789
 # Import our own files
 from custom_noise_models import pauli_noise_model
 from custom_transpiler import shortest_transpile_from_distribution, WAQCT_device_properties
@@ -90,28 +90,28 @@ def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True, recovery=True, cur
     circ = create_empty_circuit(qbReg, anReg, clReg)
 
     ## === Step 1: XZZXI ===
-    circ += flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=reset)
+    circ += _flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=reset)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg, 
         reset=reset, current_cycle=current_cycle, current_step=0) # To be made conditional
     if recovery:
         circ += full_recovery_XZZXI(qbReg, clReg)
 
     ## === Step 2: IXZZX ===
-    circ += flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=reset)
+    circ += _flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=reset)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg,
         reset=reset, current_cycle=current_cycle, current_step=1) # To be made conditional
     if recovery:
         circ += full_recovery_IXZZX( qbReg, clReg )
 
     ## === Step 3: XIXZZ ===
-    circ += flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=reset)
+    circ += _flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=reset)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg,
         reset=reset, current_cycle=current_cycle, current_step=2) # To be made conditional
     if recovery:
         circ += full_recovery_XIXZZ( qbReg, clReg )
     
     ## === Step 4: ZXIXZ ===
-    circ += flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=reset)
+    circ += _flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=reset)
     circ += unflagged_stabilizer_all(qbReg, anReg, clReg,
         reset=reset, current_cycle=current_cycle, current_step=3) # To be made conditional
     if recovery:
@@ -119,7 +119,7 @@ def flagged_stabilizer_cycle(qbReg, anReg, clReg, reset=True, recovery=True, cur
 
     return circ
 
-def flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True, current_cycle=0):
+def _flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True, current_cycle=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -170,7 +170,7 @@ def flagged_stabilizer_XZZXI(qbReg, anReg, clReg, reset=True, current_cycle=0):
     
     return circ
 
-def flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True, current_cycle=0):
+def _flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True, current_cycle=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -223,7 +223,7 @@ def flagged_stabilizer_IXZZX(qbReg, anReg, clReg, reset=True, current_cycle=0):
 
     return circ
 
-def flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True, current_cycle=0):
+def _flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True, current_cycle=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -276,7 +276,7 @@ def flagged_stabilizer_XIXZZ(qbReg, anReg, clReg, reset=True, current_cycle=0):
 
     return circ
 
-def flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True, current_cycle=0):
+def _flagged_stabilizer_ZXIXZ(qbReg, anReg, clReg, reset=True, current_cycle=0):
 
     # Create a circuit
     circ = create_empty_circuit(qbReg, anReg, clReg)
@@ -690,14 +690,16 @@ def get_classical_register(n_cycles):
     return [syndrome_register, flag_register, ancilla_msmnt_register]
 
 def create_empty_circuit(qbReg, anReg, clReg):
+    circ = QuantumCircuit(qbReg, anReg)
     if isinstance(clReg, list):
         circ = QuantumCircuit(qbReg, anReg)
         for reg_type in clReg:
             for reg_index in reg_type:
                 for reg in reg_index:
-                    circ.add_register( reg )
+                    circ.add_register(reg)
     else:
-        circ = QuantumCircuit(qbReg, anReg, clReg)
+        circ.add_register(clReg)
+    #circ.add_register(readout)
 
     return circ
 
@@ -888,3 +890,51 @@ def get_fidelities(results_noisy, results_ideal, snapshot_type):
         return _get_fidelities_mat(results_noisy, results_ideal)
     return _get_fidelities_vec(results_noisy, results_ideal)
 
+
+
+
+def get_full_stabilizer_circuit(registers, n_cycles=1
+        reset=True, recovery=False, flag=True):
+    """Returns the circuit for a full stabilizer circuit, including encoding, 
+    stabilizers (with conditional flags and recovery) and final measurement.
+    """
+
+    # Unpack registers
+    qbReg = registers[0]
+    anReg = registers[1]
+    clReg = registers[2]
+    readout = registers[3]
+
+    # Define the circuit
+    qb = QuantumRegister(5, 'code_qubit')
+    an = AncillaRegister(2, 'ancilla_qubit')
+    readout = ClassicalRegister(5, 'readout')
+    if n_cycles > 1:
+        cr = get_classical_register(n_cycles)
+    else:
+        cr = ClassicalRegister(5, 'syndrome_bit')
+    circ = create_empty_circuit(qb, an, cr)
+    circ.add_register(readout)
+
+    # Encode the state
+    circ += encode_input(qb)
+    circ.snapshot_statevector('post_encoding')
+
+    # Stabilizer
+    for i in range(n_cycles):
+        if flag is True:
+            circ += flagged_stabilizer_cycle(registers,
+                reset=reset,
+                recovery=recovery,
+                current_cycle=i,
+            )
+        else:
+            # ADD AS CYCLE FUNCTION WHICH INCLDUES RECOVERY
+            circ += unflagged_stabilizer_all(registers, reset=reset)
+        circ.snapshot_statevector('stabilizer_' + str(i))
+
+    # Final readout
+    circ.measure(qb, readout)
+    circ.snapshot_statevector('post_measure')
+
+    return circuit
