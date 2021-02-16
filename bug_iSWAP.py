@@ -1,9 +1,8 @@
 # %%
-from custom_transpiler import WAQCT_device_properties, _add_custom_device_equivalences, shortest_transpile_from_distribution
+from simulator_program.custom_transpiler import WAQCT_device_properties, _add_custom_device_equivalences, shortest_transpile_from_distribution
 from qiskit import *
 from IPython.core.display import display
 from qiskit.visualization.state_visualization import plot_bloch_multivector
-from custom_transpiler import _add_custom_device_equivalences
 from qiskit.quantum_info.states.measures import state_fidelity
 from qiskit.providers.aer.backends.qasm_simulator import QasmSimulator
 import numpy as np
