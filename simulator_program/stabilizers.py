@@ -8,12 +8,6 @@
 #   The advanced registers currently be used for recovery. Need to fix that,
 #   but it has the problem of flag-measurement being in a separate register
 #   and c_if can only be conditioned on one. 
-#
-#   Create a function for automatically generates registers for unflagged cycle
-#
-#   Add recovery possibilities for unflagged cycles with advanced registers
-#
-#   Double-check and improve all documentation
 
 # %% Import modules
 import numpy as np
@@ -26,15 +20,15 @@ from qiskit import (QuantumCircuit,
                     )
 from qiskit.providers.aer.extensions.snapshot_statevector import *
 
-# %% NEWLY ADDED FUNCTIONS
+# %% General functions
 def get_full_stabilizer_circuit(registers, n_cycles=1,
         reset=True, recovery=False, flag=True):
     """Returns the circuit for a full stabilizer circuit, including encoding, 
-    stabilizers (with conditional flags and recovery) and final measurement.
+    stabilizers (with optional flags and recovery) and final measurement.
     """
 
     # Unpack registers
-    qbReg, anReg, clReg, readout = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, readout = registers
 
     # Define the circuit
     circ = get_empty_stabilizer_circuit(registers)
@@ -68,7 +62,7 @@ def get_empty_stabilizer_circuit(registers):
     """Create an empty qiskit circuit adapted for stabilizer circuits"""
 
     # Unpack registers
-    qbReg, anReg, clReg, readout = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, readout = registers
 
     circ = QuantumCircuit(qbReg, anReg)
     if isinstance(clReg, list):
@@ -85,12 +79,9 @@ def get_empty_stabilizer_circuit(registers):
 
 def unpack_stabilizer_registers(registers):
     """Unpacks all registers packed as a list according to customs used
-    in all stabilizer functions (stabilizer.py)
+    in all stabilizer functions (stabilizer.py). Kind of obsolete
     """
-    qbReg = registers[0]
-    anReg = registers[1]
-    clReg = registers[2]
-    readout = registers[3]
+    qbReg, anReg, clReg, readout = registers
     return qbReg, anReg, clReg, readout
 
 def encode_input(registers):
@@ -98,7 +89,7 @@ def encode_input(registers):
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>
     """
 
-    qbReg, _, _, _ = unpack_stabilizer_registers(registers)
+    qbReg, _, _, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     circ.h(qbReg[3])
@@ -123,84 +114,109 @@ def encode_input(registers):
 
     return circ
 
-# %% Generate registers for storing ALL measurements
-def get_classical_register(n_cycles):
-    """Generate lists of classical registers for
-    storing all measurement data for the flagged
-    error correction code"""
+def get_classical_register(n_cycles, flag=True):
+    """Generate lists of classical registers for storing all measurement data.
+    
+    The function accepts the flag bool to determine whether to create 
+    registers for additional flag measurements. The names are as follows:
+    
+    syndrome_register: The standard four unflagged stabilizer measurements.
+        Without flags, its dimensions are [n_cycles][1][4] and with flags they
+        are [n_cycles][current_step][4] where current step represents where
+        in the full flagged stabilizer cycle measurements were made (0-3).
 
+    flag_register: All flag measurements, only appears if flag is set to True.
+        It has the dimensions [n_cycles][current_step][1].
 
-    # List of registers for each iteration of the conditional
-    # step of 'all four unflagged stabilizers'
-    syndrome_register = [
-        [ ClassicalRegister( 4, 'syndrome_cycle_' +str(i) +'_step_' +str(j)) 
-        for j in range(4) ] for i in range(n_cycles) ]
+    ancilla_msmnt_register: Contains the extra single ancilla measurement
+        performed along with a flag measurement in the flagged cycle. Only
+        appears if flag is set to True. Dimensions are
+        [n_cycles][current_step][1]
+    """
 
-    # List of registers for each step in the flagged stabilizer cycle
-    flag_register = [ 
-        [ ClassicalRegister( 1, 'flag_cycle_' +str(i) +'_step_' +str(j))
-        for j in range(4) ] for i in range(n_cycles) ]
+    if flag:
+        # List of registers for each iteration of the conditional
+        # step of 'all four unflagged stabilizers'
+        syndrome_register = [
+            [ ClassicalRegister( 4, 'syndrome_cycle_' +str(i) +'_step_' +str(j)) 
+            for j in range(4) ] for i in range(n_cycles) ]
 
-    # List of registers for the single stabilizer run with flag
-    ancilla_msmnt_register = [
-        [ ClassicalRegister( 1, 'ancilla_cycle_' +str(i) +'_step_' +str(j))
-        for j in range(4) ] for i in range(n_cycles) ]
+        # List of registers for each step in the flagged stabilizer cycle
+        flag_register = [ 
+            [ ClassicalRegister( 1, 'flag_cycle_' +str(i) +'_step_' +str(j))
+            for j in range(4) ] for i in range(n_cycles) ]
 
-    return [syndrome_register, flag_register, ancilla_msmnt_register]
+        # List of registers for the single stabilizer run with flag
+        ancilla_msmnt_register = [
+            [ ClassicalRegister( 1, 'ancilla_cycle_' +str(i) +'_step_' +str(j))
+            for j in range(4) ] for i in range(n_cycles) ]
+
+        return [syndrome_register, flag_register, ancilla_msmnt_register]
+    
+    else:
+        # A register of four bits per cycle
+        syndrome_register = [
+            [ ClassicalRegister( 4, 'syndrome_cycle_' +str(i) +'_step_' +str(j)) 
+            for j in range(1) ] for i in range(n_cycles) ]
+        return [syndrome_register]
 
 # %% All flagged stabilizers
 def flagged_stabilizer_cycle(registers, reset=True, recovery=True,
         current_cycle=0):
-    '''Runs the one cycle of the [[5,1,3]] code 
-    with two ancillas as described in the article.
-    This includes the recovery from any detected errors.
+    """Runs one cycle of the [[5,1,3]] code with two ancillas as described in
+    the article by Chao & Reichardt (2017).
+    This includes the (optional) recovery from any detected errors.
     
     Currently, it requires reset=True to appropriately
-    correct errors'''
+    correct errors, and cannot perform recovery with the advanced registers
+    """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
-    ## === Step 1: XZZXI ===
+    # === Step 1: XZZXI ===
     circ += _flagged_stabilizer_XZZXI(registers, reset, current_cycle)
-    circ += unflagged_stabilizer_cycle(registers, reset,
+    circ += unflagged_stabilizer_cycle(registers, reset, recovery=False,
         current_cycle=current_cycle, current_step=0)
     if recovery:
-        circ += full_recovery_XZZXI(registers)
+        circ += full_recovery_XZZXI(registers, reset, current_cycle, 0)
 
-    ## === Step 2: IXZZX ===
+    # === Step 2: IXZZX ===
     circ += _flagged_stabilizer_IXZZX(registers, reset, current_cycle)
-    circ += unflagged_stabilizer_cycle(registers, reset,
+    circ += unflagged_stabilizer_cycle(registers, reset, recovery=False,
         current_cycle=current_cycle, current_step=1)
     if recovery:
-        circ += full_recovery_IXZZX(registers)
+        circ += full_recovery_IXZZX(registers, reset, current_cycle, 1)
 
-    ## === Step 3: XIXZZ ===
+    # === Step 3: XIXZZ ===
     circ += _flagged_stabilizer_XIXZZ(registers, reset, current_cycle)
-    circ += unflagged_stabilizer_cycle(registers, reset,
+    circ += unflagged_stabilizer_cycle(registers, reset, recovery=False,
         current_cycle=current_cycle, current_step=2)
     if recovery:
-        circ += full_recovery_XIXZZ(registers)
+        circ += full_recovery_XIXZZ(registers, reset, current_cycle, 2)
     
-    ## === Step 4: ZXIXZ ===
+    # === Step 4: ZXIXZ ===
     circ += _flagged_stabilizer_ZXIXZ(registers, reset, current_cycle)
-    circ += unflagged_stabilizer_cycle(registers, reset,
+    circ += unflagged_stabilizer_cycle(registers, reset, recovery=False,
         current_cycle=current_cycle, current_step=3)
     if recovery:
-        circ += full_recovery_ZXIXZ(registers)
+        circ += full_recovery_ZXIXZ(registers, reset, current_cycle, 3)
 
     return circ
 
 
 def _flagged_stabilizer_XZZXI(registers, reset=True, current_cycle=0):
+    """Gives the circuit for running the XZZXI stabilizer with a flag ancilla,
+    connected by a cz gate after the first and before the last operation.
+    """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # X
-    circ.h( qbReg[0] ) # X
+    circ.h( qbReg[0] )
     circ.h( anReg[1] )
     circ.cz( anReg[1], qbReg[0] )
     circ.h( qbReg[0] )
@@ -246,13 +262,16 @@ def _flagged_stabilizer_XZZXI(registers, reset=True, current_cycle=0):
     return circ
 
 def _flagged_stabilizer_IXZZX(registers, reset=True, current_cycle=0):
+    """Gives the circuit for running the IXZZX stabilizer with a flag ancilla,
+    connected by a cz gate after the first and before the last operation.
+    """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # X
-    circ.h( qbReg[1] ) # X
+    circ.h( qbReg[1] )
     circ.h( anReg[1] )
     circ.cz( anReg[1], qbReg[1] )
     circ.h( qbReg[1] )
@@ -297,13 +316,16 @@ def _flagged_stabilizer_IXZZX(registers, reset=True, current_cycle=0):
     return circ
 
 def _flagged_stabilizer_XIXZZ(registers, reset=True, current_cycle=0):
+    """Gives the circuit for running the XIXZZ stabilizer with a flag ancilla,
+    connected by a cz gate after the first and before the last operation.
+    """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # X
-    circ.h( qbReg[0] ) # X
+    circ.h( qbReg[0] )
     circ.h( anReg[1] )
     circ.cz( anReg[1], qbReg[0] )
     circ.h( qbReg[0] )
@@ -348,9 +370,12 @@ def _flagged_stabilizer_XIXZZ(registers, reset=True, current_cycle=0):
     return circ
 
 def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
+    """Gives the circuit for running the ZXIXZ stabilizer with a flag ancilla,
+    connected by a cz gate after the first and before the last operation.
+    """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # Z
@@ -362,12 +387,12 @@ def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
     circ.cz( anReg[0], anReg[1] ) # Flag CX  
 
     # X
-    circ.h( qbReg[1] ) # X
+    circ.h( qbReg[1] )
     circ.cz( anReg[1], qbReg[1] )
     circ.h( qbReg[1] )
 
     # X
-    circ.h( qbReg[3] ) # X
+    circ.h( qbReg[3] )
     circ.cz( anReg[1], qbReg[3] )
     circ.h( qbReg[3] )
 
@@ -403,7 +428,8 @@ def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
 def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
         current_cycle=0, current_step=0):
     """Run all four stabilizers without flags, as well as an optional
-    recovery.
+    recovery. The input current_step is only relevant for flagged cycles, and
+    should be set to 0 otherwise.
     """
     # Create circuit and run stabilizers
     circ = get_empty_stabilizer_circuit(registers)
@@ -418,15 +444,18 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
 
     # Recovery
     if recovery is True:
-        circ += unflagged_recovery(qbReg, clReg, reset=True)
+        circ += unflagged_recovery(registers, reset, current_cycle)
     
     return circ
 
 def _unflagged_stabilizer_XZZXI(registers, reset=True,
         current_cycle=0, current_step=0):
+    """Gives the circuit for running the regular XZZXI stabilizer without flag.
+    The current_step input should be set to zero unless running flagged cycles.
+    """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # X
@@ -462,9 +491,12 @@ def _unflagged_stabilizer_XZZXI(registers, reset=True,
 
 def _unflagged_stabilizer_IXZZX(registers, reset=True,
         current_cycle=0, current_step=0):
+    """Gives the circuit for running the regular IXZZX stabilizer without flag.
+    The current_step input should be set to zero unless running flagged cycles.
+    """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # X
@@ -500,9 +532,11 @@ def _unflagged_stabilizer_IXZZX(registers, reset=True,
 
 def _unflagged_stabilizer_XIXZZ(registers, reset=True,
         current_cycle=0, current_step=0):
-
+    """Gives the circuit for running the regular XIXZZ stabilizer without flag.
+    The current_step input should be set to zero unless running flagged cycles.
+    """
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # X
@@ -538,9 +572,11 @@ def _unflagged_stabilizer_XIXZZ(registers, reset=True,
 
 def _unflagged_stabilizer_ZXIXZ(registers, reset=True,
         current_cycle=0, current_step=0):
-
+    """Gives the circuit for running the regular ZXIXZ stabilizer without flag.
+    The current_step input should be set to zero unless running flagged cycles.
+    """
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # Z
@@ -576,72 +612,85 @@ def _unflagged_stabilizer_ZXIXZ(registers, reset=True,
 
 
 # %% All recoveries
-def unflagged_recovery(registers, reset=True):
-    '''Lookup table for recovery from a
-    single qubit error on code qubits'''
+def unflagged_recovery(registers, reset=True, current_cycle=0, current_step=0):
+    """Lookup table for recovery from a
+    single qubit error on code qubits"""
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
+
+    # Unpack registers
+    if isinstance(clReg, list):
+        syndrome_reg = clReg[0][current_cycle][current_step]
+    else:
+        syndrome_reg = clReg
 
     # If the ancilla is reset to |0> between measurements
     if reset:
-        circ.x(qbReg[1]).c_if(clReg, 1)
-        circ.z(qbReg[4]).c_if(clReg, 2)
-        circ.x(qbReg[2]).c_if(clReg, 3)
-        circ.z(qbReg[2]).c_if(clReg, 4)
-        circ.z(qbReg[0]).c_if(clReg, 5)
-        circ.x(qbReg[3]).c_if(clReg, 6)
-        circ.x(qbReg[2]).c_if(clReg, 7)
-        circ.z(qbReg[2]).c_if(clReg, 7)
-        circ.x(qbReg[0]).c_if(clReg, 8)
-        circ.z(qbReg[3]).c_if(clReg, 9)
-        circ.z(qbReg[1]).c_if(clReg, 10)
-        circ.x(qbReg[1]).c_if(clReg, 11)
-        circ.z(qbReg[1]).c_if(clReg, 11)
-        circ.x(qbReg[4]).c_if(clReg, 12)
-        circ.x(qbReg[0]).c_if(clReg, 13)
-        circ.z(qbReg[0]).c_if(clReg, 13)
-        circ.x(qbReg[4]).c_if(clReg, 14)
-        circ.z(qbReg[4]).c_if(clReg, 14)
-        circ.x(qbReg[3]).c_if(clReg, 15)
-        circ.z(qbReg[3]).c_if(clReg, 15)
+        circ.x(qbReg[1]).c_if(syndrome_reg, 1)
+        circ.z(qbReg[4]).c_if(syndrome_reg, 2)
+        circ.x(qbReg[2]).c_if(syndrome_reg, 3)
+        circ.z(qbReg[2]).c_if(syndrome_reg, 4)
+        circ.z(qbReg[0]).c_if(syndrome_reg, 5)
+        circ.x(qbReg[3]).c_if(syndrome_reg, 6)
+        circ.x(qbReg[2]).c_if(syndrome_reg, 7)
+        circ.z(qbReg[2]).c_if(syndrome_reg, 7)
+        circ.x(qbReg[0]).c_if(syndrome_reg, 8)
+        circ.z(qbReg[3]).c_if(syndrome_reg, 9)
+        circ.z(qbReg[1]).c_if(syndrome_reg, 10)
+        circ.x(qbReg[1]).c_if(syndrome_reg, 11)
+        circ.z(qbReg[1]).c_if(syndrome_reg, 11)
+        circ.x(qbReg[4]).c_if(syndrome_reg, 12)
+        circ.x(qbReg[0]).c_if(syndrome_reg, 13)
+        circ.z(qbReg[0]).c_if(syndrome_reg, 13)
+        circ.x(qbReg[4]).c_if(syndrome_reg, 14)
+        circ.z(qbReg[4]).c_if(syndrome_reg, 14)
+        circ.x(qbReg[3]).c_if(syndrome_reg, 15)
+        circ.z(qbReg[3]).c_if(syndrome_reg, 15)
 
     # If the ancilla is NOT reset between measurements
     else:
-        circ.x(qbReg[2]).c_if(clReg, 1)
-        circ.x(qbReg[3]).c_if(clReg, 2)
-        circ.z(qbReg[0]).c_if(clReg, 3)
-        circ.x(qbReg[4]).c_if(clReg, 4)
-        circ.z(qbReg[3]).c_if(clReg, 5)
-        circ.x(qbReg[3]).c_if(clReg, 5)
-        circ.z(qbReg[1]).c_if(clReg, 6)
-        circ.z(qbReg[3]).c_if(clReg, 7)
-        circ.x(qbReg[0]).c_if(clReg, 8)
-        circ.z(qbReg[1]).c_if(clReg, 9)
-        circ.x(qbReg[1]).c_if(clReg, 9)
-        circ.z(qbReg[4]).c_if(clReg, 10)
-        circ.x(qbReg[4]).c_if(clReg, 10)
-        circ.z(qbReg[0]).c_if(clReg, 11)
-        circ.x(qbReg[0]).c_if(clReg, 11)
-        circ.z(qbReg[2]).c_if(clReg, 12)
-        circ.z(qbReg[2]).c_if(clReg, 13)
-        circ.x(qbReg[2]).c_if(clReg, 13)
-        circ.z(qbReg[4]).c_if(clReg, 14)
-        circ.x(qbReg[1]).c_if(clReg, 15)
+        circ.x(qbReg[2]).c_if(syndrome_reg, 1)
+        circ.x(qbReg[3]).c_if(syndrome_reg, 2)
+        circ.z(qbReg[0]).c_if(syndrome_reg, 3)
+        circ.x(qbReg[4]).c_if(syndrome_reg, 4)
+        circ.z(qbReg[3]).c_if(syndrome_reg, 5)
+        circ.x(qbReg[3]).c_if(syndrome_reg, 5)
+        circ.z(qbReg[1]).c_if(syndrome_reg, 6)
+        circ.z(qbReg[3]).c_if(syndrome_reg, 7)
+        circ.x(qbReg[0]).c_if(syndrome_reg, 8)
+        circ.z(qbReg[1]).c_if(syndrome_reg, 9)
+        circ.x(qbReg[1]).c_if(syndrome_reg, 9)
+        circ.z(qbReg[4]).c_if(syndrome_reg, 10)
+        circ.x(qbReg[4]).c_if(syndrome_reg, 10)
+        circ.z(qbReg[0]).c_if(syndrome_reg, 11)
+        circ.x(qbReg[0]).c_if(syndrome_reg, 11)
+        circ.z(qbReg[2]).c_if(syndrome_reg, 12)
+        circ.z(qbReg[2]).c_if(syndrome_reg, 13)
+        circ.x(qbReg[2]).c_if(syndrome_reg, 13)
+        circ.z(qbReg[4]).c_if(syndrome_reg, 14)
+        circ.x(qbReg[1]).c_if(syndrome_reg, 15)
 
     return circ
 
-def full_recovery_XZZXI(registers, reset=True):
+def full_recovery_XZZXI(registers, reset=True, current_cycle=0, current_step=0):
+    """Lookup table for recovery using a flagged ancilla with the XZZXI
+    stabilizer. Note that it requires a single classical register and
+    reset=True to correctly recover.
+    """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # Unflagged recovery
-    circ += unflagged_recovery(registers, reset=reset)
+    circ += unflagged_recovery(registers, reset, current_cycle, current_step)
 
     # Flagged recovery
+    if isinstance(clReg, list):
+        print("Classical register is a list, performing unflagged recovery")
+        return circ
     circ.y(qbReg[2]).c_if(clReg, 1+16)
     circ.x(qbReg[3]).c_if(clReg, 1+16)
     circ.z(qbReg[2]).c_if(clReg, 2+16)
@@ -659,16 +708,23 @@ def full_recovery_XZZXI(registers, reset=True):
 
     return circ
 
-def full_recovery_IXZZX(registers, reset=True):
+def full_recovery_IXZZX(registers, reset=True, current_cycle=0, current_step=1):
+    """Lookup table for recovery using a flagged ancilla with the IXZZX
+    stabilizer. Note that it requires a single classical register and
+    reset=True to correctly recover.
+    """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # Unflagged recovery
-    circ += unflagged_recovery(registers, reset=reset)
+    circ += unflagged_recovery(registers, reset, current_cycle, current_step)
 
     # Flagged recovery
+    if isinstance(clReg, list):
+        print("Classical register is a list, performing unflagged recovery")
+        return circ
     circ.x( qbReg[1] ).c_if( clReg, 1+16 )
     circ.x( qbReg[1] ).c_if( clReg, 2+16 )
     circ.x( qbReg[2] ).c_if( clReg, 2+16 )
@@ -684,16 +740,23 @@ def full_recovery_IXZZX(registers, reset=True):
 
     return circ
 
-def full_recovery_XIXZZ(registers, reset=True):
+def full_recovery_XIXZZ(registers, reset=True, current_cycle=0, current_step=2):
+    """Lookup table for recovery using a flagged ancilla with the XIXZZ
+    stabilizer. Note that it requires a single classical register and
+    reset=True to correctly recover.
+    """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # Unflagged recovery
-    circ += unflagged_recovery(registers, reset=reset)
+    circ += unflagged_recovery(registers, reset, current_cycle, current_step)
 
     # Flagged recovery
+    if isinstance(clReg, list):
+        print("Classical register is a list, performing unflagged recovery")
+        return circ
     circ.x( qbReg[1] ).c_if( clReg, 2+16)
     circ.x( qbReg[2] ).c_if( clReg, 2+16)
     circ.x( qbReg[3] ).c_if( clReg, 4+16)
@@ -710,16 +773,22 @@ def full_recovery_XIXZZ(registers, reset=True):
 
     return circ
 
-def full_recovery_ZXIXZ(registers, reset=True):
-
+def full_recovery_ZXIXZ(registers, reset=True, current_cycle=0, current_step=3):
+    """Lookup table for recovery using a flagged ancilla with the ZXIXZ
+    stabilizer. Note that it requires a single classical register and
+    reset=True to correctly recover.
+    """
     # Create a circuit
-    qbReg, anReg, clReg, _ = unpack_stabilizer_registers(registers)
+    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # Unflagged recovery
-    circ += unflagged_recovery(registers, reset=reset)
+    circ += unflagged_recovery(registers, reset, current_cycle, current_step)
 
     # Flagged recovery
+    if isinstance(clReg, list):
+        print("Classical register is a list, performing unflagged recovery")
+        return circ
     circ.x( qbReg[1] ).c_if( clReg, 2+16)
     circ.x( qbReg[2] ).c_if( clReg, 2+16)
     circ.x( qbReg[3] ).c_if( clReg, 4+16)
@@ -739,59 +808,7 @@ def full_recovery_ZXIXZ(registers, reset=True):
 
     return circ
 
-
-# %% Testing of all functions above
-
-n_cycles=1
-# Define our registers (Maybe to be written as function?)
-qb = QuantumRegister(5, 'code_qubit')
-an = AncillaRegister(2, 'ancilla_qubit')
-cr = ClassicalRegister(5, 'syndrome_bit') # The typical register
-#cr = get_classical_register(n_cycles) # Advanced list of registers
-readout = ClassicalRegister(5, 'readout')
-
-registers = [qb, an, cr, readout] # Pack them together
-circ = get_empty_stabilizer_circuit(registers)
-
-# Get the complete circuit
-circ += get_full_stabilizer_circuit(registers,
-    n_cycles=1,
-    reset=True,
-    recovery=True,
-    flag=True,
-    )
-
-# Run it
-n_shots = 2000
-results = execute(
-    circ,  
-    Aer.get_backend('qasm_simulator'),
-    noise_model=None,
-    shots=n_shots
-).result()
-
-# Analyze results
-from qiskit.quantum_info import state_fidelity
-from qiskit.visualization import plot_histogram
-logical = logical_states()
-sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][0]
-fid = 0
-for i in range(10):
-    sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][i]
-
-    log0 = logical[0][np.arange(128,step=4)]
-    sv_test = sv_post_encoding[0:32]
-    fid += state_fidelity(log0, sv_test)
-
-print('Average fidelity:')
-print(fid/10)
-
-# Plot results
-counts = results.get_counts()
-plot_histogram( counts )
-#circuit.draw(output='mpl')
-
-# %%
+# %% Function used for internal testing
 def logical_states():
     logical_0 = np.zeros(2**5)
     logical_0[0b00000] = 1/4
@@ -837,3 +854,60 @@ def logical_states():
     logical_0 = np.kron(logical_0, an0)
 
     return [logical_0, logical_1]
+
+# %% Internal testing of functions above
+from qiskit.quantum_info import state_fidelity
+from qiskit.visualization import plot_histogram
+
+if __name__ == "__main__":
+    # The settings for our circuit
+    n_cycles = 1
+    reset = True
+    flag = False
+    recovery = False
+
+    # Define our registers (Maybe to be written as function?)
+    qb = QuantumRegister(5, 'code_qubit')
+    an = AncillaRegister(2, 'ancilla_qubit')
+    #cr = ClassicalRegister(5, 'syndrome_bit') # The typical register
+    cr = get_classical_register(n_cycles, flag) # Advanced list of registers
+    readout = ClassicalRegister(5, 'readout')
+
+    registers = [qb, an, cr, readout] # Pack them together
+    circ = get_empty_stabilizer_circuit(registers)
+
+    # Get the complete circuit
+    circ += get_full_stabilizer_circuit(registers,
+        n_cycles=n_cycles,
+        reset=reset,
+        recovery=recovery,
+        flag=flag,
+        )
+
+    # Run it
+    n_shots = 2000
+    results = execute(
+        circ,  
+        Aer.get_backend('qasm_simulator'),
+        noise_model=None,
+        shots=n_shots
+    ).result()
+
+    # Analyze results
+    logical = logical_states()
+    sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][0]
+    fid = 0
+    for i in range(10):
+        sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][i]
+
+        log0 = logical[0][np.arange(128,step=4)]
+        sv_test = sv_post_encoding[0:32]
+        fid += state_fidelity(log0, sv_test)
+
+    print('Average fidelity across 10 shots:')
+    print(fid/10)
+
+    # Plot results
+    counts = results.get_counts()
+    plot_histogram( counts )
+    #circuit.draw(output='mpl')
