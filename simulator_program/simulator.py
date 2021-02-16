@@ -14,7 +14,7 @@ from qiskit.providers.aer.extensions.snapshot_statevector import *
 
 # Import our own files
 from custom_noise_models import pauli_noise_model
-from custom_transpiler import shortest_transpile_from_distribution, WAQCT_device_properties
+from custom_transpiler import shortest_transpile_from_distribution, WAQCT_device_properties, _add_custom_device_equivalences
 
 # %% Defining useful functions
 
@@ -282,9 +282,10 @@ def transpile_circuit(circuit, optimization_level=2, repeats=1):
     layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
     translation_method = None  # 'unroller',  translator , synthesis
     transpiled_circuit = shortest_transpile_from_distribution(circuit, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
-                                                              # ,coupling_map = WAQCT_device_properties['coupling_map'])
-                                                              # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
-                                                              layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WAQCT_device_properties)
+                                                                  layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level
+                                                            #   ,coupling_map = WAQCT_device_properties['coupling_map'])
+                                                            #   ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
+                                                              , **WAQCT_device_properties)
 
     print('Final depth = ', transpiled_circuit.depth())
     print('Final gates = ', transpiled_circuit.count_ops())
@@ -296,18 +297,18 @@ def transpile_circuit(circuit, optimization_level=2, repeats=1):
 # %% Create circuit
 optimization_level = 2
 repeats = 3
-n_cycles = 0
+n_cycles = 1
 snapshot_type = 'statevector'  #'density_matrix'  # 
 circuit = define_circuit(n_cycles, snapshot_type=snapshot_type)
 
 transpiled_circuit = transpile_circuit(
     circuit, optimization_level=optimization_level, repeats=repeats)
 transpiled_circuit._layout
-logical = logical_states()
+# logical = logical_states()
 
-logical_0_transp = get_logical_0(
-    transpiled_circuit, snapshot_type=snapshot_type)
-print('Traspiled 0 fidelity ', state_fidelity(logical_0_transp, logical[0]))
+# logical_0_transp = get_logical_0(
+#     transpiled_circuit, snapshot_type=snapshot_type)
+# print('Traspiled 0 fidelity ', state_fidelity(logical_0_transp, logical[0]))
 
 # Saves the compiled circuie
 if True:
@@ -320,11 +321,11 @@ if 'transpiled_circuit' not in locals():
 
 noise = pauli_noise_model(0.001, 0.00, 0.0)
 
-n_shots = 1000
+n_shots = 100
 results_noisy = execute(
     transpiled_circuit,
     Aer.get_backend('qasm_simulator'),
-    noise_model=noise,
+    noise_model=None,
     shots=n_shots
 ).result()
 
@@ -335,7 +336,6 @@ results_ideal = execute(
     shots=1
 ).result()
 # Extract data from simulations
-
 
 def _get_fidelities_mat(results_noisy, results_ideal):
     state_vectors_noisy = results_noisy.data()['snapshots']['density_matrix']
@@ -365,7 +365,7 @@ def _get_fidelities_vec(results_noisy, results_ideal):
         for j in range(n_cycles):
             running_fidelity[i, j+1] = state_fidelity(
                 state_vectors_ideal['stabilizer_' + str(j)][0], state_vectors_noisy['stabilizer_' + str(j)][i])
-    return np.sum(running_fidelity, 0) / (n_shots+1)
+    return np.sum(running_fidelity, 0) / n_shots
 
 
 def get_fidelities(results_noisy, results_ideal, snapshot_type):
@@ -393,26 +393,32 @@ plt.show()
 
 
 # %% Demonstrate how density matrices avoid the issue of permutations
-state_vectors_ideal = results_ideal.data()['snapshots']['density_matrix']
+if snapshot_type == 'density_matrix':
+    state_vectors_ideal = results_ideal.data()['snapshots']['density_matrix']
 
-running_fidelity = np.zeros([n_cycles+1])
-running_fidelity[0] = state_fidelity(logical_0_transp,
-                                     state_vectors_ideal['post_encoding'][0]['value'])
-for j in range(n_cycles):
-    running_fidelity[j+1] = state_fidelity(logical_0_transp,
-                                           state_vectors_ideal['stabilizer_' + str(j)][0]['value'])
-print('Running fidelity without noise ', running_fidelity)
-print('It is unity since transpiled snapshots of density matrices are not permuted')
+    running_fidelity = np.zeros([n_cycles+1])
+    running_fidelity[0] = state_fidelity(logical_0_transp,
+                                        state_vectors_ideal['post_encoding'][0]['value'])
+    for j in range(n_cycles):
+        running_fidelity[j+1] = state_fidelity(logical_0_transp,
+                                            state_vectors_ideal['stabilizer_' + str(j)][0]['value'])
+    print('Running fidelity without noise ', running_fidelity)
+    print('It is unity since transpiled snapshots of density matrices are not permuted')
 # %%
 # circuit.draw(output='mpl') # If it does not work, simply remove mpl: circuit.draw()
 counts = results_noisy.get_counts()
+print(counts)
+counts = results_ideal.get_counts()
 print(counts)
 # plot_histogram(counts)
 # circuit.draw(output='mpl')
 
 # %%
-
-
+state1= results_noisy.data()['snapshots']['statevector']['post_encoding'][0]
+print(state1[0])
+state2 = results_ideal.data()['snapshots']['statevector']['post_encoding'][0]
+print(state2[0])
+print(np.vdot(state1,state2))
 # for i in range(n_shots):
 #     for j in range(n_cycles):
 #         print('shot= ',i,', cycle = ',j,', norm = ',np.linalg.norm(state_vectors['stabilizer_' + str(j)][i]))
@@ -449,3 +455,9 @@ print(counts)
 # plt.xlabel('Number of cycles')
 # plt.title('Probability of remaining in original state')
 # plt.legend()
+
+# %%
+
+# %%
+
+# %%

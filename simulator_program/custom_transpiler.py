@@ -57,7 +57,7 @@ couplinglist = [[0, 1], [0, 6], [1, 6], [2, 3],
                 [2, 6], [3, 6], [4, 5], [4, 6], [5, 6]]
 reverse_couplinglist = [[y, x] for [x, y] in couplinglist]
 coupling_map = CouplingMap(
-    couplinglist=couplinglist, description='A hexagoal 7qb code with two ancillas')
+    couplinglist=couplinglist+reverse_couplinglist, description='A hexagoal 7qb code with two ancillas')
 
 # Dict with device properties of the WAQCT QC to be used for transpilation.
 WAQCT_device_properties = {

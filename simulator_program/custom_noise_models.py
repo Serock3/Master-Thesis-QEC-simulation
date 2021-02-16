@@ -1,6 +1,6 @@
 # Import from Qiskit Aer noise module
 from qiskit.providers.aer.noise import pauli_error,depolarizing_error
-from qiskit.providers.aer.noise import thermal_relaxation_error, amplitude_damping_error, phase_amplitude_damping_error, phase_damping_error 
+from qiskit.providers.aer.noise import thermal_relaxation_error, amplitude_damping_error, phase_damping_error , phase_amplitude_damping_error
 from qiskit.providers.aer.noise import NoiseModel,QuantumError, ReadoutError
 from qiskit.providers.aer import noise
 import numpy as np
@@ -63,6 +63,7 @@ def thermal_relaxation_model():
 
     # Add errors to noise model
     noise_thermal = NoiseModel()
+
     for j in range(4):
         noise_thermal.add_quantum_error(errors_reset[j], "reset", [j])
         noise_thermal.add_quantum_error(errors_measure[j], "measure", [j])
@@ -73,4 +74,9 @@ def thermal_relaxation_model():
             noise_thermal.add_quantum_error(errors_cx[j][k], "cx", [j, k])
     return noise_thermal
 
+# def phase_amplitude_damping_model():
+
+
+#     errors_u1 = [phase_amplitude_damping_error(t1, t2, time_u1)
+#                  for t1, t2 in zip(T1s, T2s)]
 # Check this link for reference https://qiskit.org/documentation/tutorials/simulators/3_building_noise_models.html
