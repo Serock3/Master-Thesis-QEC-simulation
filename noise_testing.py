@@ -110,7 +110,7 @@ def phase_amplitude_testing(T1=40e3, T2=60e3):
     # Add errors to noise model
     noise_damping = NoiseModel()
 
-    noise_damping.add_all_qubit_quantum_error(error_single, ["x", "z", "h"])
+    noise_damping.add_all_qubit_quantum_error(error_single, ["x", "z", "h","id"])
     noise_damping.add_all_qubit_quantum_error(error_cz, ["cx", "cz"])
 
     return noise_damping
@@ -148,29 +148,62 @@ def encode_input(qbReg):
 # %%
 
 # Define registers
-qb = QuantumRegister(5, 'code_qubit')
+n_qubits = 2
+qb = QuantumRegister(n_qubits, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
 cr = ClassicalRegister(5, 'syndrome_bit')
-readout = ClassicalRegister(5, 'readout')
+readout = ClassicalRegister(n_qubits, 'readout')
 
 circ = QuantumCircuit(qb, readout)
-circ += encode_input(qb)
-circ += encode_input(qb).inverse()
-circ.barrier(qb)
+#circ += encode_input(qb)
+#circ += encode_input(qb).inverse()
+circ.h(qb[0])
+circ.cx(qb[0], qb[1])
+circ.h(qb[0])
+circ.cx(qb[0], qb[1])
+circ.h(qb[0])
+circ.cx(qb[0], qb[1])
+#circ.cx(qb[0], qb[1])
+#circ.h(qb[0])
+
+#circ.barrier(qb)
+circ.snapshot('measure', snapshot_type="density_matrix")
 circ.measure(qb, readout)
 
-circ.draw(output='mpl')
-# %%
-noise_model = thermal_relaxation_testing()
-noise_model2 = phase_amplitude_testing()
-# Run it
-n_shots = 200000
-results = execute(
+#circ.draw(output='mpl')
+# %
+
+# Run both models
+n_shots = 1
+results_thermal = execute(
     circ,  
     Aer.get_backend('qasm_simulator'),
-    noise_model=noise_model,
+    noise_model=thermal_relaxation_testing(),
+    shots=n_shots
+).result()
+results_damping = execute(
+    circ,  
+    Aer.get_backend('qasm_simulator'),
+    noise_model=phase_amplitude_testing(),
     shots=n_shots
 ).result()
 
-counts = results.get_counts()
-plot_histogram( counts )
+# If fidelity is not (close to) 1, next cell can print/analyze further
+sv_thermal = results_thermal.data()['snapshots']['density_matrix']['measure'][0]['value']
+sv_damping = results_damping.data()['snapshots']['density_matrix']['measure'][0]['value']
+print(state_fidelity(sv_damping, sv_thermal))
+#counts = results.get_counts()
+#plot_histogram( counts )
+# %%
+
+print(sv_damping)
+print(' ')
+print(sv_thermal)
+print(state_fidelity(sv_damping, sv_thermal))
+
+#%%
+from qiskit.quantum_info import DensityMatrix
+
+test_dm = DensityMatrix(sv_damping)
+test_sv = testy.to_statevector()
+print(test_sv)
