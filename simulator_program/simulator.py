@@ -5,7 +5,12 @@ from numpy.core.fromnumeric import repeat
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, AncillaRegister, execute, Aer
+from qiskit import (QuantumCircuit, 
+                    QuantumRegister, 
+                    ClassicalRegister, 
+                    AncillaRegister, 
+                    execute, 
+                    Aer
 from qiskit.visualization import plot_histogram
 from IPython.display import display
 
@@ -13,14 +18,14 @@ from qiskit.quantum_info import state_fidelity
 from qiskit.providers.aer.extensions.snapshot_statevector import *
 
 # Import our own files
-from custom_noise_models import pauli_noise_model
-from custom_transpiler import shortest_transpile_from_distribution, WAQCT_device_properties, _add_custom_device_equivalences
-
+from custom_noise_models import pauli_noise_model, amplitude_damping_error
+from custom_transpiler import (shortest_transpile_from_distribution, 
+                               WAQCT_device_properties,
+                               _add_custom_device_equivalences
+                               )
 # %% Defining useful functions
 
-# Not that this does not consider our setup
-
-
+# Note that this does not consider our setup
 def encode_input(qbReg):
     '''Encode the input into logical 0 and 1
     This assumes that the 0:th qubit is the
@@ -207,7 +212,8 @@ def define_circuit(n_cycles, snapshot_type='density_matrix'):
     as an output. Input is the number of stabilizer
     cycles to perform'''
 
-    # TODO: Transpile each segment seperated by a barrer or snapshop seperately and combine afterwards
+    # TODO: Transpile each segment seperated by a barrer or snapshop seperately 
+    #       and combine afterwards
     # TODO: Change the ancilla reg to use AncillaRegister()
     # Define the registers
     # The 5 qubits to encode the state in
@@ -244,7 +250,8 @@ def define_circuit(n_cycles, snapshot_type='density_matrix'):
 
 def get_logical_0(transpiled_circuit, snapshot_type):
     ''' Run the actual ciruit and get the statevector after encoding
-        This is a bit problematic for several reasons so that's why I'm trying to avoid it
+        This is a bit problematic for several reasons so that's why I'm trying
+        to avoid it
     '''
     results = execute(
         transpiled_circuit,  # NOT RUNNING THE TRANSPILED CIRCUIT AT THE MOMENT

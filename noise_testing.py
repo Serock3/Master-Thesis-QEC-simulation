@@ -74,13 +74,13 @@ def thermal_relaxation_model():
 def thermal_relaxation_testing(T1=40e3, T2=60e3):
 
     # Instruction times (in nanoseconds)
-    time_single = 15
-    time_cz = 300
+    t_single = 15
+    t_cz = 300
 
     # QuantumError objects
-    error_single = thermal_relaxation_error(T1, T2, time_single)
-    error_cz = thermal_relaxation_error(T1, T2, time_cz).expand(
-        thermal_relaxation_error(T1, T2, time_cz))
+    error_single = thermal_relaxation_error(T1, T2, t_single)
+    error_cz = thermal_relaxation_error(T1, T2, t_cz).expand(
+        thermal_relaxation_error(T1, T2, t_cz))
 
     # Add errors to noise model
     noise_thermal = NoiseModel()
@@ -90,17 +90,17 @@ def thermal_relaxation_testing(T1=40e3, T2=60e3):
 
     return noise_thermal
 
-def phase_amplitude_testing(T1=40e3, T2=60e3):
+def phase_amplitude_testing(T1=40e3, T2=60e3, t_single=15, t_cz=300):
 
     # Instruction times (in nanoseconds)
-    time_single = 15
-    time_cz = 300
+    t_single = 15
+    t_cz = 300
 
-    pAD_single = 1-np.exp(-time_single/T1)
-    pPD_single = 1 - (np.exp(-2*time_single/T2))/(np.exp(-time_single/T1))
+    pAD_single = 1 - np.exp(-t_single/T1)
+    pPD_single = 1 - np.exp(-2*t_single/T2) / np.exp(-t_single/T1)
 
-    pAD_cz = 1-np.exp(-time_cz/T1)
-    pPD_cz = 1 - (np.exp(-2*time_cz/T2))/(np.exp(-time_cz/T1))
+    pAD_cz = 1-np.exp(-t_cz/T1)
+    pPD_cz = 1 - (np.exp(-2*t_cz/T2))/(np.exp(-t_cz/T1))
 
     # QuantumError objects
     error_single = phase_amplitude_damping_error(pAD_single, pPD_single)
@@ -110,8 +110,10 @@ def phase_amplitude_testing(T1=40e3, T2=60e3):
     # Add errors to noise model
     noise_damping = NoiseModel()
 
-    noise_damping.add_all_qubit_quantum_error(error_single, ["x", "z", "h","id"])
-    noise_damping.add_all_qubit_quantum_error(error_cz, ["cx", "cz"])
+    noise_damping.add_all_qubit_quantum_error(error_single,
+        ["x", "z", "h", "id", "u1", "u2"])
+    noise_damping.add_all_qubit_quantum_error(error_cz, 
+        ["cx", "cz", "swap", "iswap"])
 
     return noise_damping
 
@@ -174,7 +176,7 @@ circ.measure(qb, readout)
 # %
 
 # Run both models
-n_shots = 1
+n_shots = 1000
 results_thermal = execute(
     circ,  
     Aer.get_backend('qasm_simulator'),

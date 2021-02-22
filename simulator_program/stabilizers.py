@@ -53,7 +53,7 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
         circ.snapshot_statevector('stabilizer_' + str(current_cycle))
 
     # Final readout
-    circ.measure(qb, readout)
+    circ.measure(qbReg, readout)
     circ.snapshot_statevector('post_measure')
 
     return circ
