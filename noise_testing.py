@@ -23,6 +23,10 @@ from qiskit.providers.aer.noise import NoiseModel,QuantumError, ReadoutError
 from qiskit.providers.aer import noise
 import numpy as np
 
+# Our own files
+from simulator_program.custom_noise_models import phase_amplitude_model
+from simulator_program.stabilizers import *
+
 # %%
 def thermal_relaxation_model():
     # T1 and T2 values for qubits 0-3
@@ -118,7 +122,6 @@ def phase_amplitude_testing(T1=40e3, T2=60e3, t_single=15, t_cz=300):
     return noise_damping
 
 
-
 def encode_input(qbReg):
     """Encode the input into logical 0 and 1 for the [[5,1,3]] code. This
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>
@@ -147,7 +150,7 @@ def encode_input(qbReg):
 
     return circ
 
-# %%
+# %% ===== Comparing Thermal Relaxation with Phase+Amplitude Damping =====
 
 # Define registers
 n_qubits = 2
@@ -165,15 +168,12 @@ circ.h(qb[0])
 circ.cx(qb[0], qb[1])
 circ.h(qb[0])
 circ.cx(qb[0], qb[1])
-#circ.cx(qb[0], qb[1])
-#circ.h(qb[0])
+# This circuit creates equal superposition of |01> and |11>
 
-#circ.barrier(qb)
 circ.snapshot('measure', snapshot_type="density_matrix")
 circ.measure(qb, readout)
 
 #circ.draw(output='mpl')
-# %
 
 # Run both models
 n_shots = 1000
@@ -191,12 +191,12 @@ results_damping = execute(
 ).result()
 
 # If fidelity is not (close to) 1, next cell can print/analyze further
+# Note: Might have to rerun several times to get fidelity != 1
 sv_thermal = results_thermal.data()['snapshots']['density_matrix']['measure'][0]['value']
 sv_damping = results_damping.data()['snapshots']['density_matrix']['measure'][0]['value']
 print(state_fidelity(sv_damping, sv_thermal))
-#counts = results.get_counts()
-#plot_histogram( counts )
-# %%
+
+# %% Further comparison between the two models
 
 print(sv_damping)
 print(' ')
@@ -209,3 +209,71 @@ from qiskit.quantum_info import DensityMatrix
 test_dm = DensityMatrix(sv_damping)
 test_sv = testy.to_statevector()
 print(test_sv)
+
+
+# %% Testing noise model + stabilizer
+from simulator_program.stabilizers import _flagged_stabilizer_XZZXI
+
+# Define our registers (Maybe to be written as function?)
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(2, 'ancilla_qubit')
+cr = ClassicalRegister(5, 'syndrome_bit') # The typical register
+#cr = get_classical_register(n_cycles, flag) # Advanced list of registers
+readout = ClassicalRegister(5, 'readout')
+
+registers = [qb, an, cr, readout] # Pack them together
+#circ.x(qb[0])
+circ = get_empty_stabilizer_circuit(registers)
+
+# Settings for circuit
+n_cycles = 1
+reset=False
+flag=True
+recovery=False
+
+# Get the circuit
+circ += get_full_stabilizer_circuit(registers,
+    n_cycles=n_cycles,
+    reset=reset,
+    recovery=recovery,
+    flag=flag,
+)
+
+# Run the circuit
+n_shots = 2048*8
+results = execute(
+    circ,  
+    Aer.get_backend('qasm_simulator'),
+    noise_model=phase_amplitude_model(T2=40e3),
+    shots=n_shots
+).result()
+
+counts = results.get_counts()
+#plot_histogram(results.get_counts())
+#circ.draw(output='mpl')
+
+# %% Group the counts into bigger sets
+
+output_groups = {'no syndrome, log0 state': 0, 'no syndrome, log1 state': 0,
+    'syndrome, log0 state': 0, 'syndrome, log1 state': 0}
+for output in counts:
+    output_state = int(output[0:5])
+    output_msmnt = int(output[6:11])
+
+
+    log0_list = [0,11,101,110,1001,1010,1100,1111,10001,10010,10100,10111,
+        11000,11011,11101,11110]
+    log1_list = [1,10,100,111,1000,1011,1101,1110,10000,10011,10101,10110,
+        11001,11010,11100,11111]
+
+    # Check if we're in logical zero or 1
+    if output_state in log0_list and output_msmnt == 0:
+        output_groups['no syndrome, log0 state'] += counts[output]
+    elif output_state in log1_list and output_msmnt == 0:
+        output_groups['no syndrome, log1 state'] += counts[output]
+    elif output_state in log0_list and output_msmnt > 0:
+        output_groups['syndrome, log0 state'] += counts[output]
+    elif output_state in log1_list and output_msmnt > 0:
+        output_groups['syndrome, log1 state'] += counts[output]
+
+plot_histogram(output_groups)
