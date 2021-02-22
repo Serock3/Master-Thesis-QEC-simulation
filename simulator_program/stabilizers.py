@@ -4,7 +4,7 @@
 # the ancilla qubit. An example of how to use the functions is shown at the
 # bottom.
 #
-# TO-DO: 
+# TODO: 
 #   The advanced registers currently be used for recovery. Need to fix that,
 #   but it has the problem of flag-measurement being in a separate register
 #   and c_if can only be conditioned on one. 
@@ -23,9 +23,10 @@ from qiskit.providers.aer.extensions.snapshot_statevector import *
 # %% General functions
 def get_full_stabilizer_circuit(registers, n_cycles=1,
         reset=True, recovery=False, flag=True):
-    """Returns the circuit for a full stabilizer circuit, including encoding, 
-    stabilizers (with optional flags and recovery) and final measurement.
+    """Returns the circuit for a full repeating stabilizer circuit, including encoding, 
+    n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
     """
+
 
     # Unpack registers
     qbReg, anReg, clReg, readout = registers
@@ -111,6 +112,37 @@ def encode_input(registers):
     circ.cz(qbReg[4], qbReg[2])
     circ.cz(qbReg[4], qbReg[3])
     circ.cx(qbReg[4], qbReg[1])
+
+    return circ
+
+def encode_input_v2(registers):
+    """Encode the input into logical 0 and 1 for the [[5,1,3]] code. This
+    assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>.
+
+    Alternate version Basudha found on stackoverflow.
+    """
+
+    qbReg, _, _, _ = registers
+    circ = get_empty_stabilizer_circuit(registers)
+
+    circ.z(qbReg[0])
+    circ.h(qbReg[1])
+    circ.h(qbReg[2])
+    circ.h(qbReg[3])
+    circ.h(qbReg[4])
+
+    circ.h(qbReg[0])
+    circ.cz(qbReg[0], qbReg[1])
+    circ.cz(qbReg[0], qbReg[2])
+    circ.cz(qbReg[0], qbReg[3])
+    circ.cz(qbReg[0], qbReg[4])
+    circ.h(qbReg[0])
+    
+    circ.cz(qbReg[0], qbReg[1])
+    circ.cz(qbReg[2], qbReg[3])
+    circ.cz(qbReg[1], qbReg[2])
+    circ.cz(qbReg[3], qbReg[4])
+    circ.cz(qbReg[0], qbReg[4])
 
     return circ
 
@@ -911,3 +943,5 @@ if __name__ == "__main__":
     counts = results.get_counts()
     plot_histogram( counts )
     #circuit.draw(output='mpl')
+
+# %%
