@@ -4,7 +4,7 @@
 # the ancilla qubit. An example of how to use the functions is shown at the
 # bottom.
 #
-# TODO: 
+# TO-DO: 
 #   The advanced registers currently be used for recovery. Need to fix that,
 #   but it has the problem of flag-measurement being in a separate register
 #   and c_if can only be conditioned on one. 
@@ -23,10 +23,9 @@ from qiskit.providers.aer.extensions.snapshot_statevector import *
 # %% General functions
 def get_full_stabilizer_circuit(registers, n_cycles=1,
         reset=True, recovery=False, flag=True):
-    """Returns the circuit for a full repeating stabilizer circuit, including encoding, 
-    n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
+    """Returns the circuit for a full stabilizer circuit, including encoding, 
+    stabilizers (with optional flags and recovery) and final measurement.
     """
-
 
     # Unpack registers
     qbReg, anReg, clReg, readout = registers
@@ -115,37 +114,6 @@ def encode_input(registers):
     circ.cz(qbReg[4], qbReg[2])
     circ.cz(qbReg[4], qbReg[3])
     circ.cx(qbReg[4], qbReg[1])
-
-    return circ
-
-def encode_input_v2(registers):
-    """Encode the input into logical 0 and 1 for the [[5,1,3]] code. This
-    assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>.
-
-    Alternate version Basudha found on stackoverflow.
-    """
-
-    qbReg, _, _, _ = registers
-    circ = get_empty_stabilizer_circuit(registers)
-
-    circ.z(qbReg[0])
-    circ.h(qbReg[1])
-    circ.h(qbReg[2])
-    circ.h(qbReg[3])
-    circ.h(qbReg[4])
-
-    circ.h(qbReg[0])
-    circ.cz(qbReg[0], qbReg[1])
-    circ.cz(qbReg[0], qbReg[2])
-    circ.cz(qbReg[0], qbReg[3])
-    circ.cz(qbReg[0], qbReg[4])
-    circ.h(qbReg[0])
-    
-    circ.cz(qbReg[0], qbReg[1])
-    circ.cz(qbReg[2], qbReg[3])
-    circ.cz(qbReg[1], qbReg[2])
-    circ.cz(qbReg[3], qbReg[4])
-    circ.cz(qbReg[0], qbReg[4])
 
     return circ
 
@@ -498,16 +466,16 @@ def _unflagged_stabilizer_XZZXI(registers, reset=True,
         anQb = anReg[1]
 
     # X
-    circ.h(anQb)
-    circ.h(qbReg[0])
-    circ.cz(anQb, qbReg[0])
-    circ.h(qbReg[0])       
+    circ.h( anQb )
+    circ.h( qbReg[0] )
+    circ.cz( anQb, qbReg[0] )
+    circ.h( qbReg[0] )       
 
     # Z
     circ.cz(anQb, qbReg[1])
 
     # Z
-    circ.cz(anQb, qbReg[2])
+    circ.cz( anQb, qbReg[2] )
 
     # X
     circ.h(qbReg[3])
@@ -544,15 +512,15 @@ def _unflagged_stabilizer_IXZZX(registers, reset=True,
 
     # X
     circ.h(anQb)
-    circ.h(qbReg[1])
-    circ.cz(anQb, qbReg[1])
-    circ.h(qbReg[1])   
+    circ.h( qbReg[1] )
+    circ.cz(anQb, qbReg[1] )
+    circ.h( qbReg[1] )   
 
     # Z
-    circ.cz(anQb, qbReg[2])
+    circ.cz(anQb, qbReg[2] )
 
     # Z
-    circ.cz(anQb, qbReg[3]) 
+    circ.cz(anQb, qbReg[3] ) 
 
     # X
     circ.h(qbReg[4])
@@ -588,20 +556,20 @@ def _unflagged_stabilizer_XIXZZ(registers, reset=True,
 
     # X
     circ.h(anQb)
-    circ.h(qbReg[0])
-    circ.cz(anQb, qbReg[0])
-    circ.h(qbReg[0])      
+    circ.h( qbReg[0] )
+    circ.cz(anQb, qbReg[0] )
+    circ.h( qbReg[0] )      
 
     # X
-    circ.h(qbReg[2])
-    circ.cz(anQb, qbReg[2])
-    circ.h(qbReg[2])
+    circ.h( qbReg[2] )
+    circ.cz(anQb, qbReg[2] )
+    circ.h( qbReg[2] )
 
     # Z
-    circ.cz(anQb, qbReg[3])
+    circ.cz(anQb, qbReg[3] )
 
     # Z
-    circ.cz(anQb, qbReg[4])
+    circ.cz(anQb, qbReg[4] )
     circ.h(anQb)
 
     # Measure
@@ -632,20 +600,20 @@ def _unflagged_stabilizer_ZXIXZ(registers, reset=True,
 
     # Z
     circ.h(anQb)
-    circ.cz(anQb, qbReg[0])
+    circ.cz(anQb, qbReg[0] )
 
     # X
     circ.h( qbReg[1] )
-    circ.cz(anQb, qbReg[1])
-    circ.h(qbReg[1])
+    circ.cz(anQb, qbReg[1] )
+    circ.h( qbReg[1] )
 
     # X
-    circ.h(qbReg[3])
-    circ.cz(anQb, qbReg[3])
-    circ.h(qbReg[3])
+    circ.h( qbReg[3] )
+    circ.cz(anQb, qbReg[3] )
+    circ.h( qbReg[3] )
     
     # Z
-    circ.cz(anQb, qbReg[4])
+    circ.cz(anQb, qbReg[4] )
     circ.h(anQb)
 
    # Measure
@@ -859,6 +827,7 @@ def full_recovery_ZXIXZ(registers, reset=True, current_cycle=0, current_step=3):
 
     return circ
 
+
 # %% Function used for internal testing
 def logical_states():
     logical_0 = np.zeros(2**5)
@@ -912,10 +881,10 @@ from qiskit.visualization import plot_histogram
 
 if __name__ == "__main__":
     # The settings for our circuit
-    n_cycles = 1
+    n_cycles = 2
     reset = True
     recovery = False
-    flag = False
+    flag = True
 
     # Define our registers (Maybe to be written as function?)
     qb = QuantumRegister(5, 'code_qubit')
@@ -928,6 +897,7 @@ if __name__ == "__main__":
     circ = get_empty_stabilizer_circuit(registers)
 
     # Get the complete circuit
+
     circ += get_full_stabilizer_circuit(registers,
         n_cycles=n_cycles,
         reset=reset,

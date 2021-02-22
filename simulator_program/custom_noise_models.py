@@ -74,9 +74,44 @@ def thermal_relaxation_model():
             noise_thermal.add_quantum_error(errors_cx[j][k], "cx", [j, k])
     return noise_thermal
 
-# def phase_amplitude_damping_model():
+def phase_amplitude_model(T1=40e3, T2=60e3, t_single=15, t_cz=300,
+        t_measure=1000, t_reset=1000):
+    """Noise model for amplitude and phase damping. All times are given
+    in nanoseconds (ns).
+    """
+    # TODO: Add accurate times for reset/measurement. Current ones use 
+    #       example from qiskit
 
+    # Calculate parameters for both 1-qb and 2-qb gates
+    pAD_single = 1 - np.exp(-t_single/T1)
+    pPD_single = 1 - np.exp(-2*t_single/T2) / np.exp(-t_single/T1)
 
-#     errors_u1 = [phase_amplitude_damping_error(t1, t2, time_u1)
-#                  for t1, t2 in zip(T1s, T2s)]
-# Check this link for reference https://qiskit.org/documentation/tutorials/simulators/3_building_noise_models.html
+    pAD_cz = 1-np.exp(-t_cz/T1)
+    pPD_cz = 1 - (np.exp(-2*t_cz/T2))/(np.exp(-t_cz/T1))
+
+    pAD_measure = 1 - np.exp(-t_measure/T1)
+    pPD_measure = 1 - np.exp(-2*t_measure/T2) / np.exp(-t_measure/T1)
+
+    pAD_reset = 1 - np.exp(-t_reset/T1)
+    pPD_reset = 1 - np.exp(-2*t_reset/T2) / np.exp(-t_reset/T1)
+
+    # QuantumError objects
+    error_single = phase_amplitude_damping_error(pAD_single, pPD_single)
+    error_measure = phase_amplitude_damping_error(pAD_measure, pPD_measure)
+    error_reset = phase_amplitude_damping_error(pAD_single, pPD_reset)
+    error_cz = phase_amplitude_damping_error(pAD_cz, pPD_cz).expand(
+        phase_amplitude_damping_error(pAD_cz, pPD_cz))
+
+    # Add errors to noise model
+    noise_damping = NoiseModel()
+    noise_damping.add_all_qubit_quantum_error(error_measure, "measure")
+    noise_damping.add_all_qubit_quantum_error(error_reset, "reset")
+    noise_damping.add_all_qubit_quantum_error(error_single,
+        ["x", "z", "h", "id", "u1", "u2"])
+    noise_damping.add_all_qubit_quantum_error(error_cz, 
+        ["cx", "cz", "swap", "iswap"])
+
+    return noise_damping
+
+# Check this link for reference
+# https://qiskit.org/documentation/tutorials/simulators/3_building_noise_models.html
