@@ -1,3 +1,6 @@
+# File for testing transpilation and composition of circuits
+# Author: Sebastian
+
 # %%
 from qiskit.quantum_info import purity
 from qiskit.quantum_info.states.measures import state_fidelity
@@ -11,6 +14,10 @@ from IPython.display import display
 from matplotlib import pyplot as plt
 from qiskit import QuantumCircuit, QuantumRegister, AncillaRegister, ClassicalRegister, Aer, execute
 from simulator_program.custom_transpiler import *
+from simulator_program.custom_transpiler import _add_custom_device_equivalences
+from qiskit.quantum_info.states.densitymatrix import DensityMatrix
+from qiskit.visualization.state_visualization import plot_state_hinton, plot_state_qsphere
+from qiskit.quantum_info.states.statevector import Statevector
 
 #%%
 
@@ -76,8 +83,122 @@ def encode_input_v2(registers):
 
     return circ
 
+def _get_fidelities_mat(results_noisy, results_ideal):
+    state_vectors_noisy = results_noisy.data()['snapshots']['density_matrix']
+    state_vectors_ideal = results_ideal.data()['snapshots']['density_matrix']
 
-n_cycles = 1
+    running_fidelity = np.zeros([n_cycles+1])
+    running_fidelity[0] = state_fidelity(state_vectors_ideal['post_encoding'][0]['value'],
+                                         state_vectors_noisy['post_encoding'][0]['value'])
+    print('Purity of encoded state = ', purity(
+        state_vectors_noisy['post_encoding'][0]['value']))
+    for j in range(n_cycles):
+        running_fidelity[j+1] = state_fidelity(state_vectors_ideal['stabilizer_' + str(j)][0]['value'],
+                                               state_vectors_noisy['stabilizer_' + str(j)][0]['value'])
+    return running_fidelity
+
+def comp_states(results1, results2):
+    """Compares two versions of circuits supposed to be identical. 
+    Looks at statevector snapshots and measurement counts.
+    TODO: Currently does not care about shots > 1 for result2.
+
+    Args:
+        results1 (result): result() from a qasm execution
+        results2 (result): result() from a qasm execution
+    """
+    snapshot_type = 'statevector'  # 'density_matrix'# TODO: Make this automatic
+    snapshot_list1 = [(name, state) for (name, state) in results1.data()[
+        'snapshots'][snapshot_type].items()]
+    snapshot_list2 = [(name, state) for (name, state) in results2.data()[
+        'snapshots'][snapshot_type].items()]
+    
+    n_shots1 = len(snapshot_list1[0][1])
+    n_shots2 = len(snapshot_list2[0][1])
+
+    running_fidelity = np.zeros([n_shots1])
+
+    for i in range(len(snapshot_list1)):
+        for shot in range(n_shots1):
+            running_fidelity[shot] = state_fidelity(
+                snapshot_list2[i][1][0], snapshot_list1[i][1][shot])
+        print(snapshot_list2[i][0], np.sum(running_fidelity) / n_shots1)
+    counts = results1.get_counts()
+    print(counts)
+    counts = results2.get_counts()
+    print(counts)
+
+def print_vec_diffs(state_vec1,state_vec2):
+    state1 = Statevector(state_vec1)
+    state2 = Statevector(state_vec2)
+
+    if state1.dim != state2.dim:
+        raise Exception("Error, dims not matching")
+
+    dim = int(np.log2(state1.dim))
+
+    diff = np.round(state_vec1.data-state_vec2.data,3)
+    for i in np.where(diff!=0)[0]:
+        print("Diff in",format(i, 'b').zfill(dim),np.round(state_vec1.data,3)[i],' -> ', np.round(state_vec2.data,3)[i])
+
+def comp_states_mat(results1, results2):
+    """Compares two versions of circuits supposed to be identical. 
+    Looks at desity matrix snapshots and measurement counts.
+    Works even if register sizer are different and permuted.
+
+    TODO: Currently does not care about shots > 1 for result2.
+
+    Args:
+        results1 (result): result() from a qasm execution
+        results2 (result): result() from a qasm execution
+    """
+    snapshot_type = 'density_matrix'  # 'density_matrix'# TODO: Make this automatic
+    snapshot_list1 = [(name, state) for (name, state) in results1.data()[
+        'snapshots'][snapshot_type].items()]
+    snapshot_list2 = [(name, state) for (name, state) in results2.data()[
+        'snapshots'][snapshot_type].items()]
+
+    # print('Purity of encoded state = ', purity(snapshot_list2[0][1][0]['value']))
+
+    if len(snapshot_list2[0][1]) > 1:
+        print('SEVERAL MATRICES IN comp_states_mat FOR results2, SOMETHING NOT RIGHT')
+    if len(snapshot_list1[0][1]) > 1:
+        print('SEVERAL MATRICES IN comp_states_mat FOR results1, SOMETHING NOT RIGHT')
+
+    for i in range(len(snapshot_list1)):
+        for shot in range(1):
+            fidelity = np.round(state_fidelity(
+                snapshot_list2[i][1][0]['value'], snapshot_list1[i][1][0]['value']),3)
+
+        print('Fidelity',snapshot_list2[i][0], fidelity)
+        if fidelity!=1:
+            print_vec_diffs(snapshot_list1[i][1][0]['value'],snapshot_list2[i][1][0]['value'])
+    # TODO: Do something useful with this information
+    try:
+        counts = results1.get_counts()
+        print('Counts 1\n',counts)
+    except:
+        pass
+    try:
+        counts = results2.get_counts()
+        print('Counts 2\n',counts)
+    except:
+        pass
+
+def verify_transpilation(circ,transpiled_circuit):
+    results1 = execute(
+        transpiled_circuit,
+        Aer.get_backend('qasm_simulator'),
+        shots=1
+    ).result()
+    results2 = execute(
+        circ,
+        Aer.get_backend('qasm_simulator'),
+        shots=1
+    ).result()
+
+    comp_states_mat(results1,results2)
+
+n_cycles = 0
 reset = True
 flag = False
 recovery = False
@@ -182,16 +303,25 @@ np.allclose(state1, state2)
 
 # Verkar vara samma vektor (skumt? Nån symmetri som inte syns i matriserna eller någon skillnad i ancillas?)
 # %% Transpilera dem
-
+circ2 = QuantumCircuit(qb)
+# circ.x(0)
+circ2 += encode_input_v2(registers)
+circ2.snapshot('post_encoding', 'density_matrix')#statevector
+# circ2.measure_all()
+# results2 = execute(
+#     circ2,
+#     Aer.get_backend('qasm_simulator'),
+#     shots=2**12
+# ).result()
 
 routing_method = 'sabre'  # basic lookahead stochastic sabre
-# initial_layout = {qb[0]: 0,
-#                   qb[1]: 1,
-#                   qb[2]: 2,
-#                   qb[3]: 3,
-#                   qb[4]: 4,
-#                   an[0]: 5,
-#                   an[1]: 6}
+initial_layout = {qb[0]: 0,
+                  qb[1]: 1,
+                  qb[2]: 2,
+                  qb[3]: 3,
+                  qb[4]: 4,
+                  an[0]: 5,
+                  an[1]: 6}
 # initial_layout = {an[0]: 0,
 #                     an[1]: 1,
 #                     qb[0]: 2,
@@ -202,8 +332,8 @@ routing_method = 'sabre'  # basic lookahead stochastic sabre
 initial_layout = None  # Overwriting the above layout
 layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
-repeats = 30
-optimization_level = 2
+repeats = 10
+optimization_level = 3
 transpiled_circuit = shortest_transpile_from_distribution(circ2, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
                                                           # ,coupling_map = WAQCT_device_properties['coupling_map']
                                                           # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
@@ -212,130 +342,92 @@ transpiled_circuit = shortest_transpile_from_distribution(circ2, repeats=repeats
 
 print('Final depth = ', transpiled_circuit.depth())
 print('Final gates = ', transpiled_circuit.count_ops())
-
-# %% Testa om den fortfarande är rätt
-
-
-def test_encode_circ(circ1, circ2):
-    results1 = execute(
-        circ1,
-        Aer.get_backend('qasm_simulator'),
-        shots=1
-    ).result()
-
-    results2 = execute(
-        circ2,
-        Aer.get_backend('qasm_simulator'),
-        shots=1
-    ).result()
-
-    state1 = np.real(
-        np.round(results1.data()['snapshots']['statevector']['post_encoding'][0], 3))
-    state2 = np.real(
-        np.round(results2.data()['snapshots']['statevector']['post_encoding'][0], 3))
-    print(state1)
-    print(state2)
-    print(np.allclose(state1, state2))
-
-
-test_encode_circ(circ, transpiled_circuit)
-
-# %%
-n_cycles = 0
-
-
-def _get_fidelities_mat(results_noisy, results_ideal):
-    state_vectors_noisy = results_noisy.data()['snapshots']['density_matrix']
-    state_vectors_ideal = results_ideal.data()['snapshots']['density_matrix']
-
-    running_fidelity = np.zeros([n_cycles+1])
-    running_fidelity[0] = state_fidelity(state_vectors_ideal['post_encoding'][0]['value'],
-                                         state_vectors_noisy['post_encoding'][0]['value'])
-    print('Purity of encoded state = ', purity(
-        state_vectors_noisy['post_encoding'][0]['value']))
-    for j in range(n_cycles):
-        running_fidelity[j+1] = state_fidelity(state_vectors_ideal['stabilizer_' + str(j)][0]['value'],
-                                               state_vectors_noisy['stabilizer_' + str(j)][0]['value'])
-    return running_fidelity
-
-
-def _get_fidelities_vec(results_noisy, results_ideal):
-    # Get the state vectors
-    state_vectors_noisy = results_noisy.data()['snapshots']['statevector']
-    state_vectors_ideal = results_ideal.data()['snapshots']['statevector']
-
-    running_fidelity = np.zeros([n_shots, n_cycles+1])
-
-    for i in range(n_shots):  # n_shots
-        running_fidelity[i, 0] = state_fidelity(
-            state_vectors_ideal['post_encoding'][0], state_vectors_noisy['post_encoding'][i])
-        for j in range(n_cycles):
-            running_fidelity[i, j+1] = state_fidelity(
-                state_vectors_ideal['stabilizer_' + str(j)][0], state_vectors_noisy['stabilizer_' + str(j)][i])
-    return np.sum(running_fidelity, 0) / n_shots
-
-
-def get_fidelities(results_noisy, results_ideal, snapshot_type):
-    # logical0 = logical_0_transp  # logical[0]  #
-    if snapshot_type == 'density_matrix':
-        return _get_fidelities_mat(results_noisy, results_ideal)
-    return _get_fidelities_vec(results_noisy, results_ideal)
-
-
-def comp_states(results1, results2):
-    """Compares two versions of circuits supposed to be identical. 
-    Looks at snapshots and measurement counts.
-    TODO: Currently does not care about shots > 1 for result2.
-
-    Args:
-        results1 (result): result() from a qasm execution
-        results2 (result): result() from a qasm execution
-    """
-    snapshot_type = 'statevector'  # 'density_matrix'# TODO: Make this automatic
-    snapshot_list1 = [(name, state) for (name, state) in results1.data()[
-        'snapshots'][snapshot_type].items()]
-    snapshot_list2 = [(name, state) for (name, state) in results2.data()[
-        'snapshots'][snapshot_type].items()]
-
-    n_shots1 = len(snapshot_list1[0][1])
-    n_shots2 = len(snapshot_list2[0][1])
-
-    running_fidelity = np.zeros([n_shots1])
-
-    for i in range(len(snapshot_list1)):
-        for shot in range(n_shots1):
-            running_fidelity[shot] = state_fidelity(
-                snapshot_list2[i][1][0], snapshot_list1[i][1][shot])
-        print(snapshot_list2[i][0], np.sum(running_fidelity) / n_shots1)
-    counts = results1.get_counts()
-    print(counts)
-    counts = results2.get_counts()
-    print(counts)
+verify_transpilation(circ2, transpiled_circuit)
+display(transpiled_circuit.draw())
 
 # %%
 
 
+
+# 
+# state1 = results1.data()['snapshots']['density_matrix']['post_encoding'][0]['value']
+# state2 = results2.data()['snapshots']['density_matrix']['post_encoding'][0]['value']
+
+# print(state_fidelity(state1,state2))
+
 # %%
-circ = QuantumCircuit(qb)
-circ = encode_input(registers)
-circ.snapshot('post_encoding', 'density_matrix')
-circ.measure_all()
+_add_custom_device_equivalences()
+# %%
 results1 = execute(
-    circ,
-    Aer.get_backend('qasm_simulator'),
-    shots=2**12
-).result()
+            transpiled_circuit,
+            Aer.get_backend('qasm_simulator'),
+            shots=1
+        ).result()
 
+state1 = results1.data()['snapshots']['density_matrix']['post_encoding'][0]['value']
+state1 = DensityMatrix(state1)
 
-circ2 = QuantumCircuit(qb)
-circ2 = encode_input_v2(registers)
-circ2.snapshot('post_encoding', 'density_matrix')
-circ2.measure_all()
 results2 = execute(
-    circ2,
-    Aer.get_backend('qasm_simulator'),
-    shots=2**12
-).result()
+            circ2,
+            Aer.get_backend('qasm_simulator'),
+            shots=1
+        ).result()
+
+state2 = results2.data()['snapshots']['density_matrix']['post_encoding'][0]['value']
+state2 = DensityMatrix(state2)
+print(np.round(state1.to_statevector().data,3))
+print(np.round(state2.to_statevector().data,3))
+
+print(np.round(state1.to_statevector().data-state2.to_statevector().data,3))
 # %%
-_get_fidelities_mat(results1, results2)
+state_fidelity(state1,state2)
 # %%
+plot_state_qsphere(state1)
+
+
+#%% https://qiskit.org/documentation/stubs/qiskit.circuit.QuantumCircuit.html#qiskit.circuit.QuantumCircuit
+
+# %% Kod man kan använda istället för depth
+circ.num_nonlocal_gates()
+circ.qubit_duration()
+
+circ.add_calibration()
+#%% Kod för att hitta permutationer vid snapshot (Hade varit nice att kunna göra detta utan snapshot)
+circ_t.data[-1] # om en snapshot ligger här får man typ detta
+
+"""
+circ_t.data[-1]
+(<qiskit.providers.aer.extensions.snapshot.Snapshot at 0x7f1bcf7e7be0>,
+ [Qubit(QuantumRegister(7, 'q'), 5),
+  Qubit(QuantumRegister(7, 'q'), 2),
+  Qubit(QuantumRegister(7, 'q'), 3),
+  Qubit(QuantumRegister(7, 'q'), 6),
+  Qubit(QuantumRegister(7, 'q'), 4),
+  Qubit(QuantumRegister(7, 'q'), 0),
+  Qubit(QuantumRegister(7, 'q'), 1)],
+ [])
+"""
+
+#%% Kod för att konkatenera kretsar
+circ.compose()
+
+"""
+            ┌───┐                   ┌─────┐                ┌───┐
+lqr_1_0: ───┤ H ├───    rqr_0: ──■──┤ Tdg ├    lqr_1_0: ───┤ H ├───────────────
+            ├───┤              ┌─┴─┐└─────┘                ├───┤
+lqr_1_1: ───┤ X ├───    rqr_1: ┤ X ├───────    lqr_1_1: ───┤ X ├───────────────
+         ┌──┴───┴──┐           └───┘                    ┌──┴───┴──┐┌───┐
+lqr_1_2: ┤ U1(0.1) ├  +                     =  lqr_1_2: ┤ U1(0.1) ├┤ X ├───────
+         └─────────┘                                    └─────────┘└─┬─┘┌─────┐
+lqr_2_0: ─────■─────                           lqr_2_0: ─────■───────■──┤ Tdg ├
+            ┌─┴─┐                                          ┌─┴─┐        └─────┘
+lqr_2_1: ───┤ X ├───                           lqr_2_1: ───┤ X ├───────────────
+            └───┘                                          └───┘
+lcr_0: 0 ═══════════                           lcr_0: 0 ═══════════════════════
+
+lcr_1: 0 ═══════════                           lcr_1: 0 ═══════════════════════
+"""
+
+circ.combine()
+circ.extend()
+circ.append()

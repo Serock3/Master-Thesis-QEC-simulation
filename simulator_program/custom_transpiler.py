@@ -49,4 +49,4 @@ def _add_custom_device_equivalences():
 
 # TODO: Curently not functioning? 
 # This function will automatically run the first time you import this file
-# _add_custom_device_equivalences()
+_add_custom_device_equivalences()
