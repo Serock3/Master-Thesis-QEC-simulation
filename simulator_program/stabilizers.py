@@ -21,6 +21,19 @@ from qiskit import (QuantumCircuit,
 from qiskit.providers.aer.extensions.snapshot_statevector import *
 
 # %% General functions
+class StabilizerRegisters:
+
+    def __init__(self,
+            qbReg=QuantumRegister(5, 'code_qubit'),
+            anReg=AncillaRegister(2, 'ancilla_qubit'),
+            clReg=ClassicalRegister(4, 'syndrome_bit'),
+            readout=ClassicalRegister(5, 'readout')
+    ):
+        self.QubitRegister = qbReg
+        self.AncillaRegister = anReg
+        self.SyndromeRegister = clReg
+        self.ReadoutRegister = readout
+
 def get_full_stabilizer_circuit(registers, n_cycles=1,
         reset=True, recovery=False, flag=True):
     """Returns the circuit for a full repeating stabilizer circuit, including encoding, 
@@ -29,7 +42,11 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
 
 
     # Unpack registers
-    qbReg, anReg, clReg, readout = registers
+    #qbReg, anReg, clReg, readout = registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
+    readout = registers.ReadoutRegister
     if not anReg.size == 2 and not anReg.size == 5:
         raise Exception('Ancilla register must be of size 2 or 5')
 
@@ -66,7 +83,11 @@ def get_empty_stabilizer_circuit(registers):
     """Create an empty qiskit circuit adapted for stabilizer circuits"""
 
     # Unpack registers
-    qbReg, anReg, clReg, readout = registers
+    #qbReg, anReg, clReg, readout = registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
+    readout = registers.ReadoutRegister
 
     circ = QuantumCircuit(qbReg, anReg)
     if isinstance(clReg, list):
@@ -93,7 +114,8 @@ def encode_input(registers):
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>
     """
 
-    qbReg, _, _, _ = registers
+    # Unpack registers
+    qbReg = registers.QubitRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     circ.h(qbReg[3])
@@ -195,6 +217,7 @@ def get_classical_register(n_cycles, flag=True):
             for j in range(1) ] for i in range(n_cycles) ]
         return [syndrome_register]
 
+
 # %% All flagged stabilizers
 def flagged_stabilizer_cycle(registers, reset=True, recovery=True,
         current_cycle=0):
@@ -207,7 +230,6 @@ def flagged_stabilizer_cycle(registers, reset=True, recovery=True,
     """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
     # === Step 1: XZZXI ===
@@ -247,7 +269,9 @@ def _flagged_stabilizer_XZZXI(registers, reset=True, current_cycle=0):
     """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     # X
@@ -302,7 +326,9 @@ def _flagged_stabilizer_IXZZX(registers, reset=True, current_cycle=0):
     """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     # X
@@ -356,7 +382,9 @@ def _flagged_stabilizer_XIXZZ(registers, reset=True, current_cycle=0):
     """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     # X
@@ -410,7 +438,9 @@ def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
     """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     # Z
@@ -490,7 +520,9 @@ def _unflagged_stabilizer_XZZXI(registers, reset=True,
     """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
     if anReg.size == 2:
         anQb = anReg[1]
@@ -535,7 +567,9 @@ def _unflagged_stabilizer_IXZZX(registers, reset=True,
     """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
     if anReg.size == 2:
         anQb = anReg[1]
@@ -579,7 +613,9 @@ def _unflagged_stabilizer_XIXZZ(registers, reset=True,
     The current_step input should be set to zero unless running flagged cycles.
     """
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
     if anReg.size == 2:
         anQb = anReg[1]
@@ -623,7 +659,9 @@ def _unflagged_stabilizer_ZXIXZ(registers, reset=True,
     The current_step input should be set to zero unless running flagged cycles.
     """
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
     if anReg.size == 2:
         anQb = anReg[1]
@@ -668,7 +706,8 @@ def unflagged_recovery(registers, reset=True, current_cycle=0, current_step=0):
     single qubit error on code qubits"""
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     # Unpack registers
@@ -732,7 +771,8 @@ def full_recovery_XZZXI(registers, reset=True, current_cycle=0, current_step=0):
     """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     # Unflagged recovery
@@ -766,7 +806,8 @@ def full_recovery_IXZZX(registers, reset=True, current_cycle=0, current_step=1):
     """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     # Unflagged recovery
@@ -798,7 +839,8 @@ def full_recovery_XIXZZ(registers, reset=True, current_cycle=0, current_step=2):
     """
 
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     # Unflagged recovery
@@ -830,7 +872,8 @@ def full_recovery_ZXIXZ(registers, reset=True, current_cycle=0, current_step=3):
     reset=True to correctly recover.
     """
     # Create a circuit
-    qbReg, anReg, clReg, _ = registers
+    qbReg = registers.QubitRegister
+    clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     # Unflagged recovery
@@ -920,11 +963,12 @@ if __name__ == "__main__":
     # Define our registers (Maybe to be written as function?)
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
-    #cr = ClassicalRegister(5, 'syndrome_bit') # The typical register
-    cr = get_classical_register(n_cycles, flag) # Advanced list of registers
+    cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
+    #cr = get_classical_register(n_cycles, flag) # Advanced list of registers
     readout = ClassicalRegister(5, 'readout')
 
-    registers = [qb, an, cr, readout] # Pack them together
+    registers = StabilizerRegisters(qb, an, cr, readout)
+    #registers = [qb, an, cr, readout] # Pack them together
     circ = get_empty_stabilizer_circuit(registers)
 
     # Get the complete circuit
@@ -933,7 +977,7 @@ if __name__ == "__main__":
         reset=reset,
         recovery=recovery,
         flag=flag,
-        )
+    )
 
     # Run it
     n_shots = 2000
