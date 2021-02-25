@@ -147,7 +147,7 @@ def encode_input_v2(registers):
     Alternate version Basudha found on stackoverflow.
     """
 
-    qbReg, _, _, _ = registers
+    qbReg = registers.QubitRegister
     circ = get_empty_stabilizer_circuit(registers)
 
     circ.z(qbReg[0])
