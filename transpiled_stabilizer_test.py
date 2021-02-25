@@ -431,3 +431,14 @@ lcr_1: 0 ═══════════                           lcr_1: 0 �
 circ.combine()
 circ.extend()
 circ.append()
+
+
+#%% Save circuits
+# Saves the compiled circuie
+if True:
+    with open('transpiled_circuit.dat', 'wb') as transpiled_circuit_file:
+        pickle.dump(transpiled_circuit, transpiled_circuit_file)
+# %% (Load and) run the circuit
+if 'transpiled_circuit' not in locals():
+    with open('transpiled_circuit.dat', 'rb') as transpiled_circuit_file:
+        transpiled_circuit = pickle.load(transpiled_circuit_file)
