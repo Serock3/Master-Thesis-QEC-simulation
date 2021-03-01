@@ -95,25 +95,24 @@ def encode_input(registers):
     qbReg, _, _, _ = registers
     circ = get_empty_stabilizer_circuit(registers)
 
-    circ.h(qbReg[3])
-    circ.cz(qbReg[3], qbReg[1])
-    circ.cz(qbReg[3], qbReg[2])
-    circ.cx(qbReg[3], qbReg[0])
-
-    circ.h(qbReg[2])
-    circ.cx(qbReg[2], qbReg[0])
-    circ.cz(qbReg[2], qbReg[3])
-    circ.cz(qbReg[2], qbReg[4])
-
+    circ.z(qbReg[0])
     circ.h(qbReg[1])
-    circ.cz(qbReg[1], qbReg[0])
-    circ.cx(qbReg[1], qbReg[3])
-    circ.cz(qbReg[1], qbReg[4])
-
+    circ.h(qbReg[2])
+    circ.h(qbReg[3])
     circ.h(qbReg[4])
-    circ.cz(qbReg[4], qbReg[2])
-    circ.cz(qbReg[4], qbReg[3])
-    circ.cx(qbReg[4], qbReg[1])
+
+    circ.h(qbReg[0])
+    circ.cz(qbReg[0], qbReg[1])
+    circ.cz(qbReg[0], qbReg[2])
+    circ.cz(qbReg[0], qbReg[3])
+    circ.cz(qbReg[0], qbReg[4])
+    circ.h(qbReg[0])
+    
+    circ.cz(qbReg[0], qbReg[1])
+    circ.cz(qbReg[2], qbReg[3])
+    circ.cz(qbReg[1], qbReg[2])
+    circ.cz(qbReg[3], qbReg[4])
+    circ.cz(qbReg[0], qbReg[4])
 
     return circ
 
@@ -888,7 +887,7 @@ if __name__ == "__main__":
 
     # Define our registers (Maybe to be written as function?)
     qb = QuantumRegister(5, 'code_qubit')
-    an = AncillaRegister(2, 'ancilla_qubit')
+    an = AncillaRegister(4, 'ancilla_qubit')
     #cr = ClassicalRegister(5, 'syndrome_bit') # The typical register
     cr = get_classical_register(n_cycles, flag) # Advanced list of registers
     readout = ClassicalRegister(5, 'readout')
@@ -932,3 +931,133 @@ if __name__ == "__main__":
     counts = results.get_counts()
     plot_histogram(counts)
     
+
+# %% 10 qb TRANSPILER testing
+from qiskit.compiler import transpile
+from qiskit.transpiler import PassManager, CouplingMap, Layout
+from qiskit.visualization import plot_circuit_layout
+from qiskit.circuit.equivalence_library import SessionEquivalenceLibrary
+from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZGate
+from qiskit import QuantumCircuit, QuantumRegister
+import warnings
+
+def shortest_transpile_from_distribution(circuit, repeats=40, print_depths=True, **kwargs):
+    depth = 10000
+    for i in range(repeats):
+        with warnings.catch_warnings():  # sabre causes deprication warning, this will ignore them
+            warnings.simplefilter("ignore")
+            transpiled_circuit_tmp = transpile(circuit, **kwargs)
+        if print_depths:
+            print('depth: ', transpiled_circuit_tmp.depth())
+        if transpiled_circuit_tmp.depth() < depth:
+            depth = transpiled_circuit_tmp.depth()
+            transpiled_circuit = transpiled_circuit_tmp
+    return transpiled_circuit
+
+
+basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap', 'cz']
+couplinglist = [[0,4], [0,1], [1,4], [1,5], [1,2], [2,5], [2,6], [2,3],
+    [3,6], [4,7], [4,5], [5,7], [5,8], [5,6], [6,8], [7,8], [7,9], [8,9]]
+reverse_couplinglist = [[y, x] for [x, y] in couplinglist]
+coupling_map = CouplingMap(
+    couplinglist=couplinglist+reverse_couplinglist, description='A hexagoal 7qb code with two ancillas')
+
+# Dict with device properties of the WAQCT QC to be used for transpilation.
+WAQCT_device_properties = {
+    "basis_gates": basis_gates, "coupling_map": coupling_map}
+
+def _add_custom_device_equivalences():
+    """ Ads custom gate equivalences to the SessionEquivalenceLibrary for transpilation
+    NOTE: One needs to be run once!
+    """
+    print('Adding custom device equivalences')
+    q = QuantumRegister(2, 'q')
+    def_swap = QuantumCircuit(q)
+    for inst, qargs, cargs in [
+            (iSwapGate(), [q[0], q[1]], []),
+            (CZGate(), [q[0], q[1]], []),
+            (SGate().inverse(), [q[1]], []),
+            (SGate().inverse(), [q[0]], [])
+    ]:
+        def_swap.append(inst, qargs, cargs)
+    SessionEquivalenceLibrary.add_equivalence(SwapGate(), def_swap)
+
+# TODO: Curently not functioning? 
+# This function will automatically run the first time you import this file
+_add_custom_device_equivalences()
+
+
+# %% Test transpiler
+
+# The settings for our circuit
+n_cycles = 1
+reset = False
+recovery = False
+flag = False
+
+# Define our registers (Maybe to be written as function?)
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(5, 'ancilla_qubit')
+cr = ClassicalRegister(5, 'syndrome_bit') # The typical register
+#cr = get_classical_register(n_cycles, flag) # Advanced list of registers
+readout = ClassicalRegister(5, 'readout')
+
+registers = [qb, an, cr, readout] # Pack them together
+circ = get_empty_stabilizer_circuit(registers)
+
+# Get the complete circuit
+circ += get_full_stabilizer_circuit(registers,
+    n_cycles=n_cycles,
+    reset=reset,
+    recovery=recovery,
+    flag=flag,
+)
+
+print('Starting transpilation')
+# Transpilation
+routing_method = 'sabre'  # basic lookahead stochastic sabre
+initial_layout = None  # Overwriting the above layout
+layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
+translation_method = None  # 'unroller',  translator , synthesis
+repeats = 10
+optimization_level = 1
+circ_t = shortest_transpile_from_distribution(
+    circ,
+    print_depths=False,
+    repeats=repeats,
+    routing_method=routing_method,
+    initial_layout=initial_layout,
+    layout_method=layout_method,
+    translation_method=translation_method,
+    optimization_level=optimization_level,
+    **WAQCT_device_properties
+)
+print('Drawing output')
+circ_t.draw(output='mpl')
+# %%
+# Run it
+n_shots = 2000
+results = execute(
+    circ,  
+    Aer.get_backend('qasm_simulator'),
+    noise_model=None,
+    shots=n_shots
+).result()
+
+# Analyze results
+logical = logical_states()
+sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][0]
+fid = 0
+for i in range(10):
+    sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][i]
+
+    log0 = logical[0][np.arange(128,step=4)]
+    sv_test = sv_post_encoding[0:32]
+    fid += state_fidelity(log0, sv_test)
+
+print('Average fidelity across 10 shots:')
+print(fid/10)
+
+# Plot results
+counts = results.get_counts()
+plot_histogram(counts)

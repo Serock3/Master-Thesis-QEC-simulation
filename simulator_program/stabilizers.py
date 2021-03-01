@@ -19,7 +19,7 @@ from qiskit import (QuantumCircuit,
                     Aer
                     )
 from qiskit.providers.aer.extensions.snapshot_statevector import *
-
+from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 # %% General functions
 class StabilizerRegisters:
 
@@ -54,8 +54,8 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
     circ = get_empty_stabilizer_circuit(registers)
 
     # Encode the state
-    circ += encode_input(registers)
-    circ.snapshot_statevector('post_encoding')
+    circ += encode_input_v2(registers)
+    circ.snapshot('post_encoding', 'statevector')
 
     # Stabilizer
     for current_cycle in range(n_cycles):
@@ -71,7 +71,7 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
                 recovery=recovery,
                 current_cycle=current_cycle
             )
-        circ.snapshot_statevector('stabilizer_' + str(current_cycle))
+        circ.snapshot('stabilizer_' + str(current_cycle), 'statevector')
 
     # Final readout
     circ.measure(qbReg, readout)
