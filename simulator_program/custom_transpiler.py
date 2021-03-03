@@ -11,6 +11,8 @@ def default_cost_func(circ,t_single=15, t_multi=300):
     num_multi_qb_gates = circ.num_nonlocal_gates()
     return num_single_qb_gates*t_single+num_multi_qb_gates*t_multi
 
+def depth_cost_func(circ,t_single=15, t_multi=300):
+    return circ.depth()
 
 def shortest_transpile_from_distribution(circuit, repeats=40, cost_func=default_cost_func, print_cost=True, **kwargs):
     depth = 10000
