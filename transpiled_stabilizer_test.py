@@ -442,3 +442,6 @@ if True:
 if 'transpiled_circuit' not in locals():
     with open('transpiled_circuit.dat', 'rb') as transpiled_circuit_file:
         transpiled_circuit = pickle.load(transpiled_circuit_file)
+
+
+import qiskit.providers.aer.extensions.snapshot_density_matrix

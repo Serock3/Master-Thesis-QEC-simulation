@@ -6,14 +6,20 @@ from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZ
 from qiskit import QuantumCircuit, QuantumRegister
 import warnings
 
-def shortest_transpile_from_distribution(circuit, repeats=40, print_depths=True, **kwargs):
+def default_cost_func(circ,t_single=15, t_multi=300):
+    num_single_qb_gates = circ.size()-circ.num_nonlocal_gates()
+    num_multi_qb_gates = circ.num_nonlocal_gates()
+    return num_single_qb_gates*t_single+num_multi_qb_gates*t_multi
+
+
+def shortest_transpile_from_distribution(circuit, repeats=40, cost_func=default_cost_func, print_cost=True, **kwargs):
     depth = 10000
-    for i in range(repeats):
+    for _ in range(repeats):
         with warnings.catch_warnings():  # sabre causes deprication warning, this will ignore them
             warnings.simplefilter("ignore")
             transpiled_circuit_tmp = transpile(circuit, **kwargs)
-        if print_depths:
-            print('depth: ', transpiled_circuit_tmp.depth())
+        if print_cost:
+            print('cost: ', cost_func(transpiled_circuit_tmp))
         if transpiled_circuit_tmp.depth() < depth:
             depth = transpiled_circuit_tmp.depth()
             transpiled_circuit = transpiled_circuit_tmp

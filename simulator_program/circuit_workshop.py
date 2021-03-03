@@ -109,9 +109,9 @@ registers = StabilizerRegisters(qbReg=qb)
 circ = QuantumCircuit(qb)
 circ += encode_input_v2(registers)
 circ.snapshot('post_encoding', 'density_matrix')
-circ += _unflagged_stabilizer_XZZXI(registers, reset=True,
-                                    current_cycle=0, current_step=0)
-circ.snapshot('post_XZZXI', 'density_matrix')
+# circ += _unflagged_stabilizer_XZZXI(registers, reset=True,
+#                                     current_cycle=0, current_step=0)
+# circ.snapshot('post_XZZXI', 'density_matrix')
 
 routing_method = 'sabre'  # basic lookahead stochastic sabre
 # initial_layout = {qb[0]: 0,
@@ -132,7 +132,7 @@ initial_layout = None  # Overwriting the above layout
 layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
 repeats = 10
-optimization_level = 1
+optimization_level = 3
 circ_t = shortest_transpile_from_distribution(circ, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
                                               # ,coupling_map = WAQCT_device_properties['coupling_map']
                                               # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
