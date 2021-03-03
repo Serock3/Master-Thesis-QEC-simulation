@@ -77,7 +77,7 @@ circ = get_empty_stabilizer_circuit(registers)
 
 # Settings for circuit
 n_cycles = 1
-reset=False
+reset=True
 flag=False
 recovery=False
 
@@ -95,96 +95,201 @@ routing_method = 'sabre'  # basic lookahead stochastic sabre
 initial_layout = None  # Overwriting the above layout
 layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
-#optimization_levels = [0,1,2]
+optimization_levels = [0,1,2]
 repeats = 10
-#circuit_list = [circ]
-#for optimization_level in optimization_levels:
-#    circ_t = shortest_transpile_from_distribution(
-#        circ,
-#        print_depths=False,
-#        repeats=repeats,
-#        routing_method=routing_method,
-#        initial_layout=initial_layout,
-#        layout_method=layout_method,
-#        translation_method=translation_method,
-#        optimization_level=optimization_level,
-#        **WAQCT_device_properties
-#    )
-#    circuit_list.append(circ_t)
+circuit_list = [circ]
+for optimization_level in optimization_levels:
+    circ_t = shortest_transpile_from_distribution(
+        circ,
+        print_cost=False,
+        repeats=repeats,
+        routing_method=routing_method,
+        initial_layout=initial_layout,
+        layout_method=layout_method,
+        translation_method=translation_method,
+        optimization_level=0,
+        **WAQCT_device_properties
+    )
+    circuit_list.append(circ_t)
 
-circ_t0 = shortest_transpile_from_distribution(
-    circ,
-    print_depths=False,
-    repeats=repeats,
-    routing_method=routing_method,
-    initial_layout=initial_layout,
-    layout_method=layout_method,
-    translation_method=translation_method,
-    optimization_level=1,
-    **WAQCT_device_properties
-)
-circ_t1 = shortest_transpile_from_distribution(
-    circ,
-    print_depths=False,
-    repeats=repeats,
-    routing_method=routing_method,
-    initial_layout=initial_layout,
-    layout_method=layout_method,
-    translation_method=translation_method,
-    optimization_level=1,
-    **WAQCT_device_properties
-)
-circ_t2 = shortest_transpile_from_distribution(
-    circ,
-    print_depths=False,
-    repeats=repeats,
-    routing_method=routing_method,
-    initial_layout=initial_layout,
-    layout_method=layout_method,
-    translation_method=translation_method,
-    optimization_level=2,
-    **WAQCT_device_properties
-)
+#circ_t0 = shortest_transpile_from_distribution(
+#    circ,
+#    print_depths=False,
+#    repeats=repeats,
+#    routing_method=routing_method,
+#    initial_layout=initial_layout,
+#    layout_method=layout_method,
+#    translation_method=translation_method,
+#    optimization_level=1,
+#    **WAQCT_device_properties
+#)
+#circ_t1 = shortest_transpile_from_distribution(
+#    circ,
+#    print_depths=False,
+#    repeats=repeats,
+#    routing_method=routing_method,
+#    initial_layout=initial_layout,
+#    layout_method=layout_method,
+#    translation_method=translation_method,
+#    optimization_level=1,
+#    **WAQCT_device_properties
+#)
+#circ_t2 = shortest_transpile_from_distribution(
+#    circ,
+#    print_depths=False,
+#    repeats=repeats,
+#    routing_method=routing_method,
+#    initial_layout=initial_layout,
+#    layout_method=layout_method,
+#    translation_method=translation_method,
+#    optimization_level=2,
+#    **WAQCT_device_properties
+#)
 
 # Error free run for fidelity measurements
-#transpiled_logical = []
-#for circuit in optimization_levels:
-#    results_t0 = execute(
-#        circuit_list[circuit+1],
-#        Aer.get_backend('qasm_simulator'),
-#        noise_model=None,
-#        shots=1,
-#    ).result()
-#
+correct_state = []
+for circuit in circuit_list:
+    results = execute(
+        circuit,
+        Aer.get_backend('qasm_simulator'),
+        noise_model=None,
+        shots=1,
+    ).result()
 
-results_t0 = execute(
-    circ_t0,
-    Aer.get_backend('qasm_simulator'),
-    noise_model=None,
-    shots=1,
-).result()
-logical_t0 = results_t0.data()['snapshots']['statevector']['stabilizer_0'][0]
-results_t1 = execute(
-    circ_t1,
-    Aer.get_backend('qasm_simulator'),
-    noise_model=None,
-    shots=1,
-).result()
-logical_t1 = results_t1.data()['snapshots']['statevector']['stabilizer_0'][0]
-results_t2 = execute(
-    circ_t2,
-    Aer.get_backend('qasm_simulator'),
-    noise_model=None,
-    shots=1,
-).result()
-logical_t2 = results_t2.data()['snapshots']['statevector']['stabilizer_0'][0]
+    correct_state.append(
+        results.data()['snapshots']['statevector']['stabilizer_0'][0]
+    )
 
-# %% Analyze results (NOTE: Might take a long time due to n_shots)
-T2_list = np.arange(40, 81, 2)*1e3 # 40-80 mus
-t_cz_list = np.arange(100,301, 10) # 100-300 ns
+#results_t0 = execute(
+#    circ_t0,
+#    Aer.get_backend('qasm_simulator'),
+#    noise_model=None,
+#    shots=1,
+#).result()
+#logical_t0 = results_t0.data()['snapshots']['statevector']['stabilizer_0'][0]
+#results_t1 = execute(
+#    circ_t1,
+#    Aer.get_backend('qasm_simulator'),
+#    noise_model=None,
+#    shots=1,
+#).result()
+#logical_t1 = results_t1.data()['snapshots']['statevector']['stabilizer_0'][0]
+#results_t2 = execute(
+#    circ_t2,
+#    Aer.get_backend('qasm_simulator'),
+#    noise_model=None,
+#    shots=1,
+#).result()
+#logical_t2 = results_t2.data()['snapshots']['statevector']['stabilizer_0'][0]
+
+
+
+# %% Functions for analyzing results
+def select_no_errors(mem):
+    '''Gives array of booleans corresponding to the shots without errors'''
+    return np.array( [int(item[6:10]) for item in mem] ) == 0
+
+def get_fidelity_data(circ, correct_state, param_list, n_shots=2048):
+    '''Inputs:
+    circ: The circuit to be tested
+    correct_state: The correct state for comparison
+    param_list: The error model parameters, currently only [T2, t_cz]
+    n_shots: Number of shots to average over
+    '''
+    T2, t_cz = param_list
+
+    # Run the circuit
+    results = execute(
+        circ,  
+        Aer.get_backend('qasm_simulator'),
+        noise_model=thermal_relaxation_model(T2=T2, t_cz=t_cz),
+        memory=True,
+        shots=n_shots
+    ).result()
+
+    # Post-selection
+    select_indices = select_no_errors(results.get_memory())
+    select_count = np.sum(select_indices)
+    post_selection = np.array(
+        results.data()['snapshots']['statevector']['stabilizer_0']
+        )[select_indices]
+
+    # Analyze results
+    data = np.zeros(n_shots)
+    for j in range(select_count):
+#        statevector = results.data()[
+#            'snapshots']['statevector']['stabilizer_0'][j]
+        statevector = post_selection[j]
+        data[j] = state_fidelity(statevector, correct_state)
+    fid = np.sum(data)/select_count
+    print('Boop')
+    return fid, data
+
+# %% Analyze results
+T2_list = np.arange(40, 81, 10)*1e3 # 40-80 mus
+t_cz_list = np.arange(100,301, 50) # 100-300 ns
+n_shots = 1024
+
+#T2_data = np.zeros(len(T2_list))
+fid_T2 = np.zeros(len(T2_list))
+fid_t = np.zeros(len(t_cz_list))
+T2_results_list = []
+t_cz_results_list = []
+for index in range(len(circuit_list)):
+
+    t_cz = 200
+    fid_T2 = np.zeros(len(T2_list))
+    for i in range(len(T2_list)):
+        param_list = [T2_list[i], t_cz]
+        fid_T2[i], _ = get_fidelity_data(
+            circ=circuit_list[index],
+            correct_state=correct_state[index],
+            param_list=param_list,
+            n_shots=1024,
+        )
+    T2_results_list.append(fid_T2)
+    
+
+    T2 = 60e3
+    fid_t = np.zeros(len(t_cz_list))
+    for i in range(len(t_cz_list)):
+        param_list = [T2, t_cz_list[i]]
+        fid_t[i], _ = get_fidelity_data(
+            circ=circuit_list[index],
+            correct_state=correct_state[index],
+            param_list=param_list,
+            n_shots=1024,
+        )
+    t_cz_results_list.append(fid_t)
+    print('booperz')
+# %% Temporary plotting
+fig, axs = plt.subplots(2, figsize=(14, 10))
+ax1 = axs[0]
+ax2 = axs[1]
+for i in range(4):
+    ax1.plot(T2_list*1e-3, T2_results_list[i], 'o-', label=str(i-1))
+    ax2.plot(t_cz_list, t_cz_results_list[i], 'o-', label=str(i-1))
+#ax1.plot(T2_list*1e-3, fid_T2, 'o-', label='No transpilation')
+ax1.set_xlabel('T2 [$\mu$s]')
+ax1.set_ylabel('Average fidelity')
+ax1.set_title('Fidelity with varying T2, constant 2-qb gate time (200 ns)')
+#ax1.set(ylim=(0.74, 0.96))
+ax1.legend()
+ax1.grid(linewidth=1)
+
+ax2.set_xlabel('2-qb gate time [ns]')
+ax2.set_ylabel('Average fidelity')
+ax2.set_title('Fidelity with varying 2-qb gate time, constant T2 (60 $\mu$s)')
+#ax2.set(ylim=(0.74, 0.96))
+ax2.legend()
+ax2.grid(linewidth=1)
+
+# %% OLD VERSION
+T2_list = np.arange(40, 81, 10)*1e3 # 40-80 mus
+t_cz_list = np.arange(100,301, 50) # 100-300 ns
 logical = logical_states()
 log0 = DensityMatrix(logical[1])
-n_shots = 2048*8
+n_shots = 1024
 
 # Arrays for storing all the stuff
 T2_data = np.zeros([len(T2_list), n_shots])
@@ -218,7 +323,7 @@ for i in range(len(fid_T2)):
 fid_T2 = np.sum(T2_data, axis=1)/n_shots
 print('Finished varying T2 without transpilation')
 
-# %% No transpilation, vary t_cz, fixed T2 (NO POST SELECTING HERE AND BELOW)
+# No transpilation, vary t_cz, fixed T2 (NO POST SELECTING HERE AND BELOW)
 fid_cz = np.zeros(len(t_cz_list))
 for i in range(len(fid_cz)):
     t_cz = t_cz_list[i]
