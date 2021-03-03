@@ -148,7 +148,8 @@ def encode_input_v2(registers):
     """
 
     qbReg = registers.QubitRegister
-    circ = get_empty_stabilizer_circuit(registers)
+    #circ = get_empty_stabilizer_circuit(registers)
+    circ = QuantumCircuit(qbReg)
 
     circ.z(qbReg[0])
     circ.h(qbReg[1])

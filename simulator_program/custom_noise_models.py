@@ -45,8 +45,8 @@ def thermal_relaxation_model(T1=40e3, T2=60e3, t_single=15, t_cz=300,
 
     # Add errors to noise model
     noise_damping = NoiseModel()
-    noise_damping.add_all_qubit_quantum_error(error_measure, "measure")
-    noise_damping.add_all_qubit_quantum_error(error_reset, "reset")
+    #noise_damping.add_all_qubit_quantum_error(error_measure, "measure")
+    #noise_damping.add_all_qubit_quantum_error(error_reset, "reset")
     noise_damping.add_all_qubit_quantum_error(error_single,
         ["x", "z", "h", "id", "u1", "u2"])
     noise_damping.add_all_qubit_quantum_error(error_cz, 

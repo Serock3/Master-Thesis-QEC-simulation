@@ -70,7 +70,6 @@ def logical_states():
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
 cr = ClassicalRegister(5, 'syndrome_bit') # The typical register
-#cr = get_classical_register(n_cycles, flag) # Advanced list of registers
 readout = ClassicalRegister(5, 'readout')
 
 registers = StabilizerRegisters(qb, an, cr, readout)
@@ -96,9 +95,24 @@ routing_method = 'sabre'  # basic lookahead stochastic sabre
 initial_layout = None  # Overwriting the above layout
 layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
+#optimization_levels = [0,1,2]
 repeats = 10
-optimization_level = 1
-circ_t = shortest_transpile_from_distribution(
+#circuit_list = [circ]
+#for optimization_level in optimization_levels:
+#    circ_t = shortest_transpile_from_distribution(
+#        circ,
+#        print_depths=False,
+#        repeats=repeats,
+#        routing_method=routing_method,
+#        initial_layout=initial_layout,
+#        layout_method=layout_method,
+#        translation_method=translation_method,
+#        optimization_level=optimization_level,
+#        **WAQCT_device_properties
+#    )
+#    circuit_list.append(circ_t)
+
+circ_t0 = shortest_transpile_from_distribution(
     circ,
     print_depths=False,
     repeats=repeats,
@@ -106,18 +120,64 @@ circ_t = shortest_transpile_from_distribution(
     initial_layout=initial_layout,
     layout_method=layout_method,
     translation_method=translation_method,
-    optimization_level=optimization_level,
+    optimization_level=1,
+    **WAQCT_device_properties
+)
+circ_t1 = shortest_transpile_from_distribution(
+    circ,
+    print_depths=False,
+    repeats=repeats,
+    routing_method=routing_method,
+    initial_layout=initial_layout,
+    layout_method=layout_method,
+    translation_method=translation_method,
+    optimization_level=1,
+    **WAQCT_device_properties
+)
+circ_t2 = shortest_transpile_from_distribution(
+    circ,
+    print_depths=False,
+    repeats=repeats,
+    routing_method=routing_method,
+    initial_layout=initial_layout,
+    layout_method=layout_method,
+    translation_method=translation_method,
+    optimization_level=2,
     **WAQCT_device_properties
 )
 
 # Error free run for fidelity measurements
-results_t = execute(
-    circ_t,
+#transpiled_logical = []
+#for circuit in optimization_levels:
+#    results_t0 = execute(
+#        circuit_list[circuit+1],
+#        Aer.get_backend('qasm_simulator'),
+#        noise_model=None,
+#        shots=1,
+#    ).result()
+#
+
+results_t0 = execute(
+    circ_t0,
     Aer.get_backend('qasm_simulator'),
     noise_model=None,
     shots=1,
 ).result()
-logical_t = results_t.data()['snapshots']['statevector']['stabilizer_0'][0]
+logical_t0 = results_t0.data()['snapshots']['statevector']['stabilizer_0'][0]
+results_t1 = execute(
+    circ_t1,
+    Aer.get_backend('qasm_simulator'),
+    noise_model=None,
+    shots=1,
+).result()
+logical_t1 = results_t1.data()['snapshots']['statevector']['stabilizer_0'][0]
+results_t2 = execute(
+    circ_t2,
+    Aer.get_backend('qasm_simulator'),
+    noise_model=None,
+    shots=1,
+).result()
+logical_t2 = results_t2.data()['snapshots']['statevector']['stabilizer_0'][0]
 
 # %% Analyze results (NOTE: Might take a long time due to n_shots)
 T2_list = np.arange(40, 81, 2)*1e3 # 40-80 mus
@@ -126,7 +186,17 @@ logical = logical_states()
 log0 = DensityMatrix(logical[1])
 n_shots = 2048*8
 
-# No transpilation, vary T2, fixed t_cz
+# Arrays for storing all the stuff
+T2_data = np.zeros([len(T2_list), n_shots])
+T2_data_t0 = np.zeros([len(T2_list), n_shots])
+T2_data_t1 = np.zeros([len(T2_list), n_shots])
+T2_data_t2 = np.zeros([len(T2_list), n_shots])
+t_cz_data = np.zeros([len(t_cz_list), n_shots])
+t_cz_data_t0 = np.zeros([len(t_cz_list), n_shots])
+t_cz_data_t1 = np.zeros([len(t_cz_list), n_shots])
+t_cz_data_t2 = np.zeros([len(t_cz_list), n_shots])
+
+# No transpilation, vary T2, fixed t_cz (WITH POST SELECTION)
 fid_T2 = np.zeros(len(T2_list))
 for i in range(len(fid_T2)):
     T2 = T2_list[i]
@@ -144,11 +214,11 @@ for i in range(len(fid_T2)):
     for j in range(n_shots):
         statevector = results.data()['snapshots']['statevector']['stabilizer_0'][j]
         partial_sv = partial_trace(statevector, [5,6])
-        fid_T2[i] += state_fidelity(log0, partial_sv)
-fid_T2 /= n_shots
+        T2_data[i][j] = state_fidelity(log0, partial_sv)
+fid_T2 = np.sum(T2_data, axis=1)/n_shots
 print('Finished varying T2 without transpilation')
 
-# No transpilation, vary t_cz, fixed T2
+# %% No transpilation, vary t_cz, fixed T2 (NO POST SELECTING HERE AND BELOW)
 fid_cz = np.zeros(len(t_cz_list))
 for i in range(len(fid_cz)):
     t_cz = t_cz_list[i]
@@ -166,18 +236,18 @@ for i in range(len(fid_cz)):
     for j in range(n_shots):
         statevector = results.data()['snapshots']['statevector']['stabilizer_0'][j]
         partial_sv = partial_trace(statevector, [5,6])
-        fid_cz[i] += state_fidelity(log0, partial_sv)
-fid_cz /= n_shots
+        t_cz_data[i][j] = state_fidelity(log0, partial_sv)
+fid_cz = np.sum(t_cz_data, axis=1)/n_shots
 print('Finished varying t_cz without transpilation')
 
-# With transpilation, vary T2, fixed t_cz
-fid_T2_t = np.zeros(len(T2_list))
+# With transpilation 0, vary T2, fixed t_cz
+fid_T2_t0 = np.zeros(len(T2_list))
 for i in range(len(fid_T2)):
     T2 = T2_list[i]
 
     # Run the circuit
     results = execute(
-        circ_t,  
+        circ_t0,  
         Aer.get_backend('qasm_simulator'),
         noise_model=thermal_relaxation_model(T2=T2, t_cz=200),
         shots=n_shots
@@ -187,18 +257,18 @@ for i in range(len(fid_T2)):
     # Analyze results
     for j in range(n_shots):
         statevector = results.data()['snapshots']['statevector']['stabilizer_0'][j]
-        fid_T2_t[i] += state_fidelity(logical_t, statevector)
-fid_T2_t /= n_shots
-print('Finished varying T2 with transpilation')
+        T2_data_t0[i][j] = state_fidelity(logical_t0, statevector)
+fid_T2_t0 = np.sum(T2_data_t0, axis=1)/n_shots
+print('Finished varying T2 with transpilation 0')
 
 # With transpilation, vary t_cz, fixed T2
-fid_cz_t = np.zeros(len(t_cz_list))
+fid_cz_t0 = np.zeros(len(t_cz_list))
 for i in range(len(fid_cz)):
     t_cz = t_cz_list[i]
 
     # Run the circuit
     results = execute(
-        circ_t,  
+        circ_t0,  
         Aer.get_backend('qasm_simulator'),
         noise_model=thermal_relaxation_model(T2=60e3, t_cz=t_cz),
         shots=n_shots
@@ -208,56 +278,130 @@ for i in range(len(fid_cz)):
     # Analyze results
     for j in range(n_shots):
         statevector = results.data()['snapshots']['statevector']['stabilizer_0'][j]
-        fid_cz_t[i] += state_fidelity(logical_t, statevector)
-fid_cz_t /= n_shots
-print('Finished varying t_cz with transpilation')
-# %%
+        t_cz_data_t0[i][j] = state_fidelity(logical_t0, statevector)
+fid_cz_t0 = np.sum(t_cz_data_t0, axis=1)/n_shots
+print('Finished varying t_cz with transpilation 0')
+#===========================================================================
+# With transpilation 1, vary T2, fixed t_cz
+fid_T2_t1 = np.zeros(len(T2_list))
+for i in range(len(fid_T2)):
+    T2 = T2_list[i]
+
+    # Run the circuit
+    results = execute(
+        circ_t1,  
+        Aer.get_backend('qasm_simulator'),
+        noise_model=thermal_relaxation_model(T2=T2, t_cz=200),
+        shots=n_shots
+    ).result()
+    counts = results.get_counts()
+
+    # Analyze results
+    for j in range(n_shots):
+        statevector = results.data()['snapshots']['statevector']['stabilizer_0'][j]
+        T2_data_t1[i][j] = state_fidelity(logical_t1, statevector)
+fid_T2_t1 = np.sum(T2_data_t1, axis=1)/n_shots
+print('Finished varying T2 with transpilation 1')
+
+# With transpilation 1, vary t_cz, fixed T2
+fid_cz_t1 = np.zeros(len(t_cz_list))
+for i in range(len(fid_cz)):
+    t_cz = t_cz_list[i]
+
+    # Run the circuit
+    results = execute(
+        circ_t1,  
+        Aer.get_backend('qasm_simulator'),
+        noise_model=thermal_relaxation_model(T2=60e3, t_cz=t_cz),
+        shots=n_shots
+    ).result()
+    counts = results.get_counts()
+
+    # Analyze results
+    for j in range(n_shots):
+        statevector = results.data()['snapshots']['statevector']['stabilizer_0'][j]
+        t_cz_data_t1[i][j] = state_fidelity(logical_t1, statevector)
+fid_cz_t1 = np.sum(t_cz_data_t1, axis=1)/n_shots
+print('Finished varying t_cz with transpilation 1')
+#==========================================================================
+# With transpilation 2, vary T2, fixed t_cz
+fid_T2_t2 = np.zeros(len(T2_list))
+for i in range(len(fid_T2)):
+    T2 = T2_list[i]
+
+    # Run the circuit
+    results = execute(
+        circ_t2,  
+        Aer.get_backend('qasm_simulator'),
+        noise_model=thermal_relaxation_model(T2=T2, t_cz=200),
+        shots=n_shots
+    ).result()
+    counts = results.get_counts()
+
+    # Analyze results
+    for j in range(n_shots):
+        statevector = results.data()['snapshots']['statevector']['stabilizer_0'][j]
+        T2_data_t2[i][j] = state_fidelity(logical_t2, statevector)
+fid_T2_t2 = np.sum(T2_data_t2, axis=1)/n_shots
+print('Finished varying T2 with transpilation 2')
+
+# With transpilation 2, vary t_cz, fixed T2
+fid_cz_t2 = np.zeros(len(t_cz_list))
+for i in range(len(fid_cz)):
+    t_cz = t_cz_list[i]
+
+    # Run the circuit
+    results = execute(
+        circ_t2,  
+        Aer.get_backend('qasm_simulator'),
+        noise_model=thermal_relaxation_model(T2=60e3, t_cz=t_cz),
+        shots=n_shots
+    ).result()
+    counts = results.get_counts()
+
+    # Analyze results
+    for j in range(n_shots):
+        statevector = results.data()['snapshots']['statevector']['stabilizer_0'][j]
+        t_cz_data_t2[i][j] = state_fidelity(logical_t2, statevector)
+fid_cz_t2 = np.sum(t_cz_data_t2, axis=1)/n_shots
+print('Finished varying t_cz with transpilation 2')
+
+# %% Loading data files
+T2_data = np.load('data/T2_data.npy')
+T2_data_t0 = np.load('data/T2_data_t0.npy')
+T2_data_t1 = np.load('data/T2_data_t1.npy')
+T2_data_t2 = np.load('data/T2_data_t2.npy')
+t_cz_data = np.load('data/t_cz_data.npy')
+t_cz_data_t0 = np.load('data/t_cz_data_t0.npy')
+t_cz_data_t1 = np.load('data/t_cz_data_t1.npy')
+t_cz_data_t2 = np.load('data/t_cz_data_t2.npy')
+
+
+# %% Plotting
 fig, axs = plt.subplots(2, figsize=(14, 10))
 ax1 = axs[0]
 ax2 = axs[1]
-ax1.plot(T2_list*1e-3, fid_T2,'o-')
-ax1.plot(T2_list*1e-3, fid_T2_t,'o-')
-ax2.plot(t_cz_list, fid_cz,'o-')
-ax2.plot(t_cz_list, fid_cz_t,'o-')
 
+# Vary T2
+ax1.plot(T2_list*1e-3, fid_T2, 'o-', label='No transpilation')
+ax1.plot(T2_list*1e-3, fid_T2_t0, 'o-', label='Transpiled 0')
+ax1.plot(T2_list*1e-3, fid_T2_t1, 'o-', label='Transpiled 1')
+#ax1.plot(T2_list*1e-3, fid_T2_t2, 'o-', label='Transpiled 2')
+ax1.set_xlabel('T2 [$\mu$s]')
+ax1.set_ylabel('Average fidelity')
+ax1.set_title('Fidelity with varying T2, constant 2-qb gate time (200 ns)')
+#ax1.set(ylim=(0.74, 0.96))
+ax1.legend()
+ax1.grid(linewidth=1)
 
-# %%
-def logical_states():
-    logical_0 = np.zeros(2**5)
-    logical_0[0b00000] = 1/4
-    logical_0[0b10010] = 1/4
-    logical_0[0b01001] = 1/4
-    logical_0[0b10100] = 1/4
-    logical_0[0b01010] = 1/4
-    logical_0[0b11011] = -1/4
-    logical_0[0b00110] = -1/4
-    logical_0[0b11000] = -1/4
-    logical_0[0b11101] = -1/4
-    logical_0[0b00011] = -1/4
-    logical_0[0b11110] = -1/4
-    logical_0[0b01111] = -1/4
-    logical_0[0b10001] = -1/4
-    logical_0[0b01100] = -1/4
-    logical_0[0b10111] = -1/4
-    logical_0[0b00101] = 1/4
-
-    logical_1 = np.zeros(2**5)
-    logical_1[0b11111] = 1/4
-    logical_1[0b01101] = 1/4
-    logical_1[0b10110] = 1/4
-    logical_1[0b01011] = 1/4
-    logical_1[0b10101] = 1/4
-    logical_1[0b00100] = -1/4
-    logical_1[0b11001] = -1/4
-    logical_1[0b00111] = -1/4
-    logical_1[0b00010] = -1/4
-    logical_1[0b11100] = -1/4
-    logical_1[0b00001] = -1/4
-    logical_1[0b10000] = -1/4
-    logical_1[0b01110] = -1/4
-    logical_1[0b10011] = -1/4
-    logical_1[0b01000] = -1/4
-    logical_1[0b11010] = 1/4
-
-    return [logical_0, logical_1]
-
+# Vary t_cz
+ax2.plot(t_cz_list, fid_cz, 'o-', label='No transpilation')
+ax2.plot(t_cz_list, fid_cz_t0, 'o-', label='Transpiled 0')
+ax2.plot(t_cz_list, fid_cz_t1, 'o-', label='Transpiled 1')
+#ax2.plot(t_cz_list, fid_cz_t2, 'o-', label='Transpiled 2')
+ax2.set_xlabel('2-qb gate time [ns]')
+ax2.set_ylabel('Average fidelity')
+ax2.set_title('Fidelity with varying 2-qb gate time, constant T2 (60 $\mu$s)')
+#ax2.set(ylim=(0.74, 0.96))
+ax2.legend()
+ax2.grid(linewidth=1)
