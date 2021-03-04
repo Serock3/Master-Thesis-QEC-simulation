@@ -1019,7 +1019,7 @@ routing_method = 'sabre'  # basic lookahead stochastic sabre
 initial_layout = None  # Overwriting the above layout
 layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
-repeats = 10
+repeats = 200
 optimization_level = 1
 circ_t = shortest_transpile_from_distribution(
     circ,
@@ -1034,6 +1034,12 @@ circ_t = shortest_transpile_from_distribution(
 )
 print('Drawing output')
 circ_t.draw(output='mpl')
+# %%
+print('Final depth diamond = ', circ_t.depth())
+print('Final gates diamond = ', circ_t.count_ops())
+print('Final depth diamond = ', circ.depth())
+print('Final gates diamond = ', circ.count_ops())
+
 # %%
 # Run it
 n_shots = 2000
