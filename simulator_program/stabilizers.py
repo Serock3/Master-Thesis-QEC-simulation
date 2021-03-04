@@ -51,13 +51,27 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
         raise Exception('Ancilla register must be of size 2 or 5')
 
     # Define the circuit
-    circ = get_empty_stabilizer_circuit(registers)
+    # circ = get_empty_stabilizer_circuit(registers)
 
     # Encode the state
-    circ += encode_input_v2(registers)
+    circ = encode_input_v2(registers)
     circ.snapshot('post_encoding', 'statevector')
 
     # Stabilizer
+    circ = get_repeated_stabilization(registers, n_cycles=1,
+        reset=reset, recovery=recovery, flag=flag)
+
+    # Final readout
+    circ.measure(qbReg, readout)
+    circ.snapshot_statevector('post_measure')
+
+    return circ
+    
+def get_repeated_stabilization(registers, n_cycles=1,
+        reset=True, recovery=False, flag=True, snapshot_type='statevector'):
+
+    circ = get_empty_stabilizer_circuit(registers)
+
     for current_cycle in range(n_cycles):
         if flag is True:
             circ += flagged_stabilizer_cycle(registers,
@@ -71,12 +85,8 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
                 recovery=recovery,
                 current_cycle=current_cycle
             )
-        circ.snapshot('stabilizer_' + str(current_cycle), 'statevector')
-
-    # Final readout
-    circ.measure(qbReg, readout)
-    circ.snapshot_statevector('post_measure')
-
+        if snapshot_type:
+            circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
     return circ
 
 def get_empty_stabilizer_circuit(registers):
@@ -953,6 +963,7 @@ def logical_states():
 # %% Internal testing of functions above
 from qiskit.quantum_info import state_fidelity
 from qiskit.visualization import plot_histogram
+from IPython.display import display
 
 if __name__ == "__main__":
     # The settings for our circuit
@@ -979,7 +990,8 @@ if __name__ == "__main__":
         recovery=recovery,
         flag=flag,
     )
-
+    
+    display(circ.draw())
     # Run it
     n_shots = 2000
     results = execute(
@@ -1007,3 +1019,4 @@ if __name__ == "__main__":
     counts = results.get_counts()
     plot_histogram(counts)
     
+# %%
