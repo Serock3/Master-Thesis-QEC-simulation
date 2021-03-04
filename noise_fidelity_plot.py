@@ -77,27 +77,25 @@ circ = get_empty_stabilizer_circuit(registers)
 
 # Settings for circuit
 n_cycles = 1
-reset=True
+reset=False
 flag=False
 recovery=False
 
 # Get the circuit
-#circ.x(qb[0])
-#circ += get_full_stabilizer_circuit(registers,
-#    n_cycles=n_cycles,
-#    reset=reset,
-#    recovery=recovery,
-#    flag=flag,
-#)
-
-circ.x(qb[0])
+# circ.x(qb[0])
+# circ += get_full_stabilizer_circuit(registers,
+#     n_cycles=n_cycles,
+#     reset=reset,
+#     recovery=recovery,
+#     flag=flag,
+# )
 circ += encode_input_v2(registers)
 circ += unflagged_stabilizer_cycle(registers,
-    reset=reset,
-    recovery=recovery
-)
-circ.append(Snapshot('stabilizer_0','statevector',num_qubits=5),qb)
-circ.measure(qb, readout)
+                                   reset=reset,
+                                   recovery=recovery
+                                   )
+circ.barrier()
+circ.append(Snapshot('stabilizer_0', 'density_matrix', num_qubits=5), qb)
 
 # Transpilation
 routing_method = 'sabre'  # basic lookahead stochastic sabre
@@ -123,25 +121,25 @@ for optimization_level in optimization_levels:
 
 
 # Error free run for fidelity measurements
-correct_state = []
-for circuit in circuit_list:
-    results = execute(
-        circuit,
-        Aer.get_backend('qasm_simulator'),
-        noise_model=None,
-        shots=1,
-    ).result()
+# correct_state = []
+# for circuit in circuit_list:
+#     results = execute(
+#         circuit,
+#         Aer.get_backend('qasm_simulator'),
+#         noise_model=None,
+#         shots=1,
+#     ).result()
 
-    correct_state.append(
-        results.data()['snapshots']['statevector']['stabilizer_0'][0]
-    )
+#     correct_state.append(
+#         results.data()['snapshots']['statevector']['stabilizer_0'][0]
+#     )
 
 # %% Functions for analyzing results
 def select_no_errors(mem):
     '''Gives array of booleans corresponding to the shots without errors'''
     return np.array( [int(item[6:10]) for item in mem] ) == 0
 
-def get_fidelity_data(circ, correct_state, param_list, n_shots=2048,
+def get_fidelity_data(circ, param_list, n_shots=2048,
         post_select=True):
     '''Inputs:
     circ: The circuit to be tested
@@ -150,6 +148,18 @@ def get_fidelity_data(circ, correct_state, param_list, n_shots=2048,
     n_shots: Number of shots to average over
     '''
     T2, t_cz = param_list
+
+    # Get correct state
+    results = execute(
+        circ,
+        Aer.get_backend('qasm_simulator'),
+        noise_model=None,
+        shots=1,
+    ).result()
+
+    # TODO: Make this work if circuit it permuted for later stabilizers
+    correct_state = results.data()['snapshots']['statevector']['stabilizer_0'][0]
+    
 
     # Run the circuit
     results = execute(
@@ -160,39 +170,108 @@ def get_fidelity_data(circ, correct_state, param_list, n_shots=2048,
         shots=n_shots
     ).result()
 
-    # Post-selection
     select_indices = select_no_errors(results.get_memory())
     select_count = np.sum(select_indices)
     select_fraction = select_count/n_shots
-    post_selection = np.array(
-        results.data()['snapshots']['statevector']['stabilizer_0']
-        )[select_indices]
-
-    # Analyze results
     data = np.zeros(n_shots)
-    for j in range(select_count):
-        statevector = post_selection[j]
-        data[j] = state_fidelity(statevector, correct_state)
-    fid = np.sum(data)/select_count
 
+    if post_select:
+        # Post-selection
+        post_selection = np.array(
+            results.data()['snapshots']['statevector']['stabilizer_0']
+            )[select_indices]
+
+        # Analyze results
+        for j in range(select_count):
+            statevector = post_selection[j]
+            data[j] = state_fidelity(statevector, correct_state)
+        fid = np.sum(data)/select_count
+    else:
+        for j in range(n_shots):
+            statevector = results.data()['snapshots']['statevector']['stabilizer_0'][j]
+            data[j] = state_fidelity(statevector, correct_state)
+        fid = np.sum(data)/select_count
     return fid, select_fraction, data
 
+def reformat_density_snapshot(results) -> dict:
+    """Reformats the snapshot data of the results object to be a 
+    dictionary with the measurement results as keys
+    """
+    snap_dict = {}
+    for snapshot_name in results.data()['snapshots']['density_matrix']:
+        res_dict = {}
+        for item in results.data()[
+                'snapshots']['density_matrix'][snapshot_name]:
+            res_dict[item['memory']] = item['value']
+        snap_dict[snapshot_name] = res_dict
+    return snap_dict
+
+from qiskit.aqua.utils import get_subsystems_counts
+
+
+def get_post_select_fraction_for_density_matrix(results,n_shots):
+    syndrome_reg_counts = get_subsystems_counts(results.get_counts())[1]
+    count_trivial_syndrome = 0
+    for key in syndrome_reg_counts:
+        if int(key) == 0:
+            count_trivial_syndrome = syndrome_reg_counts[key]
+    return count_trivial_syndrome/n_shots
+
+def get_fidelity_data_den_mat(circ, param_list, n_shots=2048,
+        post_select=True):
+    '''Inputs:
+    circ: The circuit to be tested
+    correct_state: The correct state for comparison
+    param_list: The error model parameters, currently only [T2, t_cz]
+    n_shots: Number of shots to average over
+    '''
+    T2, t_cz = param_list
+
+    # Get correct state
+    results = execute(
+        circ,
+        Aer.get_backend('qasm_simulator'),
+        noise_model=None,
+        shots=1,
+    ).result()
+
+    snapshots = reformat_density_snapshot(results)
+    # TODO: Make this work if circuit it permuted for later stabilizers
+    # TODO: More sophisticated key than '0x0'?
+    correct_state = snapshots['stabilizer_0']['0x0']
+
+    # Run the circuit
+    results = execute(
+        circ,  
+        Aer.get_backend('qasm_simulator'),
+        noise_model=thermal_relaxation_model(T2=T2, t_cz=t_cz),
+        memory=True,
+        shots=n_shots
+    ).result()
+
+    # TODO: make post_select=False possible
+    # Post-selection
+    select_fraction = get_post_select_fraction_for_density_matrix(results,n_shots)
+    snapshots = reformat_density_snapshot(results)
+    post_selection = snapshots['stabilizer_0']['0x0']
+
+    # Analyze results
+    fid = state_fidelity(post_selection, correct_state)
+
+    return fid, select_fraction
+
+
 # %% Analyze results
-T2_list = np.arange(40, 81, 2)*1e3 # 40-80 mus
-t_cz_list = np.arange(100,301, 10) # 100-300 ns
-n_shots = 1024*16
+T2_list = np.arange(40, 81, 20)*1e3 # 40-80 mus
+t_cz_list = np.arange(100,301, 100) # 100-300 ns
+n_shots = 10 #1024*4
 
-# fid_T2 = np.zeros(len(T2_list))
-# P_T2 = np.zeros(len(T2_list))
-
-# fid_t = np.zeros(len(t_cz_list))
-# P_t = np.zeros(len(t_cz_list))
-
+fid_T2 = np.zeros(len(T2_list))
+fid_t = np.zeros(len(t_cz_list))
 T2_results_list = []
 t_cz_results_list = []
 P_T2_list = []
 P_t_list = []
-
 for index in range(len(circuit_list)): # Loop over circuits
 
     # Post selection, vary T2
@@ -201,26 +280,38 @@ for index in range(len(circuit_list)): # Loop over circuits
     P_T2 = np.zeros(len(T2_list))
     for i in range(len(T2_list)):
         param_list = [T2_list[i], t_cz]
-        fid_T2[i], P_T2[i], _ = get_fidelity_data(
+        # fid_T2[i], _, _ = get_fidelity_data(
+        #     circ=circuit_list[index],
+        #     # correct_state=correct_state[index],
+        #     param_list=param_list,
+        #     n_shots=1024,
+        # )
+        fid_T2[i], P_T2[i] = get_fidelity_data_den_mat(
             circ=circuit_list[index],
-            correct_state=correct_state[index],
+            # correct_state=correct_state[index],
             param_list=param_list,
-            n_shots=n_shots,
+            n_shots=1024,
         )
     T2_results_list.append(fid_T2)
     P_T2_list.append(P_T2)
-    
+
     # Post selection, vary t_cz
     T2 = 60e3
     fid_t = np.zeros(len(t_cz_list))
     P_t = np.zeros(len(t_cz_list))
     for i in range(len(t_cz_list)):
         param_list = [T2, t_cz_list[i]]
-        fid_t[i], P_t[i], _ = get_fidelity_data(
+        # fid_t[i], _, _ = get_fidelity_data(
+        #     circ=circuit_list[index],
+        #     # correct_state=correct_state[index],
+        #     param_list=param_list,
+        #     n_shots=1024,
+        # )
+        fid_t[i], P_t[i] = get_fidelity_data_den_mat(
             circ=circuit_list[index],
-            correct_state=correct_state[index],
+            # correct_state=correct_state[index],
             param_list=param_list,
-            n_shots=n_shots,
+            n_shots=1024,
         )
     t_cz_results_list.append(fid_t)
     P_t_list.append(P_t)
@@ -256,6 +347,8 @@ ax4.set_ylabel('Selection fraction')
 ax4.set_title('Selection fraction with varying 2-qb gate time, constant T2 (60 $\mu$s)')
 ax4.legend()
 ax4.grid(linewidth=1)
+
+
 
 # %% Loading data files
 T2_data = np.load('data/T2_data.npy')
@@ -296,3 +389,110 @@ ax2.set_title('Fidelity with varying 2-qb gate time, constant T2 (60 $\mu$s)')
 #ax2.set(ylim=(0.74, 0.96))
 ax2.legend()
 ax2.grid(linewidth=1)
+# %% Running fidelity (multiple cycles)
+n_cycles=15
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(2, 'ancilla_qubit')
+# cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
+cr = get_classical_register(n_cycles, flag=False) # Advanced list of registers
+readout = ClassicalRegister(5, 'readout')
+
+registers = StabilizerRegisters(qb, an, cr, readout)
+
+# circ = get_empty_stabilizer_circuit(registers)
+
+circ = encode_input_v2(registers)
+circ.snapshot('post_encoding', 'density_matrix')
+# Stabilizer
+
+circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
+    reset=reset, recovery=recovery, flag=flag,snapshot_type='density_matrix')
+
+# Final readout
+# circ.measure(qbReg, readout)
+# circ.snapshot('post_measure', 'density_matrix')
+
+
+def get_running_post_select_fraction_for_density_matrix(results,n_shots,cycle):
+    subsys_counts = get_subsystems_counts(results.get_counts())
+    syndrome_reg_counts = subsys_counts[len(subsys_counts)-1-cycle]
+    count_trivial_syndrome = 0
+    for key in syndrome_reg_counts:
+        if int(key) == 0:
+            count_trivial_syndrome = syndrome_reg_counts[key]
+    return count_trivial_syndrome/n_shots
+
+def get_running_fidelity_data_den_mat(circ, param_list, n_shots=2048,
+        post_select=True):
+    '''Inputs:
+    circ: The circuit to be tested
+    correct_state: The correct state for comparison
+    param_list: The error model parameters, currently only [T2, t_cz]
+    n_shots: Number of shots to average over
+    '''
+    T2, t_cz = param_list
+
+    # Get correct state
+    results = execute(
+        circ,
+        Aer.get_backend('qasm_simulator'),
+        noise_model=None,
+        shots=1,
+    ).result()
+
+    snapshots = reformat_density_snapshot(results)
+    # TODO: Make this work if circuit it permuted for later stabilizers
+    # TODO: More sophisticated key than '0x0'?
+    correct_state = snapshots['stabilizer_0'][[key for key in snapshots['stabilizer_0'] if int(key,16) == 0][0]]
+
+    # Run the circuit
+    results = execute(
+        circ,  
+        Aer.get_backend('qasm_simulator'),
+        noise_model=thermal_relaxation_model(),
+        shots=n_shots
+    ).result()
+    print(results.get_counts())
+    # TODO: make post_select=False possible
+    # Post-selection
+    fidelities = []
+    snapshots = reformat_density_snapshot(results)
+    select_fractions = []
+    for current_cycle in range(n_cycles):
+        try:
+            post_selection = snapshots['stabilizer_' + str(current_cycle)][[key for key in snapshots['stabilizer_0'] if int(key,16) == 0][0]]
+            select_fraction = get_running_post_select_fraction_for_density_matrix(results,n_shots,current_cycle)
+            select_fractions.append(select_fraction)
+            fidelities.append(state_fidelity(post_selection, correct_state))
+        except:
+            print("No selectable states")
+            fidelities.append(-1)
+    # Analyze results
+
+
+    return fidelities, select_fractions
+n_shots = 10
+fidelities, select_fractions = get_running_fidelity_data_den_mat(circ, param_list, n_shots)
+# %% Plotting
+fig, axs = plt.subplots(2, figsize=(14, 10))
+ax1 = axs[0]
+ax2 = axs[1]
+
+# Vary T2
+ax1.plot(range(n_cycles), fidelities, 'o-', label='No transpilation')
+ax1.set_xlabel(r'Error detection cycle $n$')
+ax1.set_ylabel('Average fidelity')
+ax1.set_title('Fidelity of post selected states after $n$ error detection cycles')
+#ax1.set(ylim=(0.74, 0.96))
+ax1.legend()
+ax1.grid(linewidth=1)
+
+# Vary t_cz
+ax2.plot(range(n_cycles), select_fractions, 'o-', label='No transpilation')
+ax2.set_xlabel('2-qb gate time [ns]')
+ax2.set_ylabel(r'Error detection cycle $n$')
+ax2.set_title('Fidelity with varying 2-qb gate time, constant T2 (60 $\mu$s)')
+#ax2.set(ylim=(0.74, 0.96))
+ax2.legend()
+ax2.grid(linewidth=1)
+# %%

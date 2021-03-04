@@ -3,3 +3,4 @@
 *.pyc
 
 .vscode/
+simulator_program/__pycache__/custom_noise_models.cpython-38.pyc
