@@ -39,6 +39,17 @@ coupling_map = CouplingMap(
 WAQCT_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map}
 
+diamond_couplinglist = [[0, 2], [0, 3], [1, 3], [1, 4], [2, 5], [3, 5],
+    [3, 6], [4, 6]]
+reverse_diamond_couplinglist = [[y, x] for [x, y] in diamond_couplinglist]
+diamond_coupling_map = CouplingMap(
+    couplinglist=diamond_couplinglist+reverse_diamond_couplinglist,
+    description='A double diamond 7qb code with two ancillas')
+
+# Dict with device properties of the "Double diamond" chip for transpilation.
+diamond_device_properties = {
+    "basis_gates": basis_gates, "coupling_map": diamond_coupling_map}
+
 def _add_custom_device_equivalences():
     """ Ads custom gate equivalences to the SessionEquivalenceLibrary for transpilation
     NOTE: One needs to be run once!
