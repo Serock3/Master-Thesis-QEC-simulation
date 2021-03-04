@@ -82,13 +82,22 @@ flag=False
 recovery=False
 
 # Get the circuit
+#circ.x(qb[0])
+#circ += get_full_stabilizer_circuit(registers,
+#    n_cycles=n_cycles,
+#    reset=reset,
+#    recovery=recovery,
+#    flag=flag,
+#)
+
 circ.x(qb[0])
-circ += get_full_stabilizer_circuit(registers,
-    n_cycles=n_cycles,
+circ += encode_input_v2(registers)
+circ += unflagged_stabilizer_cycle(registers,
     reset=reset,
-    recovery=recovery,
-    flag=flag,
+    recovery=recovery
 )
+circ.append(Snapshot('stabilizer_0','statevector',num_qubits=5),qb)
+circ.measure(qb, readout)
 
 # Transpilation
 routing_method = 'sabre'  # basic lookahead stochastic sabre
@@ -169,49 +178,61 @@ def get_fidelity_data(circ, correct_state, param_list, n_shots=2048,
     return fid, select_fraction, data
 
 # %% Analyze results
-T2_list = np.arange(40, 81, 10)*1e3 # 40-80 mus
-t_cz_list = np.arange(100,301, 50) # 100-300 ns
-n_shots = 1024*4
+T2_list = np.arange(40, 81, 2)*1e3 # 40-80 mus
+t_cz_list = np.arange(100,301, 10) # 100-300 ns
+n_shots = 1024*16
 
-fid_T2 = np.zeros(len(T2_list))
-fid_t = np.zeros(len(t_cz_list))
+# fid_T2 = np.zeros(len(T2_list))
+# P_T2 = np.zeros(len(T2_list))
+
+# fid_t = np.zeros(len(t_cz_list))
+# P_t = np.zeros(len(t_cz_list))
+
 T2_results_list = []
 t_cz_results_list = []
+P_T2_list = []
+P_t_list = []
+
 for index in range(len(circuit_list)): # Loop over circuits
 
     # Post selection, vary T2
     t_cz = 200
     fid_T2 = np.zeros(len(T2_list))
+    P_T2 = np.zeros(len(T2_list))
     for i in range(len(T2_list)):
         param_list = [T2_list[i], t_cz]
-        fid_T2[i], _, _ = get_fidelity_data(
+        fid_T2[i], P_T2[i], _ = get_fidelity_data(
             circ=circuit_list[index],
             correct_state=correct_state[index],
             param_list=param_list,
-            n_shots=1024,
+            n_shots=n_shots,
         )
     T2_results_list.append(fid_T2)
+    P_T2_list.append(P_T2)
     
     # Post selection, vary t_cz
     T2 = 60e3
     fid_t = np.zeros(len(t_cz_list))
+    P_t = np.zeros(len(t_cz_list))
     for i in range(len(t_cz_list)):
         param_list = [T2, t_cz_list[i]]
-        fid_t[i], _, _ = get_fidelity_data(
+        fid_t[i], P_t[i], _ = get_fidelity_data(
             circ=circuit_list[index],
             correct_state=correct_state[index],
             param_list=param_list,
-            n_shots=1024,
+            n_shots=n_shots,
         )
     t_cz_results_list.append(fid_t)
+    P_t_list.append(P_t)
     print('boop')
 # %% Plotting
-fig, axs = plt.subplots(2, figsize=(14, 10))
-ax1 = axs[0]
-ax2 = axs[1]
+fig, axs = plt.subplots(4, figsize=(14, 16))
+ax1, ax2, ax3, ax4 = axs
 for i in range(4):
     ax1.plot(T2_list*1e-3, T2_results_list[i], 'o-', label=str(i-1))
     ax2.plot(t_cz_list, t_cz_results_list[i], 'o-', label=str(i-1))
+    ax3.plot(T2_list*1e-3, P_T2_list[i], 'o-', label=str(i-1))
+    ax4.plot(t_cz_list, P_t_list[i], 'o-', label=str(i-1))
 ax1.set_xlabel('T2 [$\mu$s]')
 ax1.set_ylabel('Average fidelity')
 ax1.set_title('Fidelity with varying T2, constant 2-qb gate time (200 ns)')
@@ -224,7 +245,17 @@ ax2.set_title('Fidelity with varying 2-qb gate time, constant T2 (60 $\mu$s)')
 ax2.legend()
 ax2.grid(linewidth=1)
 
+ax3.set_xlabel('T2 [$\mu$s]')
+ax3.set_ylabel('Selection fraction')
+ax3.set_title('Selection fraction with varying T2, constant 2-qb gate time (200 ns)')
+ax3.legend()
+ax3.grid(linewidth=1)
 
+ax4.set_xlabel('2-qb gate time [ns]')
+ax4.set_ylabel('Selection fraction')
+ax4.set_title('Selection fraction with varying 2-qb gate time, constant T2 (60 $\mu$s)')
+ax4.legend()
+ax4.grid(linewidth=1)
 
 # %% Loading data files
 T2_data = np.load('data/T2_data.npy')
