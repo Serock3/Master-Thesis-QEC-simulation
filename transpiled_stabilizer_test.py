@@ -445,3 +445,34 @@ if 'transpiled_circuit' not in locals():
 
 
 import qiskit.providers.aer.extensions.snapshot_density_matrix
+
+#%%
+repeats = 5
+routing_method = 'sabre'  # basic lookahead stochastic sabre
+qreg_qubit = QuantumRegister(5, 'qubit')
+circuit = QuantumCircuit(qreg_qubit)
+
+circuit.z(qreg_qubit[0])
+circuit.h(qreg_qubit[1])
+circuit.h(qreg_qubit[2])
+circuit.h(qreg_qubit[3])
+circuit.h(qreg_qubit[4])
+circuit.h(qreg_qubit[0])
+circuit.cz(qreg_qubit[1], qreg_qubit[2])
+circuit.cz(qreg_qubit[3], qreg_qubit[4])
+circuit.cz(qreg_qubit[0], qreg_qubit[1])
+circuit.cz(qreg_qubit[2], qreg_qubit[3])
+circuit.cz(qreg_qubit[0], qreg_qubit[2])
+circuit.cz(qreg_qubit[0], qreg_qubit[3])
+circuit.cz(qreg_qubit[0], qreg_qubit[4])
+circuit.h(qreg_qubit[0])
+circuit.cz(qreg_qubit[0], qreg_qubit[4])
+circuit.cz(qreg_qubit[0], qreg_qubit[1])
+circuit.snapshot('post_encoding', 'density_matrix')
+
+circuit_t = shortest_transpile_from_distribution(circuit,cost_func=depth_cost_func, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
+                                              layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WAQCT_device_properties)
+verify_transpilation(circuit, circuit_t)
+circuit_t.draw()
+# %%
+print(circuit_t.qasm())

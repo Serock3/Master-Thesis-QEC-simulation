@@ -422,7 +422,27 @@ def get_running_post_select_fraction_for_density_matrix(results,n_shots,cycle):
             count_trivial_syndrome = syndrome_reg_counts[key]
     return count_trivial_syndrome/n_shots
 
-def get_running_fidelity_data_den_mat(circ, param_list, n_shots=2048,
+def get_running_post_select_fraction_for_density_matrix_v2(results,n_shots,cycle):
+    """Counts occurances of trivial measurements from first cycles to current cycle (given by 'cycle')
+
+    Args:
+        results (Result): result of QASM simulation
+        n_shots (int): 
+        cycle (int): current cycle
+
+    Returns:
+        float: [description]
+    """
+    split_point = len(list(results.get_counts().keys())[0].split())-1-cycle
+
+    count_trivial_syndrome = 0
+    for outcome in results.get_counts():
+        formated_outcome = [int(key) for key in outcome.split()[split_point:]]
+        if not any(formated_outcome):
+            count_trivial_syndrome+=results.get_counts()[outcome]
+    return count_trivial_syndrome/n_shots
+
+def get_running_fidelity_data_den_mat(circ, n_shots=2048,
         post_select=True):
     '''Inputs:
     circ: The circuit to be tested
@@ -430,7 +450,6 @@ def get_running_fidelity_data_den_mat(circ, param_list, n_shots=2048,
     param_list: The error model parameters, currently only [T2, t_cz]
     n_shots: Number of shots to average over
     '''
-    T2, t_cz = param_list
 
     # Get correct state
     results = execute(
@@ -452,7 +471,7 @@ def get_running_fidelity_data_den_mat(circ, param_list, n_shots=2048,
         noise_model=thermal_relaxation_model(),
         shots=n_shots
     ).result()
-    print(results.get_counts())
+
     # TODO: make post_select=False possible
     # Post-selection
     fidelities = []
@@ -467,31 +486,76 @@ def get_running_fidelity_data_den_mat(circ, param_list, n_shots=2048,
         except:
             print("No selectable states")
             fidelities.append(-1)
-    # Analyze results
 
 
     return fidelities, select_fractions
-n_shots = 10
-fidelities, select_fractions = get_running_fidelity_data_den_mat(circ, param_list, n_shots)
-# %% Plotting
+
+#%% Transpilation for WACQT and dimond
+
+routing_method = 'sabre'  # basic lookahead stochastic sabre
+initial_layout = None  # Overwriting the above layout
+layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
+translation_method = None  # 'unroller',  translator , synthesis
+
+repeats = 30
+
+circ_WACQT = shortest_transpile_from_distribution(
+    circ,
+    print_cost=True,
+    repeats=repeats,
+    routing_method=routing_method,
+    initial_layout=initial_layout,
+    layout_method=layout_method,
+    translation_method=translation_method,
+    optimization_level=1,
+    **WAQCT_device_properties
+)
+
+circ_diamond = shortest_transpile_from_distribution(
+    circ,
+    print_cost=True,
+    repeats=repeats,
+    routing_method=routing_method,
+    initial_layout=initial_layout,
+    layout_method=layout_method,
+    translation_method=translation_method,
+    optimization_level=1,
+    **diamond_device_properties
+)
+
+print("circ_WACQT.depth()", circ_WACQT.depth())
+print("circ_WACQT.count_ops()", circ_WACQT.count_ops())
+print("circ_diamond.depth()", circ_diamond.depth())
+print("circ_diamond.count_ops()", circ_diamond.count_ops())
+
+#%% Run
+n_shots = 1024*8
+fidelities, select_fractions = get_running_fidelity_data_den_mat(circ, n_shots)
+fidelities_WACQT, select_fractions_WACQT = get_running_fidelity_data_den_mat(circ_WACQT, n_shots)
+fidelities_diamond, select_fractions_diamond = get_running_fidelity_data_den_mat(circ_diamond, n_shots)
+#%% Plotting
 fig, axs = plt.subplots(2, figsize=(14, 10))
 ax1 = axs[0]
 ax2 = axs[1]
 
 # Vary T2
 ax1.plot(range(n_cycles), fidelities, 'o-', label='No transpilation')
+ax1.plot(range(n_cycles), fidelities_WACQT, 'o-', label='WACQT device')
+ax1.plot(range(n_cycles), fidelities_diamond, 'o-', label='Diamond device')
 ax1.set_xlabel(r'Error detection cycle $n$')
-ax1.set_ylabel('Average fidelity')
-ax1.set_title('Fidelity of post selected states after $n$ error detection cycles')
+ax1.set_ylabel('Post selected fidelity')
+# ax1.set_title('Fidelity of post selected states after $n$ error detection cycles')
 #ax1.set(ylim=(0.74, 0.96))
 ax1.legend()
 ax1.grid(linewidth=1)
 
 # Vary t_cz
 ax2.plot(range(n_cycles), select_fractions, 'o-', label='No transpilation')
-ax2.set_xlabel('2-qb gate time [ns]')
-ax2.set_ylabel(r'Error detection cycle $n$')
-ax2.set_title('Fidelity with varying 2-qb gate time, constant T2 (60 $\mu$s)')
+ax2.plot(range(n_cycles), select_fractions_WACQT, 'o-', label='WACQT device')
+ax2.plot(range(n_cycles), select_fractions_diamond, 'o-', label='Diamond device')
+ax2.set_xlabel(r'Error detection cycle $n$')
+ax2.set_ylabel(r'Post select fraction')
+# ax2.set_title('Fidelity with varying 2-qb gate time, constant T2 (60 $\mu$s)')
 #ax2.set(ylim=(0.74, 0.96))
 ax2.legend()
 ax2.grid(linewidth=1)

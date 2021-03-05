@@ -37,7 +37,7 @@ def comp_states_mat(results1, results2):
     Looks at desity matrix snapshots and measurement counts.
     Works even if register sizer are different and permuted.
 
-    TODO: Currently does not care about shots > 1 for result2.
+    TODO: Make it work for non-trivial measurement outcomes
 
     Args:
         results1 (result): result() from a qasm execution
@@ -99,20 +99,12 @@ reset = True
 flag = False
 recovery = False
 
-# Define our registers (Maybe to be written as function?)
-qb = QuantumRegister(5, 'code_qubit')
-an = AncillaRegister(2, 'ancilla_qubit')
-# cr = ClassicalRegister(5, 'syndrome_bit') # The typical register
-cr = get_classical_register(n_cycles, flag)  # Advanced list of registers
-readout = ClassicalRegister(5, 'readout')
-
-registers = StabilizerRegisters(qbReg=qb)
-circ = QuantumCircuit(qb)
-circ += encode_input_v2(registers)
+registers = StabilizerRegisters()
+circ = encode_input_v2(registers)
 circ.snapshot('post_encoding', 'density_matrix')
-# circ += _unflagged_stabilizer_XZZXI(registers, reset=True,
-#                                     current_cycle=0, current_step=0)
-# circ.snapshot('post_XZZXI', 'density_matrix')
+circ += get_repeated_stabilization(registers, n_cycles=1,
+        reset=False, recovery=False, flag=False)
+circ.snapshot('post_XZZXI', 'density_matrix')
 
 routing_method = 'sabre'  # basic lookahead stochastic sabre
 # initial_layout = {qb[0]: 0,
@@ -134,7 +126,7 @@ layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
 repeats = 10
 optimization_level = 3
-circ_t = shortest_transpile_from_distribution(circ, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
+circ_t = shortest_transpile_from_distribution(circ,cost_func=depth_cost_func, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
                                               # ,coupling_map = WAQCT_device_properties['coupling_map']
                                               # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
                                               layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WAQCT_device_properties)
@@ -142,8 +134,13 @@ circ_t = shortest_transpile_from_distribution(circ, repeats=repeats, routing_met
 print('Final depth = ', circ_t.depth())
 print('Final gates = ', circ_t.count_ops())
 verify_transpilation(circ, circ_t)
-display(circ_t.draw())
+display(circ_t.draw())#output='mpl'
 # %% print to qasm to make circuit exportable to IBM quantum experience
 print(circ_t.qasm())
 
+#%% Try just optimizing the circuit
+optimization_level = 3
+circ_opt = shortest_transpile_from_distribution(circ,cost_func=depth_cost_func, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
+                                              layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level)
+display(circ_opt.draw())#output='mpl'
 # %%
