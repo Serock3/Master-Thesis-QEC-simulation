@@ -19,7 +19,7 @@ from qiskit.quantum_info import state_fidelity
 
 # Our own files
 from simulator_program.custom_noise_models import phase_amplitude_model
-from simulator_program.custom_noise_models import thermal_relaxation_model
+from simulator_program.custom_noise_models import thermal_relaxation_model, pauli_noise_model
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 
@@ -468,7 +468,7 @@ def get_running_fidelity_data_den_mat(circ, n_shots=2048,
     results = execute(
         circ,  
         Aer.get_backend('qasm_simulator'),
-        noise_model=thermal_relaxation_model(),
+        noise_model=pauli_noise_model(p_gate1=0.001, p_meas=0, p_reset=0.0),
         shots=n_shots
     ).result()
 
@@ -480,12 +480,13 @@ def get_running_fidelity_data_den_mat(circ, n_shots=2048,
     for current_cycle in range(n_cycles):
         try:
             post_selection = snapshots['stabilizer_' + str(current_cycle)][[key for key in snapshots['stabilizer_0'] if int(key,16) == 0][0]]
-            select_fraction = get_running_post_select_fraction_for_density_matrix(results,n_shots,current_cycle)
+            select_fraction = get_running_post_select_fraction_for_density_matrix_v2(results,n_shots,current_cycle)
             select_fractions.append(select_fraction)
             fidelities.append(state_fidelity(post_selection, correct_state))
         except:
             print("No selectable states")
             fidelities.append(-1)
+            select_fractions.append(0)
 
 
     return fidelities, select_fractions
@@ -497,7 +498,7 @@ initial_layout = None  # Overwriting the above layout
 layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
 
-repeats = 30
+repeats = 10
 
 circ_WACQT = shortest_transpile_from_distribution(
     circ,
@@ -511,6 +512,7 @@ circ_WACQT = shortest_transpile_from_distribution(
     **WAQCT_device_properties
 )
 
+print("transpilation done for circ_WACQT, dept")
 circ_diamond = shortest_transpile_from_distribution(
     circ,
     print_cost=True,
@@ -522,6 +524,7 @@ circ_diamond = shortest_transpile_from_distribution(
     optimization_level=1,
     **diamond_device_properties
 )
+print("transpilation done for circ_diamond, dept")
 
 print("circ_WACQT.depth()", circ_WACQT.depth())
 print("circ_WACQT.count_ops()", circ_WACQT.count_ops())
@@ -529,10 +532,13 @@ print("circ_diamond.depth()", circ_diamond.depth())
 print("circ_diamond.count_ops()", circ_diamond.count_ops())
 
 #%% Run
-n_shots = 1024*8
+n_shots = 1024*2
 fidelities, select_fractions = get_running_fidelity_data_den_mat(circ, n_shots)
+print(select_fractions)
 fidelities_WACQT, select_fractions_WACQT = get_running_fidelity_data_den_mat(circ_WACQT, n_shots)
+print(select_fractions_WACQT)
 fidelities_diamond, select_fractions_diamond = get_running_fidelity_data_den_mat(circ_diamond, n_shots)
+print(select_fractions_diamond)
 #%% Plotting
 fig, axs = plt.subplots(2, figsize=(14, 10))
 ax1 = axs[0]
