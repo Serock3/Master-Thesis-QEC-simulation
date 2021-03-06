@@ -12,6 +12,7 @@ from IPython.display import display
 from matplotlib import pyplot as plt
 from qiskit import QuantumCircuit, QuantumRegister, AncillaRegister, ClassicalRegister, Aer, execute
 from custom_transpiler import *
+from custom_transpiler import WAQCT_device_properties
 from qiskit.quantum_info.states.densitymatrix import DensityMatrix
 from qiskit.quantum_info.states.statevector import Statevector
 
@@ -144,3 +145,12 @@ circ_opt = shortest_transpile_from_distribution(circ,cost_func=depth_cost_func, 
                                               layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level)
 display(circ_opt.draw())#output='mpl'
 # %%
+circ = QuantumCircuit(qb)
+circ += encode_input_v2(registers)
+circ.snapshot('post_encoding', 'statevector')
+results2 = execute(
+    circ,
+    Aer.get_backend('qasm_simulator'),
+    shots=16,
+    # memory=True
+).result()
