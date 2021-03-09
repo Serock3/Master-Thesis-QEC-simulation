@@ -48,8 +48,8 @@ circ += unflagged_stabilizer_cycle(registers,
     reset=reset,
     recovery=recovery
 )
-circ.snapshot('post_encoding', 'density_matrix')
-circ.snapshot('second_snap', 'density_matrix')
+
+#circ.snapshot('second_snap', 'density_matrix')
 #circ.append(Snapshot('booper','density_matrix',num_qubits=5),qb)
 #circ.measure(qb, readout)
 
@@ -58,8 +58,8 @@ routing_method = 'sabre'  # basic lookahead stochastic sabre
 initial_layout = None  # Overwriting the above layout
 layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
-repeats = 20
-#optimization_level = 1
+repeats = 200
+optimization_level = 1
 circ_diamond = shortest_transpile_from_distribution(
     circ,
     print_cost=False,
@@ -68,7 +68,7 @@ circ_diamond = shortest_transpile_from_distribution(
     initial_layout=initial_layout,
     layout_method=layout_method,
     translation_method=translation_method,
-    optimization_level=1,
+    optimization_level=optimization_level,
     **diamond_device_properties
 )
 circ_WACQT = shortest_transpile_from_distribution(
@@ -79,18 +79,20 @@ circ_WACQT = shortest_transpile_from_distribution(
     initial_layout=initial_layout,
     layout_method=layout_method,
     translation_method=translation_method,
-    optimization_level=1,
+    optimization_level=optimization_level,
     **WAQCT_device_properties
 )
-circ_WACQT.draw(output='mpl')
-circ_diamond.draw(output='mpl')
+#circ_WACQT.draw(output='mpl')
+#circ_diamond.draw(output='mpl')
 
+#verify_transpilation(circ, circ_diamond)
+#verify_transpilation(circ, circ_WACQT)
+
+# %%
 print('Final depth diamond = ', circ_diamond.depth())
-print('Final gates diamond = ', circ_diamond.count_ops())
+print('Final 2qb-gates diamond = ', circ_diamond.num_nonlocal_gates())
 print('Final depth WACQT = ', circ_WACQT.depth())
-print('Final gates WACQT = ', circ_WACQT.count_ops())
-verify_transpilation(circ, circ_diamond)
-verify_transpilation(circ, circ_WACQT)
+print('Final 2qb- gates WACQT = ', circ_WACQT.num_nonlocal_gates())
 
 
 # %%
