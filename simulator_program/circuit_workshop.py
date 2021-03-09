@@ -94,17 +94,22 @@ def verify_transpilation(circ, transpiled_circuit):
     comp_states_mat(results1, results2)
 
 
+display(WAQCT_device_properties['coupling_map'].draw())
 # %% Transpile the (v2) encoding circuit for [[5,1,3]]
 n_cycles = 0
-reset = True
+reset = False
 flag = False
 recovery = False
 
 registers = StabilizerRegisters()
-circ = encode_input_v2(registers)
+circ = QuantumCircuit()
+circ += encode_input_v2(registers)
 circ.snapshot('post_encoding', 'density_matrix')
-circ += get_repeated_stabilization(registers, n_cycles=1,
-        reset=False, recovery=False, flag=False)
+circ += unflagged_stabilizer_cycle(registers,
+                                   reset=reset,
+                                   recovery=recovery,
+                                   current_cycle=0, 
+                                   num_ancillas=1)
 circ.snapshot('post_XZZXI', 'density_matrix')
 
 routing_method = 'sabre'  # basic lookahead stochastic sabre
@@ -127,23 +132,31 @@ layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
 repeats = 10
 optimization_level = 3
-circ_t = shortest_transpile_from_distribution(circ,cost_func=depth_cost_func, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
+circ_t = shortest_transpile_from_distribution(circ,
+                                              cost_func=depth_cost_func, 
+                                              repeats=repeats, 
+                                              routing_method=routing_method, 
+                                              initial_layout=initial_layout,
+                                              layout_method=layout_method, 
+                                              translation_method=translation_method, 
+                                              optimization_level=optimization_level, 
                                               # ,coupling_map = WAQCT_device_properties['coupling_map']
                                               # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
-                                              layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WAQCT_device_properties)
+                                              **WAQCT_device_properties)
 
 print('Final depth = ', circ_t.depth())
+print('Final #2qb gates = ', circ_t.num_nonlocal_gates())
 print('Final gates = ', circ_t.count_ops())
 verify_transpilation(circ, circ_t)
-display(circ_t.draw())#output='mpl'
+display(circ_t.draw(output='mpl'))  # output='mpl'
 # %% print to qasm to make circuit exportable to IBM quantum experience
 print(circ_t.qasm())
 
-#%% Try just optimizing the circuit
+# %% Try just optimizing the circuit
 optimization_level = 3
-circ_opt = shortest_transpile_from_distribution(circ,cost_func=depth_cost_func, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
-                                              layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level)
-display(circ_opt.draw())#output='mpl'
+circ_opt = shortest_transpile_from_distribution(circ, cost_func=depth_cost_func, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
+                                                layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level)
+display(circ_opt.draw())  # output='mpl'
 # %%
 circ = QuantumCircuit(qb)
 circ += encode_input_v2(registers)

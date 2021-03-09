@@ -29,8 +29,8 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
 
     # Unpack registers
     qbReg, anReg, clReg, readout = registers
-    if not anReg.size == 2 and not anReg.size == 5:
-        raise Exception('Ancilla register must be of size 2 or 5')
+    # if not anReg.size == 2 and not anReg.size == 5:
+    #     raise Exception('Ancilla register must be of size 2 or 5')
 
     # Define the circuit
     circ = get_empty_stabilizer_circuit(registers)
@@ -1019,11 +1019,11 @@ routing_method = 'sabre'  # basic lookahead stochastic sabre
 initial_layout = None  # Overwriting the above layout
 layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
-repeats = 200
+repeats = 10
 optimization_level = 1
 circ_t = shortest_transpile_from_distribution(
     circ,
-    print_depths=False,
+    print_depths=True,
     repeats=repeats,
     routing_method=routing_method,
     initial_layout=initial_layout,
