@@ -263,7 +263,7 @@ def get_fidelity_data_den_mat(circ, param_list, n_shots=2048,
 
 # %% Analyze results
 T2_list = np.arange(40, 81, 20)*1e3 # 40-80 mus
-t_cz_list = np.arange(100,301, 100) # 100-300 ns
+t_cz_list = np.arange(100, 301, 100) # 100-300 ns
 n_shots = 10 #1024*4
 
 fid_T2 = np.zeros(len(T2_list))
@@ -406,7 +406,7 @@ circ.snapshot('post_encoding', 'density_matrix')
 # Stabilizer
 
 circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-    reset=reset, recovery=recovery, flag=flag,snapshot_type='density_matrix')
+    reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
 
 # Final readout
 # circ.measure(qbReg, readout)
@@ -443,7 +443,7 @@ def get_running_post_select_fraction_for_density_matrix_v2(results,n_shots,cycle
     return count_trivial_syndrome/n_shots
 
 def get_running_fidelity_data_den_mat(circ, n_shots=2048,
-        post_select=True):
+        noise_model=thermal_relaxation_model(), post_select=True):
     '''Inputs:
     circ: The circuit to be tested
     correct_state: The correct state for comparison
@@ -468,7 +468,7 @@ def get_running_fidelity_data_den_mat(circ, n_shots=2048,
     results = execute(
         circ,  
         Aer.get_backend('qasm_simulator'),
-        noise_model=pauli_noise_model(p_gate1=0.001, p_meas=0, p_reset=0.0),
+        noise_model=noise_model,
         shots=n_shots
     ).result()
 
@@ -477,21 +477,29 @@ def get_running_fidelity_data_den_mat(circ, n_shots=2048,
     fidelities = []
     snapshots = reformat_density_snapshot(results)
     select_fractions = []
-    for current_cycle in range(n_cycles):
-        try:
-            post_selection = snapshots['stabilizer_' + str(current_cycle)][[key for key in snapshots['stabilizer_0'] if int(key,16) == 0][0]]
-            select_fraction = get_running_post_select_fraction_for_density_matrix_v2(results,n_shots,current_cycle)
-            select_fractions.append(select_fraction)
-            fidelities.append(state_fidelity(post_selection, correct_state))
-        except:
-            print("No selectable states")
-            fidelities.append(-1)
-            select_fractions.append(0)
+    if post_select:
+        for current_cycle in range(n_cycles):
+            try:
+                post_selection = snapshots['stabilizer_' + str(current_cycle)][[key for key in snapshots['stabilizer_0'] if int(key,16) == 0][0]]
+                select_fraction = get_running_post_select_fraction_for_density_matrix_v2(results,n_shots,current_cycle)
+                select_fractions.append(select_fraction)
+                fidelities.append(state_fidelity(post_selection, correct_state))
+            except:
+                print("No selectable states")
+                fidelities.append(-1)
+                select_fractions.append(0)
+        return fidelities, select_fractions
+
+    else:
+        for current_cycle in range(n_cycles):
+            for key in snapshots['stabilizer_0'].keys():
+            #    current_state = snapshots['stabilizer_0'][key]
+            #    fid += state_fidelity(current_state, correct_state)
+
+            #fidelities.append(state_fidelity(0x???, correct_state))
 
 
-    return fidelities, select_fractions
-
-#%% Transpilation for WACQT and dimond
+#%% Transpilation for WACQT and diamond
 
 routing_method = 'sabre'  # basic lookahead stochastic sabre
 initial_layout = None  # Overwriting the above layout
@@ -565,4 +573,55 @@ ax2.set_ylabel(r'Post select fraction')
 #ax2.set(ylim=(0.74, 0.96))
 ax2.legend()
 ax2.grid(linewidth=1)
+
+# %% TESTING WITH RECOVERY AND POST PROCESSING =================================
+# Settings
+n_cycles=15
+reset=False
+recovery=False
+flag=False
+
+# Registers
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(2, 'ancilla_qubit')
+# cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
+cr = get_classical_register(n_cycles, flag=False) # Advanced list of registers
+readout = ClassicalRegister(5, 'readout')
+registers = StabilizerRegisters(qb, an, cr, readout)
+
+# Circuit
+circ = encode_input_v2(registers)
+#circ.snapshot('post_encoding', 'density_matrix')
+circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
+    reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
+# circ.measure(qbReg, readout)
+# circ.snapshot('post_measure', 'density_matrix')
+
+# Transpilation
+routing_method = 'sabre'  # basic lookahead stochastic sabre
+initial_layout = None  # Overwriting the above layout
+layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
+translation_method = None  # 'unroller',  translator , synthesis
+repeats = 30
+circ_WACQT = shortest_transpile_from_distribution(
+    circ,
+    print_cost=False,
+    repeats=repeats,
+    routing_method=routing_method,
+    initial_layout=initial_layout,
+    layout_method=layout_method,
+    translation_method=translation_method,
+    optimization_level=1,
+    **WAQCT_device_properties
+)
+
+fidelities, select_fractions = get_running_fidelity_data_den_mat(circ, 
+    n_shots=2048,
+    noise_model=thermal_relaxation_model(),
+    post_select=True,
+)
+
 # %%
+fig, axs = plt.subplots(1, figsize=(14, 10))
+
+axs.plot(range(n_cycles), select_fractions, 'o-', label='No transpilation')
