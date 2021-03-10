@@ -74,7 +74,21 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
 
 
 def get_repeated_stabilization(registers, n_cycles=1,
-                               reset=True, recovery=False, flag=True, snapshot_type='statevector'):
+        reset=True, recovery=False, flag=True, snapshot_type='statevector'):
+    """Generates a circuit for repeated stabilizers. Including recovery and 
+    fault tolerant flagged circuits of selected.
+
+    Args:
+        registers (Register): Register object containing all registers
+        n_cycles (int, optional): Number of stabilizer circuits. Defaults to 1.
+        reset (bool, optional): Whether or not to reset ancillas. Defaults to True.
+        recovery (bool, optional): Whether or not to apply recovery operations. Defaults to False.
+        flag (bool, optional): Whether or not to use the fault-tolerant flagged circuit. Defaults to True.
+        snapshot_type (str, optional): Type of snapshot (None,'statevector' or 'density_matrix'). Defaults to 'statevector'.
+
+    Returns:
+        QuantumCircuit: The resulting circuit
+    """
 
     circ = get_empty_stabilizer_circuit(registers)
 
