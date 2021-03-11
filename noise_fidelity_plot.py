@@ -399,12 +399,14 @@ readout = ClassicalRegister(5, 'readout')
 
 registers = StabilizerRegisters(qb, an, cr, readout)
 
+reset=False
+recovery=False
+flag=False
 # circ = get_empty_stabilizer_circuit(registers)
 
 circ = encode_input_v2(registers)
 circ.snapshot('post_encoding', 'density_matrix')
 # Stabilizer
-
 circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
     reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
 
@@ -491,12 +493,22 @@ def get_running_fidelity_data_den_mat(circ, n_shots=2048,
         return fidelities, select_fractions
 
     else:
+        counts = results.get_counts()
         for current_cycle in range(n_cycles):
-            for key in snapshots['stabilizer_0'].keys():
-            #    current_state = snapshots['stabilizer_0'][key]
-            #    fid += state_fidelity(current_state, correct_state)
+#            counting = 0
+            fid=0
+            for key in snapshots['stabilizer_'+str(current_cycle)]:
+                bin_string = bin(int(key,16))[2:].zfill(4*(current_cycle+1))
+                current_state = snapshots['stabilizer_'+str(current_cycle)][key]
+                for outcome in results.get_counts():
+                    formated_outcome = outcome.replace(' ','')[-4*(current_cycle+1):]
+                    if formated_outcome == bin_string:
+                        fid += state_fidelity(current_state, correct_state)*counts[outcome]
+#                        counting += counts[outcome]
+            fidelities.append(fid/n_shots)
+#            print(counting)
+        return fidelities
 
-            #fidelities.append(state_fidelity(0x???, correct_state))
 
 
 #%% Transpilation for WACQT and diamond
@@ -575,12 +587,12 @@ ax2.legend()
 ax2.grid(linewidth=1)
 
 # %% TESTING WITH RECOVERY AND POST PROCESSING =================================
-# Settings
-n_cycles=15
-reset=False
-recovery=False
-flag=False
+# Tests different combinations of reset/no reset, transpiled, post-processing
+# and recovery.
+#
+# Took about 2h for me to run with 2048 shots per experiment
 
+n_cycles=15
 # Registers
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
@@ -589,13 +601,25 @@ cr = get_classical_register(n_cycles, flag=False) # Advanced list of registers
 readout = ClassicalRegister(5, 'readout')
 registers = StabilizerRegisters(qb, an, cr, readout)
 
-# Circuit
+# Circuit without reset, without recovery
 circ = encode_input_v2(registers)
-#circ.snapshot('post_encoding', 'density_matrix')
 circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-    reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
-# circ.measure(qbReg, readout)
-# circ.snapshot('post_measure', 'density_matrix')
+    reset=False, recovery=False, flag=False, snapshot_type='density_matrix')
+
+# Circuit without reset, with recovery
+circ_rec = encode_input_v2(registers)
+circ_rec += get_repeated_stabilization(registers, n_cycles=n_cycles,
+    reset=False, recovery=True, flag=False, snapshot_type='density_matrix')
+
+# Circuit with reset, without recovery
+circ_res = encode_input_v2(registers)
+circ_res += get_repeated_stabilization(registers, n_cycles=n_cycles,
+    reset=True, recovery=False, flag=False, snapshot_type='density_matrix')
+
+# Circuit with reset, with recovery
+circ_res_rec = encode_input_v2(registers)
+circ_res_rec += get_repeated_stabilization(registers, n_cycles=n_cycles,
+    reset=True, recovery=True, flag=False, snapshot_type='density_matrix')
 
 # Transpilation
 routing_method = 'sabre'  # basic lookahead stochastic sabre
@@ -603,25 +627,232 @@ initial_layout = None  # Overwriting the above layout
 layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
 repeats = 30
-circ_WACQT = shortest_transpile_from_distribution(
-    circ,
-    print_cost=False,
-    repeats=repeats,
-    routing_method=routing_method,
-    initial_layout=initial_layout,
-    layout_method=layout_method,
-    translation_method=translation_method,
-    optimization_level=1,
+optimization_level = 1
+circ_WACQT = shortest_transpile_from_distribution(circ, 
+    print_cost=False, repeats=repeats, routing_method=routing_method,
+    initial_layout=initial_layout, layout_method=layout_method,
+    translation_method=translation_method, optimization_level=optimization_level,
     **WAQCT_device_properties
 )
+circ_rec_WACQT = shortest_transpile_from_distribution(circ_rec, 
+    print_cost=False, repeats=repeats, routing_method=routing_method,
+    initial_layout=initial_layout, layout_method=layout_method,
+    translation_method=translation_method, optimization_level=optimization_level,
+    **WAQCT_device_properties
+)
+circ_res_WACQT = shortest_transpile_from_distribution(circ_res, 
+    print_cost=False, repeats=repeats, routing_method=routing_method,
+    initial_layout=initial_layout, layout_method=layout_method,
+    translation_method=translation_method, optimization_level=optimization_level,
+    **WAQCT_device_properties
+)
+circ_res_rec_WACQT = shortest_transpile_from_distribution(circ_res_rec, 
+    print_cost=False, repeats=repeats, routing_method=routing_method,
+    initial_layout=initial_layout, layout_method=layout_method,
+    translation_method=translation_method, optimization_level=optimization_level,
+    **WAQCT_device_properties
+)
+print('Starting to run 12 different processes')
+# Run it
+n_shots = 2048
+# No processing, no reset, no transpilation
+fid = get_running_fidelity_data_den_mat(circ, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
+# No processing, no reset, with transpilation
+fid_t = get_running_fidelity_data_den_mat(circ_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
+# No processing, with reset, no transpilation
+fid_res = get_running_fidelity_data_den_mat(circ_res, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
+# No processing, with reset, with transpilation
+fid_res_t = get_running_fidelity_data_den_mat(circ_res_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
 
-fidelities, select_fractions = get_running_fidelity_data_den_mat(circ, 
-    n_shots=2048,
+# Post selection, no reset, no transpilation
+fid_ps, frac = get_running_fidelity_data_den_mat(circ, 
+    n_shots=n_shots,
     noise_model=thermal_relaxation_model(),
     post_select=True,
 )
+print('Check!')
+# Post selection, no reset, with transpilation
+fid_ps_t, frac_t = get_running_fidelity_data_den_mat(circ_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=True,
+)
+print('Check!')
+# Post selection, with reset, no transpilation
+fid_ps_res, frac_res = get_running_fidelity_data_den_mat(circ_res, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=True,
+)
+print('Check!')
+# Post selection, with reset, with transpilation
+fid_ps_res_t, frac_res_t = get_running_fidelity_data_den_mat(circ_res_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=True,
+)
+print('Check!')
+
+# Recovery, no reset, no transpilation
+fid_rec = get_running_fidelity_data_den_mat(circ_rec, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
+# Recovery, no reset, with transpilation
+fid_rec_t = get_running_fidelity_data_den_mat(circ_rec_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
+# Recovery, with reset, no transpilation
+fid_rec_res = get_running_fidelity_data_den_mat(circ_res_rec, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
+# Recovery, with reset, with transpilation
+fid_rec_res_t = get_running_fidelity_data_den_mat(circ_res_rec_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
 
 # %%
-fig, axs = plt.subplots(1, figsize=(14, 10))
+fig, axs = plt.subplots(4, figsize=(14, 20))
+ax1 = axs[0]
+ax2 = axs[1]
+ax3 = axs[2]
+ax4 = axs[3]
 
-axs.plot(range(n_cycles), select_fractions, 'o-', label='No transpilation')
+# Plot 1: Reset or not (No processing)
+ax1.plot(range(n_cycles), fid, 'o-', color='blue', label='No transp, no reset')
+ax1.plot(range(n_cycles), fid_t, 'o-', color='red', label='Transp, no reset')
+ax1.plot(range(n_cycles), fid_res, 'D-', color='blue', label='No transp, with reset')
+ax1.plot(range(n_cycles), fid_res_t, 'D-', color='red', label='Transp with reset')
+ax1.set_xlabel('Number of cycles')
+ax1.set_ylabel('Average fidelity')
+ax1.set_title('Reset vs no reset, without post selection or recovery')
+#ax1.set(ylim=(0.74, 0.96))
+ax1.legend()
+ax1.grid(linewidth=1)
+
+# Plot 2
+ax2.plot(range(n_cycles), fid_rec, 'o-', color='blue', label='No transp, no reset')
+ax2.plot(range(n_cycles), fid_rec_t, 'o-', color='red', label='Transp, no reset')
+ax2.plot(range(n_cycles), fid_rec_res, 'D-', color='blue', label='No transp, with reset')
+ax2.plot(range(n_cycles), fid_rec_res_t, 'D-', color='red', label='Transp with reset')
+ax2.set_xlabel('Number of cycles')
+ax2.set_ylabel('Average fidelity')
+ax2.set_title('Reset vs no reset, with recovery')
+ax2.legend()
+ax2.grid(linewidth=1)
+
+# Plot 3: Recovery, post-selection and nothing
+ax3.plot(range(n_cycles), fid_t, 'o-', color='blue', label='No processing')
+ax3.plot(range(n_cycles), frac_t, 'o-', color='red', label='Post-selection fraction')
+ax3.plot(range(n_cycles), fid_rec_t, 'o-', color='orange', label='Recovery')
+ax3.set_xlabel('Number of cycles')
+ax3.set_ylabel('Average fidelity')
+ax3.set_title('Comparing processing methods without reset')
+ax3.legend()
+ax3.grid(linewidth=1)
+
+# Plot 4: Recovery, post-selection and nothing
+ax4.plot(range(n_cycles), fid_res_t, 'o-', color='blue', label='No processing')
+ax4.plot(range(n_cycles), frac_res_t, 'o-', color='red', label='Post-selected fraction')
+ax4.plot(range(n_cycles), fid_rec_res_t, 'o-', color='orange', label='Recovery')
+ax4.set_xlabel('Number of cycles')
+ax4.set_ylabel('Average fidelity')
+ax4.set_title('Comparing processing methods with reset')
+ax4.legend()
+ax4.grid(linewidth=1)
+
+# %% Store all fidelities and fractions
+with open('data/fid.txt', 'w') as f:
+    for item in fid:
+        f.write("%s\n" % item)
+
+with open('data/fid_t.txt', 'w') as f:
+    for item in fid_t:
+        f.write("%s\n" % item)
+
+with open('data/fid_res.txt', 'w') as f:
+    for item in fid_res:
+        f.write("%s\n" % item)
+
+with open('data/fid_res_t.txt', 'w') as f:
+    for item in fid_res_t:
+        f.write("%s\n" % item)
+
+with open('data/fid_rec.txt', 'w') as f:
+    for item in fid_rec:
+        f.write("%s\n" % item)
+
+with open('data/fid_rec_t.txt', 'w') as f:
+    for item in fid_rec_t:
+        f.write("%s\n" % item)
+
+with open('data/fid_rec_res.txt', 'w') as f:
+    for item in fid_rec_res:
+        f.write("%s\n" % item)
+
+with open('data/fid_rec_res_t.txt', 'w') as f:
+    for item in fid_rec_res_t:
+        f.write("%s\n" % item)
+
+with open('data/fid_ps.txt', 'w') as f:
+    for item in fid_ps:
+        f.write("%s\n" % item)
+
+with open('data/fid_ps_t.txt', 'w') as f:
+    for item in fid_ps_t:
+        f.write("%s\n" % item)
+
+with open('data/fid_ps_res.txt', 'w') as f:
+    for item in fid_ps_res:
+        f.write("%s\n" % item)
+
+with open('data/fid_ps_res_t.txt', 'w') as f:
+    for item in fid_ps_res_t:
+        f.write("%s\n" % item)
+
+with open('data/frac.txt', 'w') as f:
+    for item in frac:
+        f.write("%s\n" % item)
+
+with open('data/frac_t.txt', 'w') as f:
+    for item in frac_t:
+        f.write("%s\n" % item)
+
+with open('data/frac_res.txt', 'w') as f:
+    for item in frac_res:
+        f.write("%s\n" % item)
+
+with open('data/frac_res_t.txt', 'w') as f:
+    for item in frac_res_t:
+        f.write("%s\n" % item)
