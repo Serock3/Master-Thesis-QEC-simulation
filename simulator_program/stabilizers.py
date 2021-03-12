@@ -63,7 +63,7 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
     circ.snapshot('post_encoding', 'statevector')
 
     # Stabilizer
-    circ = get_repeated_stabilization(registers, n_cycles=1,
+    circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
                                       reset=reset, recovery=recovery, flag=flag)
 
     # Final readout
@@ -207,7 +207,7 @@ def encode_input_v2(registers):
     return circ
 
 
-def get_classical_register(n_cycles, flag=True):
+def get_classical_register(n_cycles, reset=True, recovery=False, flag=True):
     """Generate lists of classical registers for storing all measurement data.
 
     The function accepts the flag bool to determine whether to create 
@@ -245,6 +245,14 @@ def get_classical_register(n_cycles, flag=True):
              for j in range(4)] for i in range(n_cycles)]
 
         return [syndrome_register, flag_register, ancilla_msmnt_register]
+
+    # TODO: Make this functional with flags? If necessary
+    elif recovery and not reset:
+        # A register of four bits per cycle
+        syndrome_register = [
+            [ClassicalRegister(5, 'syndrome_cycle_' + str(i) + '_step_' + str(j))
+             for j in range(1)] for i in range(n_cycles)]
+        return [syndrome_register]
 
     else:
         # A register of four bits per cycle
@@ -556,20 +564,25 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
                        _unflagged_stabilizer_XIXZZ,
                        _unflagged_stabilizer_ZXIXZ]
 
+    # Create list of syndrome bits
+    if isinstance(registers.SyndromeRegister, list):
+        syn_reg = registers.SyndromeRegister[0][current_cycle][current_step]
+        syn_bit_list = [syn_reg[n] for n in range(4)]
+    else:
+        syn_bit_list = [registers.SyndromeRegister[n] for n in range(4)]
+        
     # Create circuit and run stabilizers
     circ = get_empty_stabilizer_circuit(registers)
-    
     for i in range(4):
-        circ += stabilizer_list[i](registers,anQb=anQb_list[i], reset=reset,
-                                        current_cycle=current_cycle, current_step=current_step)
-    # circ += _unflagged_stabilizer_XZZXI(registers, reset=reset,
-    #                                     current_cycle=current_cycle, current_step=current_step)
-    # circ += _unflagged_stabilizer_IXZZX(registers, reset=reset,
-    #                                     current_cycle=current_cycle, current_step=current_step)
-    # circ += _unflagged_stabilizer_XIXZZ(registers, reset=reset,
-    #                                     current_cycle=current_cycle, current_step=current_step)
-    # circ += _unflagged_stabilizer_ZXIXZ(registers, reset=reset,
-    #                                     current_cycle=current_cycle, current_step=current_step)
+        circ += stabilizer_list[i](registers, anQb=anQb_list[i], 
+            syn_bit=syn_bit_list[i], reset=reset)
+
+    # Add an extra measurement to the next syndrome register
+    # TODO: Make this compatible with using more than 1 ancilla
+    if recovery and not reset:
+        if current_cycle < len(registers.SyndromeRegister[0])-1:
+            circ.measure(anQb_list[-1], 
+                registers.SyndromeRegister[0][current_cycle+1][current_step][4])
 
     # Recovery
     if recovery is True:
@@ -578,9 +591,8 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     return circ
 
 
-def _unflagged_stabilizer_XZZXI(registers, anQb=None, reset=True,
-                                current_cycle=0, current_step=0):
-    """    Gives the circuit for running the regular XZZXI stabilizer without flag.
+def _unflagged_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
+    """Gives the circuit for running the regular XZZXI stabilizer without flag.
     The current_step input should be set to zero unless running flagged cycles.
 
     Args:
@@ -624,13 +636,7 @@ def _unflagged_stabilizer_XZZXI(registers, anQb=None, reset=True,
     circ.h(anQb)
 
     # Measure
-    # TODO: Do what I did for the ancillas and move this logic out of the function.
-    # Instead put the classical reg to measure to as a function arg.
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0]
-        circ.measure(anQb, syndrome_reg[current_cycle][current_step][0])
-    else:
-        circ.measure(anQb, clReg[0])
+    circ.measure(anQb, syn_bit)
 
     # Reset
     if reset:
@@ -639,8 +645,7 @@ def _unflagged_stabilizer_XZZXI(registers, anQb=None, reset=True,
     return circ
 
 
-def _unflagged_stabilizer_IXZZX(registers, anQb=None, reset=True,
-                                current_cycle=0, current_step=0):
+def _unflagged_stabilizer_IXZZX(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular IXZZX stabilizer without flag.
     The current_step input should be set to zero unless running flagged cycles.
     """
@@ -675,11 +680,7 @@ def _unflagged_stabilizer_IXZZX(registers, anQb=None, reset=True,
     circ.h(anQb)
 
     # Measure
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0]
-        circ.measure(anQb, syndrome_reg[current_cycle][current_step][1])
-    else:
-        circ.measure(anQb, clReg[1])
+    circ.measure(anQb, syn_bit)
 
     # Reset
     if reset:
@@ -688,8 +689,7 @@ def _unflagged_stabilizer_IXZZX(registers, anQb=None, reset=True,
     return circ
 
 
-def _unflagged_stabilizer_XIXZZ(registers, anQb=None, reset=True,
-                                current_cycle=0, current_step=0):
+def _unflagged_stabilizer_XIXZZ(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular XIXZZ stabilizer without flag.
     The current_step input should be set to zero unless running flagged cycles.
     """
@@ -724,11 +724,7 @@ def _unflagged_stabilizer_XIXZZ(registers, anQb=None, reset=True,
     circ.h(anQb)
 
     # Measure
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0]
-        circ.measure(anQb, syndrome_reg[current_cycle][current_step][2])
-    else:
-        circ.measure(anQb, clReg[2])
+    circ.measure(anQb, syn_bit)
 
     # Reset
     if reset:
@@ -737,8 +733,7 @@ def _unflagged_stabilizer_XIXZZ(registers, anQb=None, reset=True,
     return circ
 
 
-def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, reset=True,
-                                current_cycle=0, current_step=0):
+def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular ZXIXZ stabilizer without flag.
     The current_step input should be set to zero unless running flagged cycles.
     """
@@ -772,12 +767,8 @@ def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, reset=True,
     circ.cz(anQb, qbReg[4])
     circ.h(anQb)
 
-   # Measure
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0]
-        circ.measure(anQb, syndrome_reg[current_cycle][current_step][3])
-    else:
-        circ.measure(anQb, clReg[3])
+    # Measure
+    circ.measure(anQb, syn_bit)
 
     # Reset
     if reset:
@@ -847,6 +838,27 @@ def unflagged_recovery(registers, reset=True, current_cycle=0, current_step=0):
         circ.x(qbReg[2]).c_if(syndrome_reg, 13)
         circ.z(qbReg[4]).c_if(syndrome_reg, 14)
         circ.x(qbReg[1]).c_if(syndrome_reg, 15)
+
+        circ.x(qbReg[2]).c_if(syndrome_reg, 16+15-1)
+        circ.x(qbReg[3]).c_if(syndrome_reg, 16+15-2)
+        circ.z(qbReg[0]).c_if(syndrome_reg, 16+15-3)
+        circ.x(qbReg[4]).c_if(syndrome_reg, 16+15-4)
+        circ.z(qbReg[3]).c_if(syndrome_reg, 16+15-5)
+        circ.x(qbReg[3]).c_if(syndrome_reg, 16+15-5)
+        circ.z(qbReg[1]).c_if(syndrome_reg, 16+15-6)
+        circ.z(qbReg[3]).c_if(syndrome_reg, 16+15-7)
+        circ.x(qbReg[0]).c_if(syndrome_reg, 16+15-8)
+        circ.z(qbReg[1]).c_if(syndrome_reg, 16+15-9)
+        circ.x(qbReg[1]).c_if(syndrome_reg, 16+15-9)
+        circ.z(qbReg[4]).c_if(syndrome_reg, 16+15-10)
+        circ.x(qbReg[4]).c_if(syndrome_reg, 16+15-10)
+        circ.z(qbReg[0]).c_if(syndrome_reg, 16+15-11)
+        circ.x(qbReg[0]).c_if(syndrome_reg, 16+15-11)
+        circ.z(qbReg[2]).c_if(syndrome_reg, 16+15-12)
+        circ.z(qbReg[2]).c_if(syndrome_reg, 16+15-13)
+        circ.x(qbReg[2]).c_if(syndrome_reg, 16+15-13)
+        circ.z(qbReg[4]).c_if(syndrome_reg, 16+15-14)
+        circ.x(qbReg[1]).c_if(syndrome_reg, 16+15-15)
 
     return circ
 

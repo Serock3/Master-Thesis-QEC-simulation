@@ -394,13 +394,13 @@ n_cycles=15
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
 # cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
-cr = get_classical_register(n_cycles, flag=False) # Advanced list of registers
+cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=False)
 readout = ClassicalRegister(5, 'readout')
 
 registers = StabilizerRegisters(qb, an, cr, readout)
 
 reset=False
-recovery=False
+recovery=True
 flag=False
 # circ = get_empty_stabilizer_circuit(registers)
 
@@ -495,18 +495,15 @@ def get_running_fidelity_data_den_mat(circ, n_shots=2048,
     else:
         counts = results.get_counts()
         for current_cycle in range(n_cycles):
-#            counting = 0
             fid=0
             for key in snapshots['stabilizer_'+str(current_cycle)]:
-                bin_string = bin(int(key,16))[2:].zfill(4*(current_cycle+1))
+                bin_string = bin(int(key,16))[2:].zfill(5*(current_cycle+1))
                 current_state = snapshots['stabilizer_'+str(current_cycle)][key]
                 for outcome in results.get_counts():
-                    formated_outcome = outcome.replace(' ','')[-4*(current_cycle+1):]
+                    formated_outcome = outcome.replace(' ','')[-5*(current_cycle+1):]
                     if formated_outcome == bin_string:
                         fid += state_fidelity(current_state, correct_state)*counts[outcome]
-#                        counting += counts[outcome]
             fidelities.append(fid/n_shots)
-#            print(counting)
         return fidelities
 
 
@@ -593,11 +590,14 @@ ax2.grid(linewidth=1)
 # Took about 2h for me to run with 2048 shots per experiment
 
 n_cycles=15
+reset=False
+recovery=True
+flag=False
 # Registers
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
 # cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
-cr = get_classical_register(n_cycles, flag=False) # Advanced list of registers
+cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=False) # Advanced list of registers
 readout = ClassicalRegister(5, 'readout')
 registers = StabilizerRegisters(qb, an, cr, readout)
 
@@ -653,7 +653,7 @@ circ_res_rec_WACQT = shortest_transpile_from_distribution(circ_res_rec,
     **WAQCT_device_properties
 )
 print('Starting to run 12 different processes')
-# Run it
+# %% Run it
 n_shots = 2048
 # No processing, no reset, no transpilation
 fid = get_running_fidelity_data_den_mat(circ, 
@@ -712,7 +712,7 @@ fid_ps_res_t, frac_res_t = get_running_fidelity_data_den_mat(circ_res_WACQT,
     post_select=True,
 )
 print('Check!')
-
+# %%
 # Recovery, no reset, no transpilation
 fid_rec = get_running_fidelity_data_den_mat(circ_rec, 
     n_shots=n_shots,
@@ -726,6 +726,7 @@ fid_rec_t = get_running_fidelity_data_den_mat(circ_rec_WACQT,
     noise_model=thermal_relaxation_model(),
     post_select=False,
 )
+# %%
 print('Check!')
 # Recovery, with reset, no transpilation
 fid_rec_res = get_running_fidelity_data_den_mat(circ_res_rec, 
@@ -748,7 +749,7 @@ ax1 = axs[0]
 ax2 = axs[1]
 ax3 = axs[2]
 ax4 = axs[3]
-
+#%%
 # Plot 1: Reset or not (No processing)
 ax1.plot(range(n_cycles), fid, 'o-', color='blue', label='No transp, no reset')
 ax1.plot(range(n_cycles), fid_t, 'o-', color='red', label='Transp, no reset')
@@ -771,17 +772,24 @@ ax2.set_ylabel('Average fidelity')
 ax2.set_title('Reset vs no reset, with recovery')
 ax2.legend()
 ax2.grid(linewidth=1)
-
+#%%
+fig, axs = plt.subplots(4, figsize=(14, 20))
+ax1 = axs[0]
+ax2 = axs[1]
+ax3 = axs[2]
+ax4 = axs[3]
 # Plot 3: Recovery, post-selection and nothing
-ax3.plot(range(n_cycles), fid_t, 'o-', color='blue', label='No processing')
-ax3.plot(range(n_cycles), frac_t, 'o-', color='red', label='Post-selection fraction')
-ax3.plot(range(n_cycles), fid_rec_t, 'o-', color='orange', label='Recovery')
+#ax3.plot(range(n_cycles), fid_t, 'o-', color='blue', label='No processing')
+#ax3.plot(range(n_cycles), frac_t, 'o-', color='red', label='Post-selection fraction')
+ax3.plot(range(n_cycles), fid_rec_t, 'o-', color='red', label='Recovery')
+ax3.plot(range(n_cycles), fid_rec_t_old, 'o-', color='orange', label='Recovery old')
+ax3.plot(range(n_cycles), fid_rec_res_t, 'o-', color='blue', label='Recovery with reset')
 ax3.set_xlabel('Number of cycles')
 ax3.set_ylabel('Average fidelity')
 ax3.set_title('Comparing processing methods without reset')
 ax3.legend()
 ax3.grid(linewidth=1)
-
+#%%
 # Plot 4: Recovery, post-selection and nothing
 ax4.plot(range(n_cycles), fid_res_t, 'o-', color='blue', label='No processing')
 ax4.plot(range(n_cycles), frac_res_t, 'o-', color='red', label='Post-selected fraction')
@@ -856,3 +864,15 @@ with open('data/frac_res.txt', 'w') as f:
 with open('data/frac_res_t.txt', 'w') as f:
     for item in frac_res_t:
         f.write("%s\n" % item)
+
+# %% Load data example
+fid_ps_res = []
+with open('data/fid_ps_res.txt', 'r') as filehandle:
+    for line in filehandle:
+        # remove linebreak which is the last character of the string
+        currentPlace = line[:-1]
+
+        # add item to the list
+        fid_ps_res.append(float(currentPlace))
+
+print(fid_ps_res)

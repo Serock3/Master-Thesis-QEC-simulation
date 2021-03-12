@@ -510,7 +510,6 @@ def unflagged_recovery(registers, reset=True, current_cycle=0, current_step=0):
     # Unpack registers
     if isinstance(clReg, list):
         syndrome_reg = clReg[0][current_cycle][current_step]
-        print(current_cycle)
     else:
         syndrome_reg = clReg
 
