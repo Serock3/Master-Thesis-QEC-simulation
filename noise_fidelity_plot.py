@@ -350,6 +350,9 @@ ax2.set_title('Fidelity with varying 2-qb gate time, constant T2 (60 $\mu$s)')
 ax2.legend()
 ax2.grid(linewidth=1)
 # %% Running fidelity (multiple cycles)
+reset=False
+recovery=True
+flag=False
 n_cycles=15
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
@@ -359,9 +362,7 @@ readout = ClassicalRegister(5, 'readout')
 
 registers = StabilizerRegisters(qb, an, cr, readout)
 
-reset=False
-recovery=True
-flag=False
+
 # circ = get_empty_stabilizer_circuit(registers)
 
 circ = encode_input_v2(registers)
@@ -434,7 +435,6 @@ def get_running_fidelity_data_den_mat(circ, n_shots=2048,
         shots=n_shots
     ).result()
 
-    # TODO: make post_select=False possible
     # Post-selection
     fidelities = []
     snapshots = reformat_density_snapshot(results)
@@ -453,14 +453,15 @@ def get_running_fidelity_data_den_mat(circ, n_shots=2048,
         return fidelities, select_fractions
 
     else:
+        cl_reg_size = len(list(results.get_counts().keys())[0].split()[1])
         counts = results.get_counts()
         for current_cycle in range(n_cycles):
             fid=0
             for key in snapshots['stabilizer_'+str(current_cycle)]:
-                bin_string = bin(int(key,16))[2:].zfill(5*(current_cycle+1))
+                bin_string = bin(int(key,16))[2:].zfill(cl_reg_size*(current_cycle+1))
                 current_state = snapshots['stabilizer_'+str(current_cycle)][key]
                 for outcome in results.get_counts():
-                    formated_outcome = outcome.replace(' ','')[-5*(current_cycle+1):]
+                    formated_outcome = outcome.replace(' ','')[-cl_reg_size*(current_cycle+1):]
                     if formated_outcome == bin_string:
                         fid += state_fidelity(current_state, correct_state)*counts[outcome]
             fidelities.append(fid/n_shots)
@@ -571,6 +572,18 @@ circ_rec = encode_input_v2(registers)
 circ_rec += get_repeated_stabilization(registers, n_cycles=n_cycles,
     reset=False, recovery=True, flag=False, snapshot_type='density_matrix')
 
+# Testing with only snapshotting the code qubits (No reset, recovery)
+circ_rec_new = encode_input_v2(registers)
+for current_cycle in range(n_cycles):
+    circ_rec_new += unflagged_stabilizer_cycle(registers,
+                                   reset=False,
+                                   recovery=True,
+                                   current_cycle=current_cycle
+                                   )
+    circ_rec_new.barrier()
+    circ_rec_new.append(Snapshot('stabilizer_'+str(current_cycle),
+        'density_matrix', num_qubits=5), qb)
+
 # Circuit with reset, without recovery
 circ_res = encode_input_v2(registers)
 circ_res += get_repeated_stabilization(registers, n_cycles=n_cycles,
@@ -612,6 +625,13 @@ circ_res_rec_WACQT = shortest_transpile_from_distribution(circ_res_rec,
     translation_method=translation_method, optimization_level=optimization_level,
     **WAQCT_device_properties
 )
+
+circ_rec_new_WACQT = shortest_transpile_from_distribution(circ_rec_new, 
+    print_cost=False, repeats=repeats, routing_method=routing_method,
+    initial_layout=initial_layout, layout_method=layout_method,
+    translation_method=translation_method, optimization_level=optimization_level,
+    **WAQCT_device_properties
+)
 print('Starting to run 12 different processes')
 # %% Run it
 n_shots = 2048
@@ -622,6 +642,7 @@ fid = get_running_fidelity_data_den_mat(circ,
     post_select=False,
 )
 print('Check!')
+#%%
 # No processing, no reset, with transpilation
 fid_t = get_running_fidelity_data_den_mat(circ_WACQT, 
     n_shots=n_shots,
@@ -630,12 +651,12 @@ fid_t = get_running_fidelity_data_den_mat(circ_WACQT,
 )
 print('Check!')
 # No processing, with reset, no transpilation
-fid_res = get_running_fidelity_data_den_mat(circ_res, 
-    n_shots=n_shots,
-    noise_model=thermal_relaxation_model(),
-    post_select=False,
-)
-print('Check!')
+#fid_res = get_running_fidelity_data_den_mat(circ_res, 
+#    n_shots=n_shots,
+#    noise_model=thermal_relaxation_model(),
+#    post_select=False,
+#)
+#print('Check!')
 # No processing, with reset, with transpilation
 fid_res_t = get_running_fidelity_data_den_mat(circ_res_WACQT, 
     n_shots=n_shots,
@@ -643,7 +664,7 @@ fid_res_t = get_running_fidelity_data_den_mat(circ_res_WACQT,
     post_select=False,
 )
 print('Check!')
-
+#%%
 # Post selection, no reset, no transpilation
 fid_ps, frac = get_running_fidelity_data_den_mat(circ, 
     n_shots=n_shots,
@@ -686,6 +707,15 @@ fid_rec_t = get_running_fidelity_data_den_mat(circ_rec_WACQT,
     noise_model=thermal_relaxation_model(),
     post_select=False,
 )
+
+print('Check!')
+# Recovery, no reset, with transpilation
+fid_rec_new_t = get_running_fidelity_data_den_mat(circ_rec_new_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+
 # %%
 print('Check!')
 # Recovery, with reset, no transpilation
@@ -694,6 +724,7 @@ fid_rec_res = get_running_fidelity_data_den_mat(circ_res_rec,
     noise_model=thermal_relaxation_model(),
     post_select=False,
 )
+# %%
 print('Check!')
 # Recovery, with reset, with transpilation
 fid_rec_res_t = get_running_fidelity_data_den_mat(circ_res_rec_WACQT, 
@@ -709,11 +740,11 @@ ax1 = axs[0]
 ax2 = axs[1]
 ax3 = axs[2]
 ax4 = axs[3]
-#%%
+
 # Plot 1: Reset or not (No processing)
-ax1.plot(range(n_cycles), fid, 'o-', color='blue', label='No transp, no reset')
+#ax1.plot(range(n_cycles), fid, 'o-', color='blue', label='No transp, no reset')
 ax1.plot(range(n_cycles), fid_t, 'o-', color='red', label='Transp, no reset')
-ax1.plot(range(n_cycles), fid_res, 'D-', color='blue', label='No transp, with reset')
+#ax1.plot(range(n_cycles), fid_res, 'D-', color='blue', label='No transp, with reset')
 ax1.plot(range(n_cycles), fid_res_t, 'D-', color='red', label='Transp with reset')
 ax1.set_xlabel('Number of cycles')
 ax1.set_ylabel('Average fidelity')
@@ -721,7 +752,7 @@ ax1.set_title('Reset vs no reset, without post selection or recovery')
 #ax1.set(ylim=(0.74, 0.96))
 ax1.legend()
 ax1.grid(linewidth=1)
-
+#%%
 # Plot 2
 ax2.plot(range(n_cycles), fid_rec, 'o-', color='blue', label='No transp, no reset')
 ax2.plot(range(n_cycles), fid_rec_t, 'o-', color='red', label='Transp, no reset')
@@ -741,9 +772,10 @@ ax4 = axs[3]
 # Plot 3: Recovery, post-selection and nothing
 #ax3.plot(range(n_cycles), fid_t, 'o-', color='blue', label='No processing')
 #ax3.plot(range(n_cycles), frac_t, 'o-', color='red', label='Post-selection fraction')
-ax3.plot(range(n_cycles), fid_rec_t, 'o-', color='red', label='Recovery')
-ax3.plot(range(n_cycles), fid_rec_t_old, 'o-', color='orange', label='Recovery old')
-ax3.plot(range(n_cycles), fid_rec_res_t, 'o-', color='blue', label='Recovery with reset')
+ax3.plot(range(n_cycles), fid_rec, 'o-', color='purple', label='Nygamla otranspilerad')
+ax3.plot(range(n_cycles), fid_rec_t, 'o-', color='red', label='Nygamla Recovery')
+ax3.plot(range(n_cycles), fid_rec_res_t, 'o-', color='orange', label='Recovery reset')
+ax3.plot(range(n_cycles), fid_rec_new_t, 'o-', color='blue', label='New recovery')
 ax3.set_xlabel('Number of cycles')
 ax3.set_ylabel('Average fidelity')
 ax3.set_title('Comparing processing methods without reset')
@@ -826,13 +858,30 @@ with open('data/frac_res_t.txt', 'w') as f:
         f.write("%s\n" % item)
 
 # %% Load data example
-fid_ps_res = []
-with open('data/fid_ps_res.txt', 'r') as filehandle:
+fid_rec_res_t = []
+with open('data/fid_rec_res_t.txt', 'r') as filehandle:
     for line in filehandle:
         # remove linebreak which is the last character of the string
         currentPlace = line[:-1]
 
         # add item to the list
-        fid_ps_res.append(float(currentPlace))
+        fid_rec_res_t.append(float(currentPlace))
 
 print(fid_ps_res)
+
+# %% Further testing
+
+# Settings for circuit
+n_cycles = 1
+reset=False
+flag=False
+recovery=False
+
+
+circ += encode_input_v2(registers)
+circ += unflagged_stabilizer_cycle(registers,
+                                   reset=reset,
+                                   recovery=recovery
+                                   )
+circ.barrier()
+circ.append(Snapshot('stabilizer_0', 'density_matrix', num_qubits=5), qb)
