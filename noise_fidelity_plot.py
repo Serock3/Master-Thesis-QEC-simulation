@@ -23,46 +23,6 @@ from simulator_program.custom_noise_models import thermal_relaxation_model, paul
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 
-# %%
-def logical_states():
-    logical_0 = np.zeros(2**5)
-    logical_0[0b00000] = 1/4
-    logical_0[0b10010] = 1/4
-    logical_0[0b01001] = 1/4
-    logical_0[0b10100] = 1/4
-    logical_0[0b01010] = 1/4
-    logical_0[0b11011] = -1/4
-    logical_0[0b00110] = -1/4
-    logical_0[0b11000] = -1/4
-    logical_0[0b11101] = -1/4
-    logical_0[0b00011] = -1/4
-    logical_0[0b11110] = -1/4
-    logical_0[0b01111] = -1/4
-    logical_0[0b10001] = -1/4
-    logical_0[0b01100] = -1/4
-    logical_0[0b10111] = -1/4
-    logical_0[0b00101] = 1/4
-
-    logical_1 = np.zeros(2**5)
-    logical_1[0b11111] = 1/4
-    logical_1[0b01101] = 1/4
-    logical_1[0b10110] = 1/4
-    logical_1[0b01011] = 1/4
-    logical_1[0b10101] = 1/4
-    logical_1[0b00100] = -1/4
-    logical_1[0b11001] = -1/4
-    logical_1[0b00111] = -1/4
-    logical_1[0b00010] = -1/4
-    logical_1[0b11100] = -1/4
-    logical_1[0b00001] = -1/4
-    logical_1[0b10000] = -1/4
-    logical_1[0b01110] = -1/4
-    logical_1[0b10011] = -1/4
-    logical_1[0b01000] = -1/4
-    logical_1[0b11010] = 1/4
-
-    return [logical_0, logical_1]
-
 # %% =================  Testing noise model + stabilizer ======================
 # DEFINE AND TRANSPILE THE CIRCUIT
 

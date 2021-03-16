@@ -23,6 +23,7 @@ from qiskit import (QuantumCircuit,
                     )
 from qiskit.providers.aer.extensions.snapshot_statevector import *
 from qiskit.providers.aer.extensions.snapshot_density_matrix import *
+from typing import List
 # %% General functions
 
 
@@ -42,12 +43,12 @@ class StabilizerRegisters:
 
 def get_full_stabilizer_circuit(registers, n_cycles=1,
                                 reset=True, recovery=False, flag=True):
-    """Returns the circuit for a full repeating stabilizer circuit, including encoding, 
+    """Returns the circuit for a full repeating stabilizer circuit, including encoding,
     n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
     """
 
     # Unpack registers
-    #qbReg, anReg, clReg, readout = registers
+    # qbReg, anReg, clReg, readout = registers
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
@@ -64,7 +65,7 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
 
     # Stabilizer
     circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-                                      reset=reset, recovery=recovery, flag=flag)
+                                       reset=reset, recovery=recovery, flag=flag)
 
     # Final readout
     circ.measure(qbReg, readout)
@@ -74,8 +75,8 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
 
 
 def get_repeated_stabilization(registers, n_cycles=1,
-        reset=True, recovery=False, flag=True, snapshot_type='statevector'):
-    """Generates a circuit for repeated stabilizers. Including recovery and 
+                               reset=True, recovery=False, flag=True, snapshot_type='statevector'):
+    """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
     Args:
@@ -114,7 +115,7 @@ def get_empty_stabilizer_circuit(registers):
     """Create an empty qiskit circuit adapted for stabilizer circuits"""
 
     # Unpack registers
-    #qbReg, anReg, clReg, readout = registers
+    # qbReg, anReg, clReg, readout = registers
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
@@ -182,7 +183,7 @@ def encode_input_v2(registers):
     """
 
     qbReg = registers.QubitRegister
-    #circ = get_empty_stabilizer_circuit(registers)
+    # circ = get_empty_stabilizer_circuit(registers)
     circ = QuantumCircuit(qbReg)
 
     circ.z(qbReg[0])
@@ -210,7 +211,7 @@ def encode_input_v2(registers):
 def get_classical_register(n_cycles, reset=True, recovery=False, flag=True):
     """Generate lists of classical registers for storing all measurement data.
 
-    The function accepts the flag bool to determine whether to create 
+    The function accepts the flag bool to determine whether to create
     registers for additional flag measurements. The names are as follows:
 
     syndrome_register: The standard four unflagged stabilizer measurements.
@@ -548,16 +549,18 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
         num_ancillas: Specifies how many acillas to spread the measurements over
     """
 
+    # Use the previous behaviour if num_ancillas=None
     if not num_ancillas:
         if registers.AncillaRegister.size == 2:
             anQb_list = [registers.AncillaRegister[1]]*4
         elif registers.AncillaRegister.size >= 4:
             # I don't like this really, we don't use the flagged ciruit anymore so it shouldn't get the 0 stop by default
-            anQb_list = [registers.AncillaRegister[n] for n in [1,2,3,4]]
+            anQb_list = [registers.AncillaRegister[n] for n in [1, 2, 3, 4]]
         else:
             Warning("Ancilla reg too small (this should never happen)")
     else:
-        anQb_list = [registers.AncillaRegister[n%num_ancillas] for n in range(4)]
+        anQb_list = [registers.AncillaRegister[n % num_ancillas]
+                     for n in range(4)]
 
     stabilizer_list = [_unflagged_stabilizer_XZZXI,
                        _unflagged_stabilizer_IXZZX,
@@ -570,19 +573,19 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
         syn_bit_list = [syn_reg[n] for n in range(4)]
     else:
         syn_bit_list = [registers.SyndromeRegister[n] for n in range(4)]
-        
+
     # Create circuit and run stabilizers
     circ = get_empty_stabilizer_circuit(registers)
     for i in range(4):
-        circ += stabilizer_list[i](registers, anQb=anQb_list[i], 
-            syn_bit=syn_bit_list[i], reset=reset)
+        circ += stabilizer_list[i](registers, anQb=anQb_list[i],
+                                   syn_bit=syn_bit_list[i], reset=reset)
 
     # Add an extra measurement to the next syndrome register
     # TODO: Make this compatible with using more than 1 ancilla
     if recovery and not reset:
         if current_cycle < len(registers.SyndromeRegister[0])-1:
-            circ.measure(anQb_list[-1], 
-                registers.SyndromeRegister[0][current_cycle+1][current_step][4])
+            circ.measure(anQb_list[-1],
+                         registers.SyndromeRegister[0][current_cycle+1][current_step][4])
 
     # Recovery
     if recovery is True:
@@ -611,6 +614,8 @@ def _unflagged_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
+    # NOTE: Use the empty circuit below instead? It doesn't add the readout register
+    # circ = QuantumCircuit(qbReg,anReg,clReg)
     if not anQb:
         if anReg.size == 2:
             anQb = anReg[1]
@@ -1007,7 +1012,15 @@ def full_recovery_ZXIXZ(registers, reset=True, current_cycle=0, current_step=3):
 # %% Function used for internal testing
 
 
-def logical_states():
+def logical_states(include_ancillas='front') -> List[List[float]]:
+    """Returns the logical states for the [[5,1,3]] code.
+
+    Args:
+        include_ancillas (str/None, optional): Whether to append the acillas by tensor product to the end. Defaults to True.
+
+    Returns:
+        List[List[float]]: List of both logical states
+    """
     logical_0 = np.zeros(2**5)
     logical_0[0b00000] = 1/4
     logical_0[0b10010] = 1/4
@@ -1044,12 +1057,16 @@ def logical_states():
     logical_1[0b01000] = -1/4
     logical_1[0b11010] = 1/4
 
-    # Add two ancillas in |0>
-    an0 = np.zeros(2**2)
-    an0[0] = 1.0
-
-    logical_1 = np.kron(logical_1, an0)
-    logical_0 = np.kron(logical_0, an0)
+    if include_ancillas:
+        # Add two ancillas in |0>
+        an0 = np.zeros(2**2)
+        an0[0] = 1.0
+        if include_ancillas == 'front':
+            logical_1 = np.kron(logical_1, an0)
+            logical_0 = np.kron(logical_0, an0)
+        elif include_ancillas == 'back':
+            logical_1 = np.kron(an0, logical_1)
+            logical_0 = np.kron(an0, logical_0)
 
     return [logical_0, logical_1]
 
