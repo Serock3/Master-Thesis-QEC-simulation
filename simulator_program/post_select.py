@@ -36,8 +36,8 @@ def reformat_density_snapshot(results) -> dict:
     return snap_dict
 
 
-def get_running_post_select_fraction_for_density_matrix(results, n_shots, cycle):
-
+def get_trivial_subsystem_counts_at_cycle(results, n_shots, cycle):
+    # Depricated
     subsys_counts = get_subsystems_counts(results.get_counts())
     syndrome_reg_counts = subsys_counts[len(subsys_counts)-1-cycle]
     count_trivial_syndrome = 0
@@ -47,26 +47,24 @@ def get_running_post_select_fraction_for_density_matrix(results, n_shots, cycle)
     return count_trivial_syndrome/n_shots
 
 
-def get_subsystem_counts_up_to_cycle(counts, cycle, post_select_syndrome = None):
-    """Get counts for the subsystem of registers up to cycle. If post_select_syndrome is 
-    set, then only return the counts for that specific (subsystem) measurement.
+def get_subsystem_counts_up_to_cycle(counts, cycle):
+    """Get counts for the subsystem of registers up to cycle. 
 
     Args:
         counts (Dict): Counts dictionary
         cycle (int): current cycle
-        post_select_syndrome (int, optional): Subsystem measurement syndrome to post select. Defaults to None.
-
     Returns:
         Dict: subsystem counts. If post_select_syndrome is set then and int is returned
     """
 
     subsys_counts = {}
-    count_trivial_syndrome = 0
     for outcome in counts:
         formated_outcome = int(''.join([key for key in outcome.split()[-(1+cycle):]]))
-        if formated_outcome == post_select_syndrome:
-            count_trivial_syndrome += counts[outcome]
-    return count_trivial_syndrome
+        if formated_outcome in subsys_counts:
+            subsys_counts[formated_outcome] += counts[outcome]
+        else:
+            subsys_counts[formated_outcome] = counts[outcome]
+    return subsys_counts
 
 
 
@@ -113,7 +111,7 @@ def get_running_fidelity_data_den_mat(circ, n_cycles, n_shots=2048,
                 # post_selection = snapshots['stabilizer_' + str(current_cycle)][[
                 #     key for key in snapshots['stabilizer_0'] if int(key, 16) == 0][0]]
                 select_fraction = get_subsystem_counts_up_to_cycle(
-                    results.get_counts(), current_cycle)
+                    results.get_counts(), current_cycle)[0]
                 select_fractions.append(select_fraction)
                 fidelities.append(state_fidelity(
                     post_selection, correct_state))
@@ -148,7 +146,7 @@ def get_running_fidelity_data_den_mat(circ, n_cycles, n_shots=2048,
 reset = False
 recovery = True
 flag = False
-n_cycles = 2
+n_cycles = 5
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
 # cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
@@ -167,7 +165,7 @@ circ.snapshot('post_encoding', 'density_matrix')
 circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
                                    reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
 
-n_shots = 10
+n_shots = 100
 fidelities, select_fractions = get_running_fidelity_data_den_mat(
     circ, n_cycles, n_shots)
 
@@ -178,7 +176,7 @@ ax2 = axs[1]
 
 ax1.plot(range(n_cycles), fidelities, 'o-', label='No transpilation')
 ax1.set_xlabel(r'Error detection cycle $n$')
-ax1.set_ylabel('Post selected fidelity')
+ax1.set_ylabel('Post selected count')
 ax1.legend()
 ax1.grid(linewidth=1)
 
