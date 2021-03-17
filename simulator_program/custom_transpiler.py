@@ -28,17 +28,20 @@ def shortest_transpile_from_distribution(circuit, repeats=40, cost_func=default_
     return transpiled_circuit
 
 
+# WAQCT 7 qb
 basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap', 'cz']
 couplinglist = [[0, 1], [0, 6], [1, 6], [2, 3],
                 [2, 6], [3, 6], [4, 5], [4, 6], [5, 6]]
 reverse_couplinglist = [[y, x] for [x, y] in couplinglist]
 coupling_map = CouplingMap(
-    couplinglist=couplinglist+reverse_couplinglist, description='A hexagoal 7qb code with two ancillas')
+    couplinglist=couplinglist+reverse_couplinglist,
+    description='A hexagoal 7qb code with two ancillas')
 
 # Dict with device properties of the WAQCT QC to be used for transpilation.
 WAQCT_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map}
 
+# Diamond 7 qb
 diamond_couplinglist = [[0, 2], [0, 3], [1, 3], [1, 4], [2, 5], [3, 5],
     [3, 6], [4, 6]]
 reverse_diamond_couplinglist = [[y, x] for [x, y] in diamond_couplinglist]
@@ -49,6 +52,18 @@ diamond_coupling_map = CouplingMap(
 # Dict with device properties of the "Double diamond" chip for transpilation.
 diamond_device_properties = {
     "basis_gates": basis_gates, "coupling_map": diamond_coupling_map}
+
+# Triangle 10 qb
+couplinglist_triangle = [[0,4], [0,1], [1,4], [1,5], [1,2], [2,5], [2,6], [2,3],
+    [3,6], [4,7], [4,5], [5,7], [5,8], [5,6], [6,8], [7,8], [7,9], [8,9]]
+reverse_triangle_couplinglist = [[y, x] for [x, y] in couplinglist_triangle]
+coupling_map_triangle = CouplingMap(
+    couplinglist=couplinglist_triangle+reverse_triangle_couplinglist,
+    description='A triangular 10qb chip')
+
+# Dict with device properties of the WAQCT QC to be used for transpilation.
+triangle_device_properties = {
+    "basis_gates": basis_gates, "coupling_map": coupling_map}
 
 def _add_custom_device_equivalences():
     """ Ads custom gate equivalences to the SessionEquivalenceLibrary for transpilation
