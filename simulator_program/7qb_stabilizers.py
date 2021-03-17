@@ -1,6 +1,10 @@
 # Functions for running the [[7,1,3]] steane code, mainly on the 10qb chip
 # Stabi
-e#s  %% Import modules
+
+# TODO: Add recovery
+# TODO: Remove dependence of having 3 ancillas
+# TODO: Implement an adapted get_classical_register, tailored for [[7,1,3]]
+# %% Import modules
 import numpy as np
 from qiskit import (QuantumCircuit,
                     QuantumRegister, 
@@ -11,6 +15,7 @@ from qiskit import (QuantumCircuit,
                     )
 from qiskit.providers.aer.extensions.snapshot_statevector import *
 from qiskit.providers.aer.extensions.snapshot_density_matrix import *
+from custom_transpiler import *
 # %% General functions
 class StabilizerRegistersSteane:
 
@@ -25,66 +30,49 @@ class StabilizerRegistersSteane:
         self.SyndromeRegister = clReg
         self.ReadoutRegister = readout
 
-def get_full_stabilizer_circuit(registers, n_cycles=1,
-        reset=True, recovery=False, flag=True):
-    """Returns the circuit for a full repeating stabilizer circuit, including encoding, 
-    n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
+def get_full_stabilizer_circuit_steane(registers, n_cycles=1,
+        reset=True, recovery=False, snapshot_type='statevector'):
+    """Returns the circuit for a full repeating stabilizer circuit of the
+    [[7,1,3]] (Steane) code. This includes encoding, n_cycles of repeated
+    stabilizers (with optional recovery) and final measurement.
     """
 
-
     # Unpack registers
-    #qbReg, anReg, clReg, readout = registers
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
     readout = registers.ReadoutRegister
-    if not anReg.size == 2 and not anReg.size == 5:
-        raise Exception('Ancilla register must be of size 2 or 5')
-
-    # Define the circuit
-    # circ = get_empty_stabilizer_circuit(registers)
 
     # Encode the state
-    circ = encode_input_v2(registers)
-    circ.snapshot('post_encoding', 'statevector')
+    circ = encode_input_steane(registers)
 
     # Stabilizer
-    circ = get_repeated_stabilization(registers, n_cycles=1,
-        reset=reset, recovery=recovery, flag=flag)
+    circ += get_repeated_stabilization_steane(registers, n_cycles=n_cycles,
+        reset=reset, recovery=recovery, snapshot_type=snapshot_type)
 
     # Final readout
     circ.measure(qbReg, readout)
-    circ.snapshot_statevector('post_measure')
 
     return circ
     
-def get_repeated_stabilization(registers, n_cycles=1,
-        reset=True, recovery=False, flag=True, snapshot_type='statevector'):
+def get_repeated_stabilization_steane(registers, n_cycles=1,
+        reset=True, recovery=False, snapshot_type='statevector'):
 
-    circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit_steane(registers)
 
     for current_cycle in range(n_cycles):
-        if flag is True:
-            circ += flagged_stabilizer_cycle(registers,
-                reset=reset,
-                recovery=recovery,
-                current_cycle=current_cycle,
-            )
-        else:
-            circ += unflagged_stabilizer_cycle(registers,
-                reset=reset,
-                recovery=recovery,
-                current_cycle=current_cycle
-            )
+        circ += stabilizer_cycle_steane(registers,
+            reset=reset,
+            recovery=recovery
+        )
         if snapshot_type:
             circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
     return circ
 
-def get_empty_stabilizer_circuit(registers):
+def get_empty_stabilizer_circuit_steane(registers):
     """Create an empty qiskit circuit adapted for stabilizer circuits"""
 
     # Unpack registers
-    #qbReg, anReg, clReg, readout = registers
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
@@ -134,85 +122,36 @@ def encode_input_steane(registers):
 
     return circ
 
-def get_classical_register(n_cycles, flag=True):
-    """Generate lists of classical registers for storing all measurement data.
-    
-    The function accepts the flag bool to determine whether to create 
-    registers for additional flag measurements. The names are as follows:
-    
-    syndrome_register: The standard four unflagged stabilizer measurements.
-        Without flags, its dimensions are [n_cycles][1][4] and with flags they
-        are [n_cycles][current_step][4] where current step represents where
-        in the full flagged stabilizer cycle measurements were made (0-3).
-
-    flag_register: All flag measurements, only appears if flag is set to True.
-        It has the dimensions [n_cycles][current_step][1].
-
-    ancilla_msmnt_register: Contains the extra single ancilla measurement
-        performed along with a flag measurement in the flagged cycle. Only
-        appears if flag is set to True. Dimensions are
-        [n_cycles][current_step][1]
-    """
-
-    if flag:
-        # List of registers for each iteration of the conditional
-        # step of 'all four unflagged stabilizers'
-        syndrome_register = [
-            [ ClassicalRegister( 4, 'syndrome_cycle_' +str(i) +'_step_' +str(j)) 
-            for j in range(4) ] for i in range(n_cycles) ]
-
-        # List of registers for each step in the flagged stabilizer cycle
-        flag_register = [ 
-            [ ClassicalRegister( 1, 'flag_cycle_' +str(i) +'_step_' +str(j))
-            for j in range(4) ] for i in range(n_cycles) ]
-
-        # List of registers for the single stabilizer run with flag
-        ancilla_msmnt_register = [
-            [ ClassicalRegister( 1, 'ancilla_cycle_' +str(i) +'_step_' +str(j))
-            for j in range(4) ] for i in range(n_cycles) ]
-
-        return [syndrome_register, flag_register, ancilla_msmnt_register]
-    
-    else:
-        # A register of four bits per cycle
-        syndrome_register = [
-            [ ClassicalRegister( 4, 'syndrome_cycle_' +str(i) +'_step_' +str(j)) 
-            for j in range(1) ] for i in range(n_cycles) ]
-        return [syndrome_register]
-
-
 # %% All unflagged stabilizers
-def stabilizer_cycle_7qb(registers, reset=True, recovery=False,
-        current_cycle=0):
-    """Run all four stabilizers without flags, as well as an optional
-    recovery. The input current_step is only relevant for flagged cycles, and
-    should be set to 0 otherwise.
-    """
+def stabilizer_cycle_steane(registers, reset=True, recovery=False):
+    """Run all stabilizers for the [[7,1,3]] code. This assumes (at least) 3
+    ancilla qubits"""
+
     # Create circuit and run stabilizers
-    circ = get_empty_stabilizer_circuit(registers)
-    circ += _stabilizer_X0456(registers, reset, current_cycle)
-    circ += _stabilizer_X1356(registers, reset, current_cycle)
-    circ += _stabilizer_X2345(registers, reset, current_cycle)
-    circ += _stabilizer_Z0456(registers, reset, current_cycle)
-    circ += _stabilizer_Z1356(registers, reset, current_cycle)
-    circ += _stabilizer_Z2345(registers, reset, current_cycle)
+    circ = get_empty_stabilizer_circuit_steane(registers)
+    circ += _stabilizer_X0156(registers, reset)
+    circ += _stabilizer_X0246(registers, reset)
+    circ += _stabilizer_X0345(registers, reset)
+    circ += _stabilizer_Z0156(registers, reset)
+    circ += _stabilizer_Z0246(registers, reset)
+    circ += _stabilizer_Z0345(registers, reset)
 
     # Recovery
     if recovery is True:
-        circ += unflagged_recovery(registers, reset, current_cycle)
+        print('Recovery not yet implemented, skipping this section')
     
     return circ
 
-def _stabilizer_X0456(registers, reset=True, current_cycle=0):
-    """Gives the circuit for running the regular XZZXI stabilizer without flag.
-    The current_step input should be set to zero unless running flagged cycles.
+def _stabilizer_X0156(registers, reset=True):
+    """Gives the circuit for running the X stabilizer on data qubits
+    0, 1, 5 and 6.
     """
 
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
-    circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit_steane(registers)
     anQb = anReg[0]
 
     circ.h(anQb)
@@ -223,11 +162,7 @@ def _stabilizer_X0456(registers, reset=True, current_cycle=0):
     circ.h(anQb)
 
     # Measure
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0]
-        circ.measure(anQb, syndrome_reg[current_cycle][current_step][0])
-    else:
-        circ.measure(anQb, clReg[0])
+    circ.measure(anQb, clReg[0])
     
     # Reset
     if reset:
@@ -235,16 +170,16 @@ def _stabilizer_X0456(registers, reset=True, current_cycle=0):
 
     return circ
 
-def _stabilizer_X1356(registers, reset=True, current_cycle=0):
-    """Gives the circuit for running the regular XZZXI stabilizer without flag.
-    The current_step input should be set to zero unless running flagged cycles.
+def _stabilizer_X0246(registers, reset=True):
+    """Gives the circuit for running the X stabilizer on data qubits
+    0, 2, 4 and 6.
     """
 
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
-    circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit_steane(registers)
     anQb = anReg[1]
     
     circ.h(anQb)
@@ -255,11 +190,7 @@ def _stabilizer_X1356(registers, reset=True, current_cycle=0):
     circ.h(anQb)
 
     # Measure
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0]
-        circ.measure(anQb, syndrome_reg[current_cycle][current_step][1])
-    else:
-        circ.measure(anQb, clReg[1])
+    circ.measure(anQb, clReg[1])
     
     # Reset
     if reset:
@@ -267,16 +198,16 @@ def _stabilizer_X1356(registers, reset=True, current_cycle=0):
 
     return circ
 
-def _stabilizer_X2345(registers, reset=True, current_cycle=0):
-    """Gives the circuit for running the regular XZZXI stabilizer without flag.
-    The current_step input should be set to zero unless running flagged cycles.
+def _stabilizer_X0345(registers, reset=True):
+    """Gives the circuit for running the X stabilizer on data qubits
+    0, 3, 4 and 5.
     """
 
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
-    circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit_steane(registers)
     anQb = anReg[2]
     
     circ.h(anQb)
@@ -287,11 +218,7 @@ def _stabilizer_X2345(registers, reset=True, current_cycle=0):
     circ.h(anQb)
 
     # Measure
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0]
-        circ.measure(anQb, syndrome_reg[current_cycle][current_step][2])
-    else:
-        circ.measure(anQb, clReg[2])
+    circ.measure(anQb, clReg[2])
     
     # Reset
     if reset:
@@ -299,16 +226,16 @@ def _stabilizer_X2345(registers, reset=True, current_cycle=0):
 
     return circ
 
-def _stabilizer_Z0456(registers, reset=True, current_cycle=0):
-    """Gives the circuit for running the regular XZZXI stabilizer without flag.
-    The current_step input should be set to zero unless running flagged cycles.
+def _stabilizer_Z0156(registers, reset=True):
+    """Gives the circuit for running the Z stabilizer on data qubits
+    0, 1, 5 and 6.
     """
 
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
-    circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit_steane(registers)
     anQb = anReg[0]
     
     circ.cx(qbReg[0], anQb)
@@ -317,11 +244,7 @@ def _stabilizer_Z0456(registers, reset=True, current_cycle=0):
     circ.cx(qbReg[6], anQb)
 
     # Measure
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0]
-        circ.measure(anQb, syndrome_reg[current_cycle][current_step][3])
-    else:
-        circ.measure(anQb, clReg[3])
+    circ.measure(anQb, clReg[3])
     
     # Reset
     if reset:
@@ -329,16 +252,16 @@ def _stabilizer_Z0456(registers, reset=True, current_cycle=0):
 
     return circ
 
-def _stabilizer_Z1356(registers, reset=True, current_cycle=0):
-    """Gives the circuit for running the regular XZZXI stabilizer without flag.
-    The current_step input should be set to zero unless running flagged cycles.
+def _stabilizer_Z0246(registers, reset=True):
+    """Gives the circuit for running the Z stabilizer on data qubits
+    0, 2, 4 and 6.
     """
 
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
-    circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit_steane(registers)
     anQb = anReg[1]
     
     circ.cx(qbReg[0], anQb)
@@ -347,11 +270,7 @@ def _stabilizer_Z1356(registers, reset=True, current_cycle=0):
     circ.cx(qbReg[6], anQb)
 
     # Measure
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0]
-        circ.measure(anQb, syndrome_reg[current_cycle][current_step][4])
-    else:
-        circ.measure(anQb, clReg[4])
+    circ.measure(anQb, clReg[4])
     
     # Reset
     if reset:
@@ -359,16 +278,16 @@ def _stabilizer_Z1356(registers, reset=True, current_cycle=0):
 
     return circ
 
-def _stabilizer_Z2345(registers, reset=True, current_cycle=0):
-    """Gives the circuit for running the regular XZZXI stabilizer without flag.
-    The current_step input should be set to zero unless running flagged cycles.
+def _stabilizer_Z0345(registers, reset=True):
+    """Gives the circuit for running the X stabilizer on data qubits
+    0, 3, 4 and 5.
     """
 
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
-    circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit_steane(registers)
     anQb = anReg[2]
     
     circ.cx(qbReg[0], anQb)
@@ -377,11 +296,7 @@ def _stabilizer_Z2345(registers, reset=True, current_cycle=0):
     circ.cx(qbReg[5], anQb)
 
     # Measure
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0]
-        circ.measure(anQb, syndrome_reg[current_cycle][current_step][5])
-    else:
-        circ.measure(anQb, clReg[5])
+    circ.measure(anQb, clReg[5])
     
     # Reset
     if reset:
@@ -390,178 +305,46 @@ def _stabilizer_Z2345(registers, reset=True, current_cycle=0):
     return circ
 
 
-
-# TODO: Add recovery
-
-
-# %% 10 qb TRANSPILER testing
-from qiskit.compiler import transpile
-from qiskit.transpiler import PassManager, CouplingMap, Layout
-from qiskit.visualization import plot_circuit_layout
-from qiskit.circuit.equivalence_library import SessionEquivalenceLibrary
-from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZGate
-from qiskit import QuantumCircuit, QuantumRegister
-import warnings
-
-def shortest_transpile_from_distribution(circuit, repeats=40, print_depths=True, **kwargs):
-    depth = 10000
-    for i in range(repeats):
-        with warnings.catch_warnings():  # sabre causes deprication warning, this will ignore them
-            warnings.simplefilter("ignore")
-            transpiled_circuit_tmp = transpile(circuit, **kwargs)
-        if print_depths:
-            print('depth: ', transpiled_circuit_tmp.depth())
-        if transpiled_circuit_tmp.depth() < depth:
-            depth = transpiled_circuit_tmp.depth()
-            transpiled_circuit = transpiled_circuit_tmp
-    return transpiled_circuit
-
-
-basis_gates = ['id', 'u1', 'h', 'u3', 'swap', 'cz']
-couplinglist = [[0,4], [0,1], [1,4], [1,5], [1,2], [2,5], [2,6], [2,3],
-    [3,6], [4,7], [4,5], [5,7], [5,8], [5,6], [6,8], [7,8], [7,9], [8,9]]
-reverse_couplinglist = [[y, x] for [x, y] in couplinglist]
-coupling_map = CouplingMap(
-    couplinglist=couplinglist+reverse_couplinglist, description='A hexagoal 7qb code with two ancillas')
-
-# Dict with device properties of the WAQCT QC to be used for transpilation.
-WAQCT_device_properties = {
-    "basis_gates": basis_gates, "coupling_map": coupling_map}
-
-def _add_custom_device_equivalences():
-    """ Ads custom gate equivalences to the SessionEquivalenceLibrary for transpilation
-    NOTE: One needs to be run once!
-    """
-    print('Adding custom device equivalences')
-    q = QuantumRegister(2, 'q')
-    def_swap = QuantumCircuit(q)
-    for inst, qargs, cargs in [
-            (iSwapGate(), [q[0], q[1]], []),
-            (CZGate(), [q[0], q[1]], []),
-            (SGate().inverse(), [q[1]], []),
-            (SGate().inverse(), [q[0]], [])
-    ]:
-        def_swap.append(inst, qargs, cargs)
-    SessionEquivalenceLibrary.add_equivalence(SwapGate(), def_swap)
-
-_add_custom_device_equivalences()
-
-# %%
-def print_vec_diffs(state_vec1, state_vec2):
-    state1 = DensityMatrix(state_vec1).to_statevector()
-    state2 = DensityMatrix(state_vec2).to_statevector()
-
-    if state1.dim != state2.dim:
-        raise Exception("Error, dims not matching")
-
-    dim = int(np.log2(state1.dim))
-
-    diff = np.round(state1.data-state2.data, 3)
-    for i in np.where(diff != 0)[0]:
-        print("Diff in", format(i, 'b').zfill(dim), np.round(
-            state1.data, 3)[i], ' -> ', np.round(state2.data, 3)[i])
-
-
-def comp_states_mat(results1, results2):
-    """Compares two versions of circuits supposed to be identical. 
-    Looks at desity matrix snapshots and measurement counts.
-    Works even if register sizer are different and permuted.
-
-    TODO: Make it work for non-trivial measurement outcomes
-
-    Args:
-        results1 (result): result() from a qasm execution
-        results2 (result): result() from a qasm execution
-    """
-    snapshot_type = 'density_matrix'  # 'density_matrix'# TODO: Make this automatic
-    snapshot_list1 = [(name, state) for (name, state) in results1.data()[
-        'snapshots'][snapshot_type].items()]
-    snapshot_list2 = [(name, state) for (name, state) in results2.data()[
-        'snapshots'][snapshot_type].items()]
-
-    # print('Purity of encoded state = ', purity(snapshot_list2[0][1][0]['value']))
-
-    if len(snapshot_list2[0][1]) > 1:
-        print('SEVERAL MATRICES IN comp_states_mat FOR results2, SOMETHING NOT RIGHT')
-    if len(snapshot_list1[0][1]) > 1:
-        print('SEVERAL MATRICES IN comp_states_mat FOR results1, SOMETHING NOT RIGHT')
-
-    for i in range(len(snapshot_list1)):
-        for shot in range(1):
-            fidelity = np.round(state_fidelity(
-                snapshot_list2[i][1][0]['value'], snapshot_list1[i][1][0]['value']), 3)
-
-        print('Fidelity', snapshot_list2[i][0], fidelity)
-        if fidelity != 1:
-            print_vec_diffs(
-                snapshot_list1[i][1][0]['value'], snapshot_list2[i][1][0]['value'])
-    # TODO: Do something useful with this information
-    try:
-        counts = results1.get_counts()
-        print('Counts 1\n', counts)
-    except:
-        pass
-    try:
-        counts = results2.get_counts()
-        print('Counts 2\n', counts)
-    except:
-        pass
-
-
-def verify_transpilation(circ, transpiled_circuit):
-    results1 = execute(
-        transpiled_circuit,
-        Aer.get_backend('qasm_simulator'),
-        shots=1
-    ).result()
-    results2 = execute(
-        circ,
-        Aer.get_backend('qasm_simulator'),
-        shots=1
-    ).result()
-
-    comp_states_mat(results1, results2)
-
-
 # %% Internal testing/running
+from qiskit.visualization import plot_histogram
 if __name__ == '__main__'
+    # Circuit settings
+    n_cycles = 1
+    reset = True
+    recovery = False
+    snapshot_type = 'statevector'
+
     # Define quantum registers and circuit
     qb = QuantumRegister(7, 'qubit')
     an = AncillaRegister(3, 'ancilla_qubit')
     readout= ClassicalRegister(7, 'readout')
     cr = ClassicalRegister(6, 'syndrome bits')
-
     registers = StabilizerRegistersSteane(qb, an, cr, readout)
-    #circ = get_empty_stabilizer_circuit(registers)
-    circ = QuantumCircuit(qb,readout)
-    circ += encode_input_steane(registers)
-    circ.barrier()
+
+    circ = get_full_stabilizer_circuit_steane(registers, n_cycles=n_cycles,
+        reset=reset, recovery=recovery, snapshot_type=snapshot_type)
+
+    #circ = QuantumCircuit(qb,readout)
+    #circ += encode_input_steane(registers)
+    #circ.barrier()
     #circ.x(qb[0])
     #circ += stabilizer_cycle_7qb(registers, reset=True, recovery=False)
-    circ.barrier()
-    circ.snapshot('test','density_matrix')
-    circ.measure(qb, readout)
+    #circ.barrier()
+    #circ.snapshot('test','density_matrix')
+    #circ.measure(qb, readout)
 
-    print('Starting transpilation')
     # Transpilation
-    routing_method = 'sabre'  # basic lookahead stochastic sabre
-    initial_layout = None  # Overwriting the above layout
-    layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
-    translation_method = None  # 'unroller',  translator , synthesis
-    repeats = 200
-    optimization_level = 3
     circ_t = shortest_transpile_from_distribution(
         circ,
         print_depths=False,
         repeats=repeats,
-        routing_method=routing_method,
-        initial_layout=initial_layout,
-        layout_method=layout_method,
-        translation_method=translation_method,
-        optimization_level=optimization_level,
-        **WAQCT_device_properties
+        routing_method='sabre',  # basic lookahead stochastic sabre
+        initial_layout=None,
+        layout_method='sabre',  # trivial 'dense', 'noise_adaptive' sabre
+        translation_method=None,  # 'unroller',  translator , synthesis
+        optimization_level=1,
+        **triangle_device_properties
     )
-    verify_transpilation(circ, circ_t)
 
     # Run it
     n_shots = 2000
@@ -573,6 +356,5 @@ if __name__ == '__main__'
     ).result()
 
     # Plot results
-    counts = results.get_counts()
-    plot_histogram(counts)
-# %%
+    display(plot_histogram(results.get_counts()))
+
