@@ -1,5 +1,6 @@
-
-# %% Import modules
+# Functions for running the [[7,1,3]] steane code, mainly on the 10qb chip
+# Stabi
+e#s  %% Import modules
 import numpy as np
 from qiskit import (QuantumCircuit,
                     QuantumRegister, 
@@ -11,7 +12,7 @@ from qiskit import (QuantumCircuit,
 from qiskit.providers.aer.extensions.snapshot_statevector import *
 from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 # %% General functions
-class StabilizerRegisters7qb:
+class StabilizerRegistersSteane:
 
     def __init__(self,
             qbReg=QuantumRegister(7, 'code_qubit'),
@@ -102,7 +103,7 @@ def get_empty_stabilizer_circuit(registers):
 
     return circ
 
-def encode_input_7qb(registers):
+def encode_input_steane(registers):
     """Encode the input into logical 0 and 1 for the [[7,1,3]] code. This
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>
     """
@@ -389,118 +390,10 @@ def _stabilizer_Z2345(registers, reset=True, current_cycle=0):
     return circ
 
 
-# %% All recoveries
-def unflagged_recovery(registers, reset=True, current_cycle=0, current_step=0):
-    """Lookup table for recovery from a
-    single qubit error on code qubits"""
 
-    # Create a circuit
-    qbReg = registers.QubitRegister
-    clReg = registers.SyndromeRegister
-    circ = get_empty_stabilizer_circuit(registers)
+# TODO: Add recovery
 
-    # Unpack registers
-    if isinstance(clReg, list):
-        syndrome_reg = clReg[0][current_cycle][current_step]
-    else:
-        syndrome_reg = clReg
 
-    # If the ancilla is reset to |0> between measurements
-    if reset:
-        circ.x(qbReg[1]).c_if(syndrome_reg, 1)
-        circ.z(qbReg[4]).c_if(syndrome_reg, 2)
-        circ.x(qbReg[2]).c_if(syndrome_reg, 3)
-        circ.z(qbReg[2]).c_if(syndrome_reg, 4)
-        circ.z(qbReg[0]).c_if(syndrome_reg, 5)
-        circ.x(qbReg[3]).c_if(syndrome_reg, 6)
-        circ.x(qbReg[2]).c_if(syndrome_reg, 7)
-        circ.z(qbReg[2]).c_if(syndrome_reg, 7)
-        circ.x(qbReg[0]).c_if(syndrome_reg, 8)
-        circ.z(qbReg[3]).c_if(syndrome_reg, 9)
-        circ.z(qbReg[1]).c_if(syndrome_reg, 10)
-        circ.x(qbReg[1]).c_if(syndrome_reg, 11)
-        circ.z(qbReg[1]).c_if(syndrome_reg, 11)
-        circ.x(qbReg[4]).c_if(syndrome_reg, 12)
-        circ.x(qbReg[0]).c_if(syndrome_reg, 13)
-        circ.z(qbReg[0]).c_if(syndrome_reg, 13)
-        circ.x(qbReg[4]).c_if(syndrome_reg, 14)
-        circ.z(qbReg[4]).c_if(syndrome_reg, 14)
-        circ.x(qbReg[3]).c_if(syndrome_reg, 15)
-        circ.z(qbReg[3]).c_if(syndrome_reg, 15)
-
-    # If the ancilla is NOT reset between measurements
-    else:
-        circ.x(qbReg[2]).c_if(syndrome_reg, 1)
-        circ.x(qbReg[3]).c_if(syndrome_reg, 2)
-        circ.z(qbReg[0]).c_if(syndrome_reg, 3)
-        circ.x(qbReg[4]).c_if(syndrome_reg, 4)
-        circ.z(qbReg[3]).c_if(syndrome_reg, 5)
-        circ.x(qbReg[3]).c_if(syndrome_reg, 5)
-        circ.z(qbReg[1]).c_if(syndrome_reg, 6)
-        circ.z(qbReg[3]).c_if(syndrome_reg, 7)
-        circ.x(qbReg[0]).c_if(syndrome_reg, 8)
-        circ.z(qbReg[1]).c_if(syndrome_reg, 9)
-        circ.x(qbReg[1]).c_if(syndrome_reg, 9)
-        circ.z(qbReg[4]).c_if(syndrome_reg, 10)
-        circ.x(qbReg[4]).c_if(syndrome_reg, 10)
-        circ.z(qbReg[0]).c_if(syndrome_reg, 11)
-        circ.x(qbReg[0]).c_if(syndrome_reg, 11)
-        circ.z(qbReg[2]).c_if(syndrome_reg, 12)
-        circ.z(qbReg[2]).c_if(syndrome_reg, 13)
-        circ.x(qbReg[2]).c_if(syndrome_reg, 13)
-        circ.z(qbReg[4]).c_if(syndrome_reg, 14)
-        circ.x(qbReg[1]).c_if(syndrome_reg, 15)
-
-    return circ
-
-# %% Function used for internal testing
-def logical_states():
-    logical_0 = np.zeros(2**5)
-    logical_0[0b00000] = 1/4
-    logical_0[0b10010] = 1/4
-    logical_0[0b01001] = 1/4
-    logical_0[0b10100] = 1/4
-    logical_0[0b01010] = 1/4
-    logical_0[0b11011] = -1/4
-    logical_0[0b00110] = -1/4
-    logical_0[0b11000] = -1/4
-    logical_0[0b11101] = -1/4
-    logical_0[0b00011] = -1/4
-    logical_0[0b11110] = -1/4
-    logical_0[0b01111] = -1/4
-    logical_0[0b10001] = -1/4
-    logical_0[0b01100] = -1/4
-    logical_0[0b10111] = -1/4
-    logical_0[0b00101] = 1/4
-
-    logical_1 = np.zeros(2**5)
-    logical_1[0b11111] = 1/4
-    logical_1[0b01101] = 1/4
-    logical_1[0b10110] = 1/4
-    logical_1[0b01011] = 1/4
-    logical_1[0b10101] = 1/4
-    logical_1[0b00100] = -1/4
-    logical_1[0b11001] = -1/4
-    logical_1[0b00111] = -1/4
-    logical_1[0b00010] = -1/4
-    logical_1[0b11100] = -1/4
-    logical_1[0b00001] = -1/4
-    logical_1[0b10000] = -1/4
-    logical_1[0b01110] = -1/4
-    logical_1[0b10011] = -1/4
-    logical_1[0b01000] = -1/4
-    logical_1[0b11010] = 1/4
-
-    # Add two ancillas in |0>
-    an0 = np.zeros(2**2)
-    an0[0] = 1.0
-
-    logical_1 = np.kron(logical_1, an0)
-    logical_0 = np.kron(logical_0, an0)
-
-    return [logical_0, logical_1]
-
-# %% Transpilation
 # %% 10 qb TRANSPILER testing
 from qiskit.compiler import transpile
 from qiskit.transpiler import PassManager, CouplingMap, Layout
@@ -614,6 +507,7 @@ def comp_states_mat(results1, results2):
     except:
         pass
 
+
 def verify_transpilation(circ, transpiled_circuit):
     results1 = execute(
         transpiled_circuit,
@@ -627,115 +521,58 @@ def verify_transpilation(circ, transpiled_circuit):
     ).result()
 
     comp_states_mat(results1, results2)
-# %% Internal testing of functions above
-from qiskit.quantum_info import state_fidelity
-from qiskit.visualization import plot_histogram
-from IPython.display import display
 
-if __name__ == "__main__":
-    # The settings for our circuit
-    n_cycles = 1
-    reset = True
-    recovery = False
-    flag = False
 
-    # Define our registers (Maybe to be written as function?)
-    qb = QuantumRegister(5, 'code_qubit')
-    an = AncillaRegister(2, 'ancilla_qubit')
-    cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
-    #cr = get_classical_register(n_cycles, flag) # Advanced list of registers
-    readout = ClassicalRegister(5, 'readout')
+# %% Internal testing/running
+if __name__ == '__main__'
+    # Define quantum registers and circuit
+    qb = QuantumRegister(7, 'qubit')
+    an = AncillaRegister(3, 'ancilla_qubit')
+    readout= ClassicalRegister(7, 'readout')
+    cr = ClassicalRegister(6, 'syndrome bits')
 
-    registers = StabilizerRegisters(qb, an, cr, readout)
-    #registers = [qb, an, cr, readout] # Pack them together
-    circ = get_empty_stabilizer_circuit(registers)
+    registers = StabilizerRegistersSteane(qb, an, cr, readout)
+    #circ = get_empty_stabilizer_circuit(registers)
+    circ = QuantumCircuit(qb,readout)
+    circ += encode_input_steane(registers)
+    circ.barrier()
+    #circ.x(qb[0])
+    #circ += stabilizer_cycle_7qb(registers, reset=True, recovery=False)
+    circ.barrier()
+    circ.snapshot('test','density_matrix')
+    circ.measure(qb, readout)
 
-    # Get the complete circuit
-    circ += get_full_stabilizer_circuit(registers,
-        n_cycles=n_cycles,
-        reset=reset,
-        recovery=recovery,
-        flag=flag,
+    print('Starting transpilation')
+    # Transpilation
+    routing_method = 'sabre'  # basic lookahead stochastic sabre
+    initial_layout = None  # Overwriting the above layout
+    layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
+    translation_method = None  # 'unroller',  translator , synthesis
+    repeats = 200
+    optimization_level = 3
+    circ_t = shortest_transpile_from_distribution(
+        circ,
+        print_depths=False,
+        repeats=repeats,
+        routing_method=routing_method,
+        initial_layout=initial_layout,
+        layout_method=layout_method,
+        translation_method=translation_method,
+        optimization_level=optimization_level,
+        **WAQCT_device_properties
     )
-    
-    display(circ.draw())
+    verify_transpilation(circ, circ_t)
+
     # Run it
     n_shots = 2000
     results = execute(
-        circ,  
+        circ_t,  
         Aer.get_backend('qasm_simulator'),
         noise_model=None,
         shots=n_shots
     ).result()
 
-    # Analyze results
-    logical = logical_states()
-    sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][0]
-    fid = 0
-    for i in range(10):
-        sv_post_encoding = results.data()['snapshots']['statevector']['stabilizer_0'][i]
-
-        log0 = logical[0][np.arange(128,step=4)]
-        sv_test = sv_post_encoding[0:32]
-        fid += state_fidelity(log0, sv_test)
-
-    print('Average fidelity across 10 shots:')
-    print(fid/10)
-
     # Plot results
     counts = results.get_counts()
     plot_histogram(counts)
-    
-# %%
-
-
-qb = QuantumRegister(7, 'qubit')
-an = AncillaRegister(3, 'ancilla_qubit')
-readout= ClassicalRegister(7, 'readout')
-cr = ClassicalRegister(6, 'syndrome bits')
-
-registers = StabilizerRegisters7qb(qb, an, cr, readout)
-#circ = get_empty_stabilizer_circuit(registers)
-circ = QuantumCircuit(qb,readout)
-circ += encode_input_7qb(registers)
-circ.barrier()
-#circ.x(qb[0])
-#circ += stabilizer_cycle_7qb(registers, reset=True, recovery=False)
-circ.barrier()
-circ.snapshot('test','density_matrix')
-circ.measure(qb, readout)
-
-print('Starting transpilation')
-# Transpilation
-routing_method = 'sabre'  # basic lookahead stochastic sabre
-initial_layout = None  # Overwriting the above layout
-layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
-translation_method = None  # 'unroller',  translator , synthesis
-repeats = 200
-optimization_level = 3
-circ_t = shortest_transpile_from_distribution(
-    circ,
-    print_depths=False,
-    repeats=repeats,
-    routing_method=routing_method,
-    initial_layout=initial_layout,
-    layout_method=layout_method,
-    translation_method=translation_method,
-    optimization_level=optimization_level,
-    **WAQCT_device_properties
-)
-verify_transpilation(circ, circ_t)
-# Run it
-n_shots = 2000
-results = execute(
-    circ_t,  
-    Aer.get_backend('qasm_simulator'),
-    noise_model=None,
-    shots=n_shots
-).result()
-
-# Plot results
-print('Plotting')
-counts = results.get_counts()
-plot_histogram(counts)
 # %%
