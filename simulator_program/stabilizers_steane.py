@@ -307,7 +307,7 @@ def _stabilizer_Z0345(registers, reset=True):
 
 # %% Internal testing/running
 from qiskit.visualization import plot_histogram
-if __name__ == '__main__'
+if __name__ == '__main__':
     # Circuit settings
     n_cycles = 1
     reset = True
@@ -321,23 +321,16 @@ if __name__ == '__main__'
     cr = ClassicalRegister(6, 'syndrome bits')
     registers = StabilizerRegistersSteane(qb, an, cr, readout)
 
+    # Full circuit
     circ = get_full_stabilizer_circuit_steane(registers, n_cycles=n_cycles,
         reset=reset, recovery=recovery, snapshot_type=snapshot_type)
 
-    #circ = QuantumCircuit(qb,readout)
-    #circ += encode_input_steane(registers)
-    #circ.barrier()
-    #circ.x(qb[0])
-    #circ += stabilizer_cycle_7qb(registers, reset=True, recovery=False)
-    #circ.barrier()
-    #circ.snapshot('test','density_matrix')
-    #circ.measure(qb, readout)
 
     # Transpilation
     circ_t = shortest_transpile_from_distribution(
         circ,
-        print_depths=False,
-        repeats=repeats,
+        print_cost=False,
+        repeats=20,
         routing_method='sabre',  # basic lookahead stochastic sabre
         initial_layout=None,
         layout_method='sabre',  # trivial 'dense', 'noise_adaptive' sabre

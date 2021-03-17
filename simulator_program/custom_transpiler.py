@@ -63,7 +63,7 @@ coupling_map_triangle = CouplingMap(
 
 # Dict with device properties of the WAQCT QC to be used for transpilation.
 triangle_device_properties = {
-    "basis_gates": basis_gates, "coupling_map": coupling_map}
+    "basis_gates": basis_gates, "coupling_map": coupling_map_triangle}
 
 def _add_custom_device_equivalences():
     """ Ads custom gate equivalences to the SessionEquivalenceLibrary for transpilation
