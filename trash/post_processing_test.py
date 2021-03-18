@@ -97,8 +97,10 @@ def post_process_v1(state, syndrome) -> List[float]:
 
     return results.get_statevector()
 
+
 def state_print(statevec):
     print(np.real(np.round(statevec, 3)))
+
 
 results = execute(
     circ,
@@ -174,7 +176,7 @@ def post_process_v2(state, syndromes) -> List[float]:
     return results.get_statevector()
 
 
-def post_process_v2_all_shots(results,n_cycles):
+def post_process_v2_all_shots(results, n_cycles):
     """Wrapper for post_process_v2 that processes every statevector for a repeated stabilizer cycle
     simulation with memory=True.
 
@@ -184,20 +186,26 @@ def post_process_v2_all_shots(results,n_cycles):
 
     Returns:
         List[List[float]]: List of corrected statvectors where first index indicates cycle, second shots
-    """ 
+    """
 
     # TODO: If this crashes a lot, make it yield instead of return? (Or just return fidelities instead)
     mem = results.get_memory()
     shots = len(mem)
-    statevector_dim = results.data()['snapshots']['statevector']['stabilizer_0'][0].shape[0]
-    post_processed_states = np.empty((n_cycles,shots,statevector_dim),dtype=np.complex_) # TODO: Make this format same as with in other places?
+    statevector_dim = results.data(
+    )['snapshots']['statevector']['stabilizer_0'][0].shape[0]
+    # TODO: Make this format same as with in other places?
+    post_processed_states = np.empty(
+        (n_cycles, shots, statevector_dim), dtype=np.complex_)
     for current_cycle in range(n_cycles):
-        statevectors = results.data()['snapshots']['statevector']['stabilizer_' + str(current_cycle)]
+        statevectors = results.data(
+        )['snapshots']['statevector']['stabilizer_' + str(current_cycle)]
         assert shots == len(statevectors)
         for shot in range(shots):
             # Convert the text format to integers. The order is from right to left, and the last entry is for final measurements ans should be removed
-            syndromes = [int(syn, 2) for syn in reversed(mem[shot].split()[-(1+current_cycle):])] 
-            post_processed_states[current_cycle][shot] = post_process_v2(statevectors[shot], syndromes)
+            syndromes = [int(syn, 2) for syn in reversed(
+                mem[shot].split()[-(1+current_cycle):])]
+            post_processed_states[current_cycle][shot] = post_process_v2(
+                statevectors[shot], syndromes)
 
     return post_processed_states
 
@@ -248,22 +256,28 @@ results = execute(
 ).result()
 
 
-for cycle in post_process_v2_all_shots(results,n_cycles):
+for cycle in post_process_v2_all_shots(results, n_cycles):
     print("\nNew cycle")
     for state_of_shot in cycle:
         print(state_fidelity(correct_state, state_of_shot))
 
-#%% Same as above but with noise model intead of artifical errors, and a fidelity plot
+# %% Same as above but with noise model intead of artifical errors, and a fidelity plot
 n_cycles = 15
 shots = 1024
+reset = True
+recovery = False
+flag = False
 
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(2, 'ancilla_qubit')
+readout = ClassicalRegister(5, 'readout')
 cr = get_classical_register(n_cycles, reset=reset,
                             recovery=recovery, flag=False)
 registers = StabilizerRegisters(qb, an, cr, readout)
 
 circ = encode_input_v2(registers)
 circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-    reset=reset, recovery=recovery, flag=flag, snapshot_type='statevector')
+                                   reset=reset, recovery=recovery, flag=flag, snapshot_type='statevector')
 
 results = execute(
     circ,
@@ -272,20 +286,24 @@ results = execute(
     shots=shots,
     memory=True
 ).result()
-
-
-fidelities = np.empty((n_cycles,shots))
-post_states = post_process_v2_all_shots(results,n_cycles)
+correct_state = logical_states(include_ancillas='back')[0]
+# Using the code in post_process.py now
+# from simulator_program.post_process import post_process_statevec_all_shots
+fidelities = np.empty((n_cycles, shots))
+post_states = post_process_v2_all_shots(results, n_cycles)
 for cycle in range(post_states.shape[0]):
     for shot in range(post_states.shape[1]):
-        fidelities[cycle][shot] = state_fidelity(correct_state, post_states[cycle][shot])
-del post_states # I imagine this could take up quite some memory, so delete it
+        fidelities[cycle][shot] = state_fidelity(
+            correct_state, post_states[cycle][shot])
+del post_states  # I imagine this could take up quite some memory, so delete it
 
-#%%
-plt.errorbar(range(n_cycles),np.mean(fidelities,axis=1),yerr=np.std(fidelities,axis=1))
+# %%
+plt.errorbar(range(n_cycles), np.mean(fidelities, axis=1),
+             yerr=np.std(fidelities, axis=1))
 # mean_fid = np.mean(fidelities,axis=1)
-mode_fid = np.quantile(fidelities,0.5,axis=1)
-plt.errorbar(range(n_cycles),mode_fid,yerr=(np.quantile(fidelities,[0.75,0.25],axis=1)-mode_fid))
+mode_fid = np.quantile(fidelities, 0.5, axis=1)
+plt.errorbar(range(n_cycles), mode_fid, yerr=(
+    np.quantile(fidelities, [0.75, 0.25], axis=1)-mode_fid))
 # del fidelities
 # del mean_fid
 # plt.boxplot(fidelities.T)
@@ -294,4 +312,3 @@ plt.errorbar(range(n_cycles),mode_fid,yerr=(np.quantile(fidelities,[0.75,0.25],a
 plt.xlabel(r'Error detection cycle $n$')
 plt.ylabel('Post-processed fidelity')
 # %% TODO: Try it with density matrices?
-
