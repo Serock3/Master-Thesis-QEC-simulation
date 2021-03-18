@@ -106,8 +106,13 @@ def get_repeated_stabilization(registers, n_cycles=1,
                                                recovery=recovery,
                                                current_cycle=current_cycle
                                                )
-        if snapshot_type:
-            circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
+        if snapshot_type:# TODO: Maybe a nice looking solution?
+            if snapshot_type == 'density_matrix':
+                circ.barrier()
+                circ.append(Snapshot('stabilizer_' + str(current_cycle), snapshot_type, num_qubits=5), registers.QubitRegister)
+                circ.barrier()
+            else:
+                circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
     return circ
 
 
@@ -133,15 +138,6 @@ def get_empty_stabilizer_circuit(registers):
     circ.add_register(readout)
 
     return circ
-
-
-def unpack_stabilizer_registers(registers):
-    """Unpacks all registers packed as a list according to customs used
-    in all stabilizer functions (stabilizer.py). Kind of obsolete
-    """
-    qbReg, anReg, clReg, readout = registers
-    return qbReg, anReg, clReg, readout
-
 
 def encode_input(registers):
     """Encode the input into logical 0 and 1 for the [[5,1,3]] code. This
