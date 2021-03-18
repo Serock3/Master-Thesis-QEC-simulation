@@ -858,16 +858,16 @@ with open('data/frac_res_t.txt', 'w') as f:
         f.write("%s\n" % item)
 
 # %% Load data example
-fid_rec_res_t = []
-with open('data/fid_rec_res_t.txt', 'r') as filehandle:
+fid_old_t = []
+with open('data/fid_t.txt', 'r') as filehandle:
     for line in filehandle:
         # remove linebreak which is the last character of the string
         currentPlace = line[:-1]
 
         # add item to the list
-        fid_rec_res_t.append(float(currentPlace))
+        fid_old_t.append(float(currentPlace))
 
-print(fid_ps_res)
+#print(fid_ps_res)
 
 # %% Further testing
 
@@ -878,10 +878,301 @@ flag=False
 recovery=False
 
 
-circ += encode_input_v2(registers)
+circ = encode_input_v2(registers)
+circ.barrier()
 circ += unflagged_stabilizer_cycle(registers,
                                    reset=reset,
                                    recovery=recovery
                                    )
 circ.barrier()
 circ.append(Snapshot('stabilizer_0', 'density_matrix', num_qubits=5), qb)
+circ.append(Snapshot('measure_0', 'density_matrix', num_qubits=2), an)
+circ.barrier()
+circ += unflagged_stabilizer_cycle(registers,
+                                   reset=reset,
+                                   recovery=recovery
+                                   )
+circ.barrier()
+circ.append(Snapshot('stabilizer_1', 'density_matrix', num_qubits=5), qb)
+circ.append(Snapshot('measure_1', 'density_matrix', num_qubits=2), an)
+circ.barrier()
+
+results = execute(
+        circ,  
+        Aer.get_backend('qasm_simulator'),
+        noise_model=thermal_relaxation_model(),
+        shots=100
+    ).result()
+
+print(len(results.data()['snapshots']['density_matrix']['measure_0']))
+print(len(results.data()['snapshots']['density_matrix']['measure_1']))
+sv_pre = results.data()['snapshots']['density_matrix']['measure_0'][0]['value']
+sv_post = results.data()['snapshots']['density_matrix']['measure_1'][0]['value']
+
+print(sv_pre)
+print(sv_post)
+# %%
+
+Q = QuantumRegister(2)
+R = ClassicalRegister(2)
+
+circ = QuantumCircuit(Q,R)
+
+circ.h(Q[0])
+circ.snapshot('pre','density_matrix')
+circ.measure(Q,R)
+circ.snapshot('post','density_matrix')
+
+results = execute(
+        circ,  
+        Aer.get_backend('qasm_simulator'),
+        noise_model=None,
+        shots=1
+    ).result()
+
+sv_pre = results.data()['snapshots']['density_matrix']['pre'][0]['value']
+sv_post = results.data()['snapshots']['density_matrix']['post'][0]['value']
+
+print(sv_pre)
+print(sv_post)
+
+
+# %% TESTING WITH RECOVERY AND POST PROCESSING =================================
+# Tests different combinations of reset/no reset, transpiled, post-processing
+# and recovery.
+#
+# Took about 2h for me to run with 2048 shots per experiment
+
+n_cycles=15
+
+# Registers
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(2, 'ancilla_qubit')
+cr = get_classical_register(n_cycles, reset=False, recovery=True, flag=False) # Advanced list of registers
+readout = ClassicalRegister(5, 'readout')
+registers = StabilizerRegisters(qb, an, cr, readout)
+
+# Circuit without reset, without recovery
+circ = encode_input_v2(registers)
+for current_cycle in range(n_cycles):
+    circ += unflagged_stabilizer_cycle(registers,
+                                   reset=False,
+                                   recovery=False,
+                                   current_cycle=current_cycle
+                                   )
+    circ.barrier()
+    circ.append(Snapshot('stabilizer_'+str(current_cycle),
+        'density_matrix', num_qubits=5), qb)
+    circ.barrier()
+
+# Without reset, with recovery
+circ_rec = encode_input_v2(registers)
+for current_cycle in range(n_cycles):
+    circ_rec += unflagged_stabilizer_cycle(registers,
+                                   reset=False,
+                                   recovery=True,
+                                   current_cycle=current_cycle
+                                   )
+    circ_rec.barrier()
+    circ_rec.append(Snapshot('stabilizer_'+str(current_cycle),
+        'density_matrix', num_qubits=5), qb)
+    circ_rec.barrier()
+
+# Circuit with reset, without recovery
+circ_res = encode_input_v2(registers)
+for current_cycle in range(n_cycles):
+    circ_res += unflagged_stabilizer_cycle(registers,
+                                   reset=True,
+                                   recovery=False,
+                                   current_cycle=current_cycle
+                                   )
+    circ_res.barrier()
+    circ_res.append(Snapshot('stabilizer_'+str(current_cycle),
+        'density_matrix', num_qubits=5), qb)
+    circ_res.barrier()
+
+# Circuit with reset, with recovery
+circ_res_rec = encode_input_v2(registers)
+for current_cycle in range(n_cycles):
+    circ_res_rec += unflagged_stabilizer_cycle(registers,
+                                   reset=True,
+                                   recovery=True,
+                                   current_cycle=current_cycle
+                                   )
+    circ_res_rec.barrier()
+    circ_res_rec.append(Snapshot('stabilizer_'+str(current_cycle),
+        'density_matrix', num_qubits=5), qb)
+    circ_res_rec.barrier()
+
+# Transpilation
+routing_method = 'sabre'  # basic lookahead stochastic sabre
+initial_layout = None  # Overwriting the above layout
+layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
+translation_method = None  # 'unroller',  translator , synthesis
+repeats = 30
+optimization_level = 1
+circ_WACQT = shortest_transpile_from_distribution(circ, 
+    print_cost=False, repeats=repeats, routing_method=routing_method,
+    initial_layout=initial_layout, layout_method=layout_method,
+    translation_method=translation_method, optimization_level=optimization_level,
+    **WAQCT_device_properties
+)
+circ_rec_WACQT = shortest_transpile_from_distribution(circ_rec, 
+    print_cost=False, repeats=repeats, routing_method=routing_method,
+    initial_layout=initial_layout, layout_method=layout_method,
+    translation_method=translation_method, optimization_level=optimization_level,
+    **WAQCT_device_properties
+)
+circ_res_WACQT = shortest_transpile_from_distribution(circ_res, 
+    print_cost=False, repeats=repeats, routing_method=routing_method,
+    initial_layout=initial_layout, layout_method=layout_method,
+    translation_method=translation_method, optimization_level=optimization_level,
+    **WAQCT_device_properties
+)
+circ_res_rec_WACQT = shortest_transpile_from_distribution(circ_res_rec, 
+    print_cost=False, repeats=repeats, routing_method=routing_method,
+    initial_layout=initial_layout, layout_method=layout_method,
+    translation_method=translation_method, optimization_level=optimization_level,
+    **WAQCT_device_properties
+)
+
+#%%
+n_shots=4096
+# Without reset, without recovery
+fid_t = get_running_fidelity_data_den_mat(circ_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
+# Without reset, with recovery
+fid_rec_t = get_running_fidelity_data_den_mat(circ_rec_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
+# With reset, without recovery
+fid_res_t = get_running_fidelity_data_den_mat(circ_res_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
+# With reset, with recovery
+fid_res_rec_t = get_running_fidelity_data_den_mat(circ_res_rec_WACQT, 
+    n_shots=n_shots,
+    noise_model=thermal_relaxation_model(),
+    post_select=False,
+)
+print('Check!')
+
+#%%
+fid_list = [fid_t, fid_rec_t, fid_res_t, fid_res_rec_t, fid_rec_old_t]
+theta_list = []
+for fid in fid_list:
+    x_D = np.ones((n_cycles-1,2))
+    for i in range(n_cycles-1):
+        x_D[i][1] += i
+    y = np.log( np.reshape(np.asarray(fid), (n_cycles,1)) )[0:14]
+    theta = np.dot(np.dot(np.linalg.inv(np.dot(x_D.T, x_D)), x_D.T), y)
+    theta_list.append(theta)
+    print(' ')
+
+x = np.linspace(0,15,100)
+y_pred_list = []
+for theta in theta_list:
+    y_pred = np.exp(theta[0]) * np.exp(x*theta[1])
+    y_pred_list.append(y_pred)
+# %%
+fig, axs = plt.subplots(1, figsize=(10, 6))
+x_dis = np.arange(1,n_cycles+1)
+# Plot 3: Recovery, post-selection and nothing
+axs.plot(x_dis, fid_t, 'o', color='purple', label='No reset, no recovery')
+axs.plot(x_dis, fid_rec_t, 'o', color='red', label='No reset, with recovery')
+axs.plot(x_dis, fid_res_t, 'o', color='orange', label='With reset, no recovery')
+axs.plot(x_dis, fid_res_rec_t, 'o', color='blue', label='With reset and recovery')
+axs.plot(x_dis, fid_rec_old_t, 'o', color='green', label='Last weeks recovery without reset')
+
+axs.plot(x, y_pred_list[0], color='purple')
+axs.plot(x, y_pred_list[1], color='red')
+axs.plot(x, y_pred_list[2], color='orange')
+axs.plot(x, y_pred_list[3], color='blue')
+axs.plot(x, y_pred_list[4], color='green')
+
+axs.set_xlabel('Number of cycles')
+axs.set_ylabel('Average fidelity')
+axs.set_title('Average fidelites with fitted curves (OLS)')
+axs.legend()
+axs.grid(linewidth=1)
+
+# %% The data for this
+fid_t = [0.7820266483694307, 0.6942680402113506, 0.6189581634542902,
+ 0.5473101432465972, 0.49189582903411766, 0.4406014871442757,
+ 0.3965180858132731, 0.35892438856430925, 0.3232515892060338,
+ 0.29521018575604546, 0.2643302101916627, 0.2432135965746566,
+ 0.2201951856089369, 0.20415497655150022, 0.1806484687564687]
+
+fid_rec_t = [0.798477818390566,
+ 0.7491983321639275,
+ 0.6912507492283043,
+ 0.647402411328184,
+ 0.6061481085279817,
+ 0.5692872735136165,
+ 0.5456085538129658,
+ 0.50557278751874,
+ 0.4863295742848199,
+ 0.47139707390102287,
+ 0.45211248786089914,
+ 0.4367334419635363,
+ 0.41720460624066535,
+ 0.39088995869627174,
+ 0.5235649896825258]
+
+fid_res_t = [0.7845025023971008,
+ 0.7000043612149575,
+ 0.6177375025741868,
+ 0.5531687953842557,
+ 0.4904526283466424,
+ 0.4443648730741602,
+ 0.39394444061392514,
+ 0.3515689198422542,
+ 0.31564453545351395,
+ 0.28482463935727065,
+ 0.26279310911880344,
+ 0.2354521351007122,
+ 0.21409207252546017,
+ 0.19548900335461822,
+ 0.17601042193263264]
+
+fid_res_rec_t = [0.7932567010692473,
+ 0.7556814792494603,
+ 0.7234313525165101,
+ 0.6799904055689716,
+ 0.6350738978155256,
+ 0.6138778889625136,
+ 0.5900353078513001,
+ 0.5655541807102011,
+ 0.5343078026061858,
+ 0.5139255686725417,
+ 0.49641958452200496,
+ 0.47383896955861887,
+ 0.4587042687502112,
+ 0.45040523409969274,
+ 0.4407623852318419]
+
+fid_rec_old_t = [0.7870037958617031,
+ 0.7228019697228526,
+ 0.6471260594024145,
+ 0.5736778857468655,
+ 0.515823071528533,
+ 0.47456708456132407,
+ 0.4340437032569509,
+ 0.40167880095343594,
+ 0.36422711302267485,
+ 0.33298037969550853,
+ 0.31369607750544365,
+ 0.2963639572320855,
+ 0.279663412338165,
+ 0.2568175814295024,
+ 0.24790719515050716]
