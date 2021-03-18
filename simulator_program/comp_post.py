@@ -7,7 +7,7 @@ from stabilizers import logical_states
 reset = True
 recovery = False
 flag = False
-n_cycles = 5
+n_cycles = 15
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
 # cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
@@ -26,7 +26,7 @@ circ.snapshot('post_encoding', 'density_matrix')
 circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
                                 reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
 
-n_shots = 100
+n_shots = 1024*4
 results = execute(
     circ,
     Aer.get_backend('qasm_simulator'),
@@ -103,13 +103,14 @@ ax1.plot(range(n_cycles), fidelities_select, 'o-', label='Post select')
 ax1.plot(range(n_cycles), fidelities_post_process, 'o-', label='Post process')
 ax1.plot(range(n_cycles), fidelities_QEC, 'o-', label='QEC')
 ax1.set_xlabel(r'Error detection cycle $n$')
-ax1.set_ylabel('Post selected count')
+ax1.set_ylabel('Fidelity')
 ax1.legend()
 ax1.grid(linewidth=1)
 
 
 ax2.plot(range(n_cycles), select_counts, 'o-', label='No transpilation')
 ax2.set_xlabel(r'Error detection cycle $n$')
-ax2.set_ylabel(r'Post select fraction')
+ax2.set_ylabel(r'Post select count')
 ax2.legend()
 ax2.grid(linewidth=1)
+# %%
