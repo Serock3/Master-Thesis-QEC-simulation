@@ -3,22 +3,22 @@ from post_process import *
 from post_select import *
 import numpy as np
 from stabilizers import logical_states
+from matplotlib import pyplot as plt
+from qiskit.providers.aer.noise.errors import ReadoutError
+from qiskit.providers.aer.noise.noise_model import NoiseModel
 
 reset = True
 recovery = False
 flag = False
-n_cycles = 15
+n_cycles = 5
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
-# cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
 cr = get_classical_register(n_cycles, reset=reset,
                             recovery=recovery, flag=False)
 readout = ClassicalRegister(5, 'readout')
-
 registers = StabilizerRegisters(qb, an, cr, readout)
 
 
-# circ = get_empty_stabilizer_circuit(registers)
 
 circ = encode_input_v2(registers)
 circ.snapshot('post_encoding', 'density_matrix')
@@ -26,11 +26,16 @@ circ.snapshot('post_encoding', 'density_matrix')
 circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
                                 reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
 
-n_shots = 1024*4
+n_shots = 100
+p1given0 = 0.1
+p0given1 = p1given0
+noise_model = NoiseModel() #thermal_relaxation_model()
+read_error = ReadoutError([[1 - p1given0, p1given0], [p0given1, 1 - p0given1]])
+noise_model.add_all_qubit_readout_error(read_error, ['measure'])
 results = execute(
     circ,
     Aer.get_backend('qasm_simulator'),
-    noise_model=thermal_relaxation_model(),
+    noise_model=noise_model,
     shots=n_shots
 ).result()
 
@@ -89,7 +94,7 @@ circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
 results = execute(
     circ,
     Aer.get_backend('qasm_simulator'),
-    noise_model=thermal_relaxation_model(),
+    noise_model=noise_model,
     shots=n_shots
 ).result()
 
