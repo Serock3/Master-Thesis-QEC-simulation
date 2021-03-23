@@ -575,18 +575,19 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     for i in range(4):
         circ += stabilizer_list[i](registers, anQb=anQb_list[i],
                                    syn_bit=syn_bit_list[i], reset=reset)
-
+        circ.barrier()
     # Add an extra measurement to the next syndrome register
     # TODO: Make this compatible with using more than 1 ancilla
     if recovery and not reset:
         if current_cycle < len(registers.SyndromeRegister[0])-1:
             circ.measure(anQb_list[-1],
                          registers.SyndromeRegister[0][current_cycle+1][current_step][4])
+            circ.barrier()
 
     # Recovery
     if recovery is True:
         circ += unflagged_recovery(registers, reset, current_cycle)
-
+        circ.barrier
     return circ
 
 
