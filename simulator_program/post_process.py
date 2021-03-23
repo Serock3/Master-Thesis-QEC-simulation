@@ -21,8 +21,12 @@ syndrome_table = [[],
                   [(XGate, 4), (ZGate, 4)],
                   [(XGate, 3), (ZGate, 3)]]
 
-# %% Post processing statevectors
+# %% Misc functions
 
+
+def _filter_readout_errors_v1(syndromes, P_e, P_r):
+    # TODO: Make this?
+    pass
 
 def _get_new_syndromes(syndromes):
     """Convert a list of syndromes (from cycles of stabilizer measurements)
@@ -31,7 +35,7 @@ def _get_new_syndromes(syndromes):
     return [syndromes[0]] + [syndromes[i-1] ^ syndromes[i]
                              for i in range(1, len(syndromes))]
 
-
+# %% Post processing statevectors
 def post_process_statvec(statevector, syndromes):
     """Version two of post-processing. Takes one statevector and it corresponding syndrome,
     applies post-processing and returns a corrected statevector.
@@ -127,7 +131,7 @@ def apply_unitary_to_den_mat(density_matrix, unitary):
 
 def split_mem_into_syndromes(memory, current_cycle, cl_reg_size=4):
     """Splits the memory from density matrix snapshot, written as a string of a hexadecimal number, 
-    into current_cycle + 1 groups of cl_reg_size bits and convert to integers"""
+    into current_cycle + 1 groups of cl_reg_size bits and convert to integers."""
 
     return [(int(memory, 16) >> cl_reg_size*cycle) %
             2**cl_reg_size for cycle in range(current_cycle+1)]
@@ -155,13 +159,13 @@ def get_syndromes_den_mat(memory, current_cycle):
     #                 cl_reg_size*(current_cycle+1))
 
 
-def post_process_den_mat(state, memory, current_cycle):
+def post_process_den_mat(den_mat, memory, current_cycle):
     """Returns the post-processed density matrix where errors detected 
     in the corresponding memory are corrected."""
 
     syndromes = get_syndromes_den_mat(memory, current_cycle)
     correction_unitary = get_unitary_matrix_for_correction(syndromes)
-    return apply_unitary_to_den_mat(state, correction_unitary)
+    return apply_unitary_to_den_mat(den_mat, correction_unitary)
 
 def get_states_and_counts_in_cycle(results, current_cycle, post_process=True):
     """Generator for touples of states and their counts for the density matrix snapshots at current cycle in results"""
