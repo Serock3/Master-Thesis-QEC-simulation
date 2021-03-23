@@ -893,7 +893,7 @@ def get_fidelities(results_noisy, results_ideal, snapshot_type):
 
 
 
-def get_full_stabilizer_circuit(registers, n_cycles=1
+def get_full_stabilizer_circuit(registers, n_cycles=1,
         reset=True, recovery=False, flag=True):
     """Returns the circuit for a full stabilizer circuit, including encoding, 
     stabilizers (with conditional flags and recovery) and final measurement.

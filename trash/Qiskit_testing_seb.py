@@ -38,7 +38,7 @@ from qiskit.circuit.classicalregister import Clbit
 from simulator_program.custom_noise_models import pauli_noise_model
 from simulator_program.custom_transpiler import shortest_transpile_from_distribution, WAQCT_device_properties
 from simulator_program.simulator import *
-%matplotlib inline
+# %matplotlib inline
 
 #  Define our registers and circuit
 qb = QuantumRegister(5, 'code_qubit')     # The 5 qubits to encode the state in
