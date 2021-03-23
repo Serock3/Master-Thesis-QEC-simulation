@@ -1,10 +1,10 @@
 # %%
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister
 from matplotlib import pyplot as plt
-from stabilizers import encode_input_v2, get_classical_register, StabilizerRegisters, get_repeated_stabilization
+from .stabilizers import encode_input_v2, get_classical_register, StabilizerRegisters, get_repeated_stabilization
 from qiskit import execute, Aer
 from qiskit.aqua.utils import get_subsystems_counts
-from custom_noise_models import thermal_relaxation_model
+from .custom_noise_models import thermal_relaxation_model
 from qiskit.quantum_info import state_fidelity
 
 """
@@ -165,7 +165,7 @@ def get_running_fidelity_data_den_mat(circ, n_cycles, n_shots=2048,
             fid = 0
             for key in snapshots['stabilizer_'+str(current_cycle)]:
                 bin_string = bin(int(key, 16))[2:].zfill(
-                    cl_reg_size*(current_cycle+1))
+                    cl_reg_size*(current_cycle+1))[-cl_reg_size*(current_cycle+1):]
                 current_state = snapshots['stabilizer_' +
                                           str(current_cycle)][key]
                 for outcome in results.get_counts():
