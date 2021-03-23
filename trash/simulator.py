@@ -13,7 +13,7 @@ from qiskit import (QuantumCircuit,
                     ClassicalRegister, 
                     AncillaRegister, 
                     execute, 
-                    Aer
+                    Aer)
 from qiskit.visualization import plot_histogram
 from IPython.display import display
 
