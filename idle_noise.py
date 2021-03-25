@@ -31,12 +31,13 @@ circ = QuantumCircuit(qb, an, readout)
 
 circ.x(qb[1])
 circ.cx(qb[2],qb[1])
+circ.iswap(qb[2],qb[1])
 circ.barrier()
 circ.measure(qb[0], readout[0])
 circ.draw()
 
 # %%
-# TODO: Expand gate_times. Maybe have it as optional input?
+# TODO: Expand gate_times. Probably want to have it as optional input?
 gate_times = {'x': 20, 'cx': 200, 'barrier': 0, 'measure': 1000} # times in ns
 dag = circuit_to_dag(circ)
 qubit_list = circ.qubits
@@ -45,12 +46,12 @@ qubit_list = circ.qubits
 time_schedule = [ [] for _ in range(7) ]
 
 for node in dag.op_nodes():
-    #print(node.name)
-    #print(node.qargs)
-    #print(node.cargs)
-    #print(node.condition)
-    #print(' ')
-
+    print(node.name)
+    print(node.qargs)
+    print(node.cargs)
+    print(node.condition)
+    print(' ')
+#%%
     # Get the indexes of qubits involved in gate
     indexes = []
     for qargs in node.qargs:
@@ -77,7 +78,10 @@ for node in dag.op_nodes():
 
     # Add the gate to time_schedule
     for index in indexes:
-        # TODO: Add function for checking gate time in gate_times
+        # TODO: Make cx/cz add target and control qubit to dict
         time_schedule[index].append(
-                {'gate': node.name, 'time': 0})
+                {'gate': node.name, 'time': gate_times[node.name]})
 # %%
+for i in range(len(time_schedule)):
+    print('Schedule for qubit '+str(i)+':\n', time_schedule[i],'\n')
+    

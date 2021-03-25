@@ -558,7 +558,7 @@ circ_nob_rec_WACQT = get_standard_transpilation(circ_nob_rec)
 circ_bar_rec_WACQT = get_standard_transpilation(circ_bar_rec)
 
 #%% Running simulations
-n_shots=1024
+n_shots=512
 # Without reset, with recovery
 fid_rec_t = get_running_fidelity_data_den_mat(circ_rec_WACQT, 
     n_cycles=n_cycles,
@@ -603,7 +603,7 @@ print('Check!')
 
 
 #%% Curve fitting with OLS
-fid_list = [fid_rec_t, fid_res_rec_t, fid_mod_rec_t, fid_nob_rec_t]
+fid_list = [fid_rec_t, fid_res_rec_t, fid_mod_rec_t, fid_nob_rec_t, fid_bar_rec_t]
 theta_list = []
 for fid in fid_list:
     x_D = np.ones((n_cycles-1,2))
@@ -626,15 +626,16 @@ x_dis = np.arange(1,n_cycles+1)
 # Plot 3: Recovery, post-selection and nothing
 #axs.plot(x_dis, fid_rec_t, 'o', color='red', label='No reset')
 #axs.plot(x_dis, fid_res_rec_t, 'o', color='blue', label='Reset to 0 state')
-axs.plot(x_dis, fid_mod_rec_t, 'o', color='orange', label='Added barriers, reset to 1 state')
-axs.plot(x_dis, fid_nob_rec_t, 'o', color='green', label='Added barriers, reset to 0 state')
-axs.plot(x_dis, fid_bar_rec_t, 'o', color='black', label='Added barriers, no reset')
+axs.plot(x_dis, fid_mod_rec_t, 'o', color='orange', label='Reset to 1 state')
+axs.plot(x_dis, fid_nob_rec_t, 'o', color='green', label='Reset to 0 state')
+#axs.plot(x_dis, fid_bar_rec_t, 'o', color='black', label='Added barriers, no reset')
 #axs.plot(x_dis, fid_bar_rec, 'o', color='cyan', label='Added barriers, no reset, no transpilation')
 #%
 #axs.plot(x, y_pred_list[0], color='red')
 #axs.plot(x, y_pred_list[1], color='blue')
 axs.plot(x, y_pred_list[2], color='orange')
 axs.plot(x, y_pred_list[3], color='green')
+#axs.plot(x, y_pred_list[4], color='black')
 
 axs.set_xlabel('Number of cycles')
 axs.set_ylabel('Average fidelity')
