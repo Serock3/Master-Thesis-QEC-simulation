@@ -107,6 +107,7 @@ def get_unitary_matrix_for_correction(syndromes, include_ancillas=False):
     """Creates the unitary matrix corresponding to the correction procedure for a syndrome.
     include_ancillas adds two additional qubits to the unitary matrix, their states are not affected.
     """
+    # TODO: Using DensityMatrix.evolve(other, qargs=None) -> DensityMatrix, this func can return a circ instead
     # TODO: cache this function? Probably not needed tbh
     # TODO: Make this work for many syndromes? Or combine them afterwards?
     dim = 5  # TODO: make it work for e.g. Stean code
@@ -126,6 +127,7 @@ def get_unitary_matrix_for_correction(syndromes, include_ancillas=False):
 
 def apply_unitary_to_den_mat(density_matrix, unitary):
     """ Apply the (time) evolution defined by unitary to the density matrix"""
+    # NOTE: Use DensityMatrix.evolve(other, qargs=None) -> DensityMatrix instead? 
     return unitary @ density_matrix @ unitary.H
 
 
