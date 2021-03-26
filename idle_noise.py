@@ -31,8 +31,10 @@ circ = QuantumCircuit(qb, an, readout)
 
 circ.x(qb[1])
 circ.cx(qb[2],qb[1])
-circ.iswap(qb[2],qb[1])
 circ.barrier()
+#circ.swap(qb[1], qb[2])
+#circ.append(Snapshot('snapshot',
+#            'density_matrix', num_qubits=3), qb)
 circ.measure(qb[0], readout[0])
 circ.draw()
 
@@ -47,11 +49,11 @@ time_schedule = [ [] for _ in range(7) ]
 
 for node in dag.op_nodes():
     print(node.name)
-    print(node.qargs)
-    print(node.cargs)
-    print(node.condition)
-    print(' ')
-#%%
+    #print(node.qargs)
+    #print(node.cargs)
+    #print(node.condition)
+    #print(' ')
+
     # Get the indexes of qubits involved in gate
     indexes = []
     for qargs in node.qargs:
@@ -63,7 +65,6 @@ for node in dag.op_nodes():
     # Check the minimum time to the gate for all qubits involved
     shortest_times = np.zeros(len(time_schedule))
     for index in indexes:
-        #qubit = qubit_list[index]
         
         if time_schedule[index]:
             for gate in time_schedule[index]:
@@ -79,9 +80,53 @@ for node in dag.op_nodes():
     # Add the gate to time_schedule
     for index in indexes:
         # TODO: Make cx/cz add target and control qubit to dict
-        time_schedule[index].append(
-                {'gate': node.name, 'time': gate_times[node.name]})
+        #if len(indexes) >= 2:
+        time_schedule[index].append({
+            'gate': node.name, 
+            'time': gate_times[node.name],
+            'dependence': indexes
+            })
+        #else
+        #    time_schedule[index].append(
+        #        {'gate': node.name, 'time': gate_times[node.name]})
+
+
+#%% Reconstruct the circuit
+recirc = QuantumCircuit()
+for reg in circ.qregs + circ.cregs:
+    recirc.add_register(reg)
+#circ.append(Snapshot('name', 'density_matrix', num_qubits=5), qb)
+#recirc.append(XGate(), qb[0])
+
+
+current_depth = np.zeros(len(time_schedule))
+time_passed = np.zeros(len(time_schedule))
+current_qubit = np.argmin(time_passed)
+print(time_schedule[current_qubit][current_depth[current_qubit]])
+gate = time_schedule[current_qubit][current_depth[current_qubit]]
+
+# while True
+    # Choose gate to add with np.argmin(time_passed)
+    # Extract gate name and qubits involved
+
+    # Add the gate to circuit
+
+    # Update times and depth to qubits involved
+
+    # Check if all instructions have been added
+    # If so, break
+
+# Problems:
+#   Classical registers currently not involved
+#       Add that to time_schedule?
+#       Instead copy non-kraus instructions from previous circuit?
+#
+#   How to handle conditional gates
+#       Either add a set noise, or ignore it completely
+#       Add conditional noise on all other qubits for each con
+
 # %%
 for i in range(len(time_schedule)):
     print('Schedule for qubit '+str(i)+':\n', time_schedule[i],'\n')
-    
+
+# %%
