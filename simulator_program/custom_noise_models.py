@@ -10,7 +10,18 @@ from qiskit.providers.aer.noise import (
 from qiskit.providers.aer.noise import NoiseModel, QuantumError, ReadoutError
 from qiskit.providers.aer import noise
 import numpy as np
+from qiskit.circuit.library import standard_gates
+from inspect import getmembers, isfunction, isclass, ismodule
 
+def get_standard_gate_times():
+    """Return a dict of standard gate times (ns) used for simulator purposes."""
+    return {
+        'x': 20, 'y': 20, 'z': 0, 'h': 20, 'u1': 0, 'u2': 20, 'u3': 20,
+        'cx': 200, 'cz': 200, 'swap': 200, 'iswap': 200,
+        'barrier': 0, 'measure': 500, 'snapshot': 0
+    }
+
+## Define noise models
 
 def pauli_noise_model(p_gate1=0.0, p_meas=0.0, p_reset=0.0):
     '''Testing around with some Bit-flip noise'''
@@ -31,7 +42,6 @@ def pauli_noise_model(p_gate1=0.0, p_meas=0.0, p_reset=0.0):
         error_gate2, ["cx", "cz", "swap", "iswap"])
 
     return noise_bit_flip
-
 
 def thermal_relaxation_model(T1=40e3, T2=60e3, t_single=15, t_cz=300,
         t_measure=1000, t_reset=1000):
