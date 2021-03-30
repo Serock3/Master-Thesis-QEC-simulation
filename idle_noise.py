@@ -12,9 +12,8 @@ from simulator_program.custom_noise_models import thermal_relaxation_model
 
 # %%
 
-
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
-                              return_time=False):
+                              return_time=False, rename = False):
     """Creates a copy of a circuit with added thermal relaxation noise added
     for idle qubits.
 
@@ -26,6 +25,8 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         T2: T2 thermal relaxation time (ns).
         return_time: Optional boolean. If set to True, the function will return
             the total time of the circuit in addition to regular outputs.
+        rename: Whether or not to replace the name 'kraus' with the 'Idle X ns' to show the idle 
+        time in prints. If true, then circuit will not be runnable.
 
     Returns:
         new_circ: Copy of circ input, with added idle noise.
@@ -65,7 +66,8 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
             if time_diff:
                 thrm_relax = thermal_relaxation_error(
                     T1, T2, time_diff).to_instruction()
-                thrm_relax.name = f'Idle {time_diff}ns'
+                if rename:
+                    thrm_relax.name = f'Idle {time_diff}ns'
                 new_circ.append(thrm_relax, [qarg])
 
         # Assume instant if classical condition exists TODO: Better solution?
@@ -172,6 +174,7 @@ def add_standard_gate_times(incomplete_gate_times={}):
 
 # %% Internal testing with a standard stabilizer circuit
 if __name__ == '__main__':
+    from qiskit import execute
     from simulator_program.stabilizers import *
     from simulator_program.custom_transpiler import *
 
@@ -179,9 +182,17 @@ if __name__ == '__main__':
     an = AncillaRegister(2, 'ancilla_qubit')
     readout = ClassicalRegister(3, 'readout')
 
-    # circ = QuantumCircuit(qb, an, readout)
+    circ = QuantumCircuit(qb, an, readout)
+    circ.x(qb[0])
+    circ.x(qb[1])
+    circ.x(qb[1])
+    circ.x(qb[1])
+    circ.x(qb[1])
+    circ.x(qb[1])
+    circ.swap(qb[0],qb[1])
+    circ.measure(qb[0], readout[0])
+    circ.measure(qb[1], readout[1])
 
-    # circ.x(qb[1])
     # circ.cx(qb[2], qb[1])
     # circ.iswap(an[0], qb[2])
     # circ.measure(an[0], readout[0])
@@ -202,8 +213,16 @@ if __name__ == '__main__':
     #                                               repeats=1, routing_method='sabre', initial_layout=None,
     #                                               translation_method=None, layout_method='sabre',
     #                                               optimization_level=1, **WAQCT_device_properties)
-    # new_circ, times = add_idle_noise_to_circuit(circ_t, return_time=True)
-    # print(new_circ)
+    new_circ, times = add_idle_noise_to_circuit(circ, return_time=True)
+    print(new_circ)
+
+    results = execute(
+        new_circ,
+        Aer.get_backend('qasm_simulator'),
+        noise_model=None,
+        shots=1024*16
+    ).result()
+    print(results.get_counts())
     # print(times)
 
     # flag = False
