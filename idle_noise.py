@@ -50,6 +50,7 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         # Set cargs to entire classical conditional register if it exists, otherwise to the cargs 
         cargs = node.condition[0] if node.condition else node.cargs
 
+        # List of bits included in gate
         gate_args = []
         for arg in node.qargs+list(cargs):
             gate_args.append(arg)
@@ -63,8 +64,11 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
                 thrm_relax.name = f'Idle {time_diff}ns'
                 new_circ.append(thrm_relax,[qarg])
     
+        # Assume instant if classical condition exists TODO: Better solution?
+        gate_time = full_gate_times[node.name] if not node.condition else 0
+        # Advance the time for the qubits included in the gate
         for gate_arg in gate_args:
-            time_passed[gate_arg] = latest_time + full_gate_times[node.name]
+            time_passed[gate_arg] = latest_time + gate_time
 
         if node.name == 'snapshot':
             time_at_snapshots_and_end[node.op.label] = max(time_passed.values())
@@ -73,7 +77,7 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         new_circ.append(node.op, node.qargs, node.cargs)
 
     time_at_snapshots_and_end['end'] = max(time_passed.values())
-    print(np.max(list(time_passed.values())))
+
     new_circ._layout = circ._layout
 
     if return_time:
@@ -203,6 +207,8 @@ if __name__ == '__main__':
     #         translation_method=None, layout_method='sabre',
     #         optimization_level=1, **WAQCT_device_properties)
 
-    # new_circ = add_idle_noise_to_circuit(circ_t)
-    # print(new_circ)
+    # new_circ, times = add_idle_noise_to_circuit(circ_t, return_time=True)
+    # # print(new_circ)
+    # new_circ.draw(output='mpl')
 
+# %%
