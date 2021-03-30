@@ -58,7 +58,7 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         for arg in node.qargs+list(cargs):
             gate_args.append(arg)
 
-        latest_time = max([time_passed[gate_arg] for gate_arg in gate_args ])
+        latest_time = max([time_passed[gate_arg] for gate_arg in gate_args])
         # Apply idle noise to qargs
         for qarg in node.qargs:
             time_diff = latest_time - time_passed[qarg]
@@ -69,7 +69,14 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
                 new_circ.append(thrm_relax, [qarg])
 
         # Assume instant if classical condition exists TODO: Better solution?
-        gate_time = full_gate_times[node.name] if not node.condition else 0
+
+        try:
+            gate_time = full_gate_times[node.name] if not node.condition else 0
+        except KeyError as op:
+            print(
+                f'WARNING! No operation duration specified for {op.args}, assuming instant.')
+            gate_time = 0
+
         # Advance the time for the qubits included in the gate
         for gate_arg in gate_args:
             time_passed[gate_arg] = latest_time + gate_time
@@ -172,14 +179,14 @@ if __name__ == '__main__':
     an = AncillaRegister(2, 'ancilla_qubit')
     readout = ClassicalRegister(3, 'readout')
 
-    circ = QuantumCircuit(qb, an, readout)
+    # circ = QuantumCircuit(qb, an, readout)
 
     # circ.x(qb[1])
     # circ.cx(qb[2], qb[1])
     # circ.iswap(an[0], qb[2])
-    circ.measure(an[0], readout[0])
-    circ.measure(an[1], readout[1])
-    circ.x(qb[0]).c_if(readout, 3)
+    # circ.measure(an[0], readout[0])
+    # circ.measure(an[1], readout[1])
+    # circ.x(qb[0]).c_if(readout, 3)
     # circ.barrier()
 
     # circ.z(qb[0])
@@ -187,49 +194,50 @@ if __name__ == '__main__':
     #                      num_qubits=2), [qb[2], qb[0]])
     # circ.measure(an[0], readout[0])
 
-    display(circ.draw())
-    # circ_t = transpile(circ, routing_method='sabre', initial_layout=None,
-    #                    translation_method=None, layout_method='sabre',
-    #                    optimization_level=1, **WAQCT_device_properties)
+    # display(circ.draw())
+    # # circ_t = transpile(circ, routing_method='sabre', initial_layout=None,
+    # #                    translation_method=None, layout_method='sabre',
+    # #                    optimization_level=1, **WAQCT_device_properties)
     # circ_t = shortest_transpile_from_distribution(circ, print_cost=False,
     #                                               repeats=1, routing_method='sabre', initial_layout=None,
     #                                               translation_method=None, layout_method='sabre',
     #                                               optimization_level=1, **WAQCT_device_properties)
-    new_circ, times = add_idle_noise_to_circuit(circ, return_time=True)
-    print(new_circ)
-    print(times)
+    # new_circ, times = add_idle_noise_to_circuit(circ_t, return_time=True)
+    # print(new_circ)
+    # print(times)
 
-    flag = False
-    reset = False
-    recovery = True
-    n_cycles=0
+    # flag = False
+    # reset = True
+    # recovery = True
+    # n_cycles = 2
 
-    # Define our registers (Maybe to be written as function?)
-    qb = QuantumRegister(5, 'code_qubit')
-    an = AncillaRegister(2, 'ancilla_qubit')
-    cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=flag)
-    readout = ClassicalRegister(5, 'readout')
+    # # Define our registers (Maybe to be written as function?)
+    # qb = QuantumRegister(5, 'code_qubit')
+    # an = AncillaRegister(2, 'ancilla_qubit')
+    # cr = get_classical_register(
+    #     n_cycles, reset=reset, recovery=recovery, flag=flag)
+    # readout = ClassicalRegister(5, 'readout')
 
-    registers = StabilizerRegisters(qb, an, cr, readout)
-    circ = get_empty_stabilizer_circuit(registers)
+    # registers = StabilizerRegisters(qb, an, cr, readout)
+    # circ = get_empty_stabilizer_circuit(registers)
 
-    # Get the complete circuit
-    circ += get_full_stabilizer_circuit(registers,
-                                        n_cycles=n_cycles,
-                                        reset=reset,
-                                        recovery=recovery,
-                                        flag=flag,
-                                        )
+    # # Get the complete circuit
+    # circ += get_full_stabilizer_circuit(registers,
+    #                                     n_cycles=n_cycles,
+    #                                     reset=reset,
+    #                                     recovery=recovery,
+    #                                     flag=flag,
+    #                                     )
 
-    # Transpile
-    circ_t = shortest_transpile_from_distribution(circ, print_cost=False,
-            repeats=10, routing_method='sabre', initial_layout=None,
-            translation_method=None, layout_method='sabre',
-            optimization_level=1, **WAQCT_device_properties)
+    # # Transpile
+    # circ_t = shortest_transpile_from_distribution(circ, print_cost=False,
+    #                                               repeats=10, routing_method='sabre', initial_layout=None,
+    #                                               translation_method=None, layout_method='sabre',
+    #                                               optimization_level=1, **WAQCT_device_properties)
 
-    new_circ, times = add_idle_noise_to_circuit(circ_t, return_time=True)
-    print(new_circ)
-    print(times)
+    # new_circ, times = add_idle_noise_to_circuit(circ_t, return_time=True)
+    # print(new_circ)
+    # print(times)
     # display(new_circ.draw(output='mpl'))
 
 # %%
