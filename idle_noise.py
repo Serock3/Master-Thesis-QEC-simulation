@@ -9,7 +9,9 @@ from qiskit.converters import circuit_to_dag
 import numpy as np
 
 from simulator_program.custom_noise_models import thermal_relaxation_model
-
+from simulator_program.stabilizers import (encode_input_v2,
+                                           get_empty_stabilizer_circuit)
+from simulator_program.custom_transpiler import *
 # %%
 
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
@@ -99,7 +101,7 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
     return new_circ
 
 
-def get_circuit_time(circ, gate_times):
+def get_circuit_time(circ, gate_times={}):
     """Returns the total run time of a circuit, given specific gate times.
 
     Args:
@@ -146,9 +148,35 @@ def get_circuit_time(circ, gate_times):
 
     return time_at_snapshots_and_end
 
+
+def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
+        gate_times={}, T1=40e3, T2=60e3):
+    """Returns a circuit with only idle noise and snapshots that matches the
+    times from add_idle_noise_to_circuit. Assumes that all involved qubtits
+    are at the same time at snapshots.
+    """
+
+    if encode_logical:
+        circ = encode_input_v2(registers)
+    else:
+        circ = get_empty_stabilizer_circuit(registers)
+
+    # Add snapshots and idle_noise
+    time_passed = get_circuit_time(circ, gate_times=gate_times)['end']
+    for key in snapshot_times:
+        time_diff = snapshot_times[key]-time_passed
+        if time_diff > 0:
+            thrm_relax = thermal_relaxation_error(
+                    T1, T2, time_diff).to_instruction()
+            for qubit in circ.qubits:
+                circ.append(thrm_relax, [qubit])
+        circ.append(Snapshot(key, 'density_matrix', num_qubits=5), registers.QubitRegister)
+        time_passed = snapshot_times[key]
+
+    return circ
+
+
 # NOTE: Kanske bör ligga i custom_transpiler? Osäker
-
-
 def get_standard_gate_times():
     """Return a dict of standard gate times (ns) used for simulator purposes."""
     return {
@@ -158,8 +186,6 @@ def get_standard_gate_times():
     }
 
 # TODO: Detta kan väl vara ett argumment i funktionen ovan?
-
-
 def add_standard_gate_times(incomplete_gate_times={}):
     """Add the standard gate times to a dict with missing entries"""
     standard_gate_times = get_standard_gate_times()
