@@ -200,7 +200,7 @@ def encode_input_v2(registers):
     circ.cz(qbReg[1], qbReg[2])
     circ.cz(qbReg[3], qbReg[4])
     circ.cz(qbReg[0], qbReg[4])
-
+    circ.barrier()
     return circ
 
 
