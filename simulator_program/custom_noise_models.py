@@ -18,18 +18,17 @@ import warnings
 # from inspect import getmembers, isfunction, isclass, ismodule
 
 # %%
-# Contains all the gate times specific to the WACQT device, grouped into categories
-
-# Lists of gate names included in noise models and their type.
-# Gates not in these sets will not be possible to include in noise models.
-# This will help noise models know how many qubits to apply noise to.
-# NOTE: Can this be generated automatically from standard_gates?
 
 # Class to contain gate times.
 # Auto populates the gate_times dictionary with default values for single and two qubit gates
 
 
 class GateTimes:
+
+    # Lists of gate names included in noise models and their type.
+    # Gates not in these sets will not be possible to include in noise models.
+    # This will help noise models know how many qubits to apply noise to.
+    # NOTE: Can this be generated automatically from standard_gates?
     single_qubit_gates = {'x', 'y', 'z', 'h', 'sx',
                           'sz', 'sy', 's', 't', 'u1', 'u2', 'u3'}
     two_qubit_gates = {'cx', 'cz', 'swap', 'iswap'}
@@ -37,6 +36,16 @@ class GateTimes:
     directives = {'barrier', 'snapshot'}
 
     def __init__(self, single_qubit_default=0, two_qubit_default=0, custom_gate_times={}):
+        """Class to contain a dictionary of gate times. 
+        Adds the gate times specified in custom_gate_times and 
+        auto populates the rest with specified default values 
+        for single and two qubit gates.
+
+        Args:
+            single_qubit_default (int, optional): Gate time for any single qubit gate not specified in custom_gate_times. Defaults to 0.
+            two_qubit_default (int, optional): Gate time for any two qubit gate not specified in custom_gate_times. Defaults to 0.
+            custom_gate_times (dict, optional): Specify any desired gate times. Defaults to {}.
+        """
         self.gate_times = {
             name: single_qubit_default for name in GateTimes.single_qubit_gates}
         self.gate_times.update(
@@ -69,7 +78,12 @@ class GateTimes:
     def get_two_qubit_times(self):
         return {name: self.gate_times[name] for name in GateTimes.two_qubit_gates}
 
+    def __repr__(self):
+        return f"GateTimes(0, 0, {self.gate_times.__repr__()})"
 
+    def __str__(self):
+        return "GateTimes object with times (ns)\n"+ self.gate_times.__str__()
+        
 # TODO: Here we can define e.g. WACQT_targeted_gate_times, and other versions
 WACQT_gate_times = GateTimes(
     single_qubit_default=20, two_qubit_default=200,
@@ -99,9 +113,9 @@ def thermal_relaxation_model_V2(T1=40e3, T2=60e3, gate_times=WACQT_gate_times):
         Noise model: thermal relaxation noise model
     """
 
-    # Convert from GateTimes object to dict
+    # Convert from dict object to GateTimes object
     if isinstance(gate_times, dict):
-        gate_times = GateTimes(0, 0, gate_times)
+        gate_times = GateTimes(0, 0, WACQT_gate_times.get_gate_times(gate_times))
 
     noise_damping = NoiseModel()
 
@@ -115,7 +129,7 @@ def thermal_relaxation_model_V2(T1=40e3, T2=60e3, gate_times=WACQT_gate_times):
     #     time_group[gate_times[single_qubit_gate]].append(single_qubit_gate)
 
     # Add single qubit error in groups of same duration
-        # Add errors to noise model
+    # Add errors to noise model
 
     time_group = {}
     for k, v in gate_times.get_single_qubit_times().items():
