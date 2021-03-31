@@ -1,7 +1,6 @@
 # File containing functions for adding noise to idle qubits and measuring
 # circuit times. Also contains a dictionary of standard gate times which can
 # be called for related purposes, such as noise models.
-
 # %% Import modules
 from qiskit import QuantumCircuit
 from qiskit.providers.aer.noise import thermal_relaxation_error
@@ -12,6 +11,8 @@ from simulator_program.custom_noise_models import thermal_relaxation_model
 from simulator_program.stabilizers import (encode_input_v2,
                                            get_empty_stabilizer_circuit)
 from simulator_program.custom_transpiler import *
+from simulator_program.custom_noise_models import WACQT_gate_times, GateTimes
+
 # %%
 
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
@@ -21,7 +22,7 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
 
     Args:
         circ: Qiskit circuit object to be copied
-        gate_times: Dict containing all gate times in ns. If left empty or 
+        gate_times: Dict/GateTimes object containing all gate times in ns. If left empty or 
             missing elements, standard values will be added.
         T1: T1 thermal relaxation time (ns).
         T2: T2 thermal relaxation time (ns).
@@ -35,7 +36,13 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         gate_times (optional): The total time of the new circuit (ns).
     """
     # Get gate times missing from input
-    full_gate_times = add_standard_gate_times(gate_times)
+    if isinstance(gate_times, dict):
+        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times = gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+        full_gate_times = WACQT_gate_times
 
     # Convert circuit to DAG
     dag = circuit_to_dag(circ)
@@ -113,7 +120,13 @@ def get_circuit_time(circ, gate_times={}):
         total_time: Total time in ns for running the full circuit
     """
     # Get gate times missing from input
-    full_gate_times = add_standard_gate_times(gate_times)
+    if isinstance(gate_times, dict):
+        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times = gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+        full_gate_times = WACQT_gate_times
 
     # Covert circuit to DAG
     dag = circuit_to_dag(circ)
@@ -203,6 +216,7 @@ if __name__ == '__main__':
     from qiskit import execute
     from simulator_program.stabilizers import *
     from simulator_program.custom_transpiler import *
+    from simulator_program.custom_noise_models import *
 
     qb = QuantumRegister(3, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
@@ -215,9 +229,10 @@ if __name__ == '__main__':
     circ.x(qb[1])
     circ.x(qb[1])
     circ.x(qb[1])
+    circ.swap(qb[2],qb[1])
     circ.swap(qb[0],qb[1])
-    circ.measure(qb[0], readout[0])
     circ.measure(qb[1], readout[1])
+    circ.measure(qb[0], readout[0])
 
     # circ.cx(qb[2], qb[1])
     # circ.iswap(an[0], qb[2])
@@ -239,14 +254,14 @@ if __name__ == '__main__':
     #                                               repeats=1, routing_method='sabre', initial_layout=None,
     #                                               translation_method=None, layout_method='sabre',
     #                                               optimization_level=1, **WAQCT_device_properties)
-    new_circ, times = add_idle_noise_to_circuit(circ, return_time=True)
+    new_circ, times = add_idle_noise_to_circuit(circ, gate_times=WACQT_gate_times ,return_time=True, rename=False)
     print(new_circ)
 
     results = execute(
         new_circ,
         Aer.get_backend('qasm_simulator'),
-        noise_model=None,
-        shots=1024*16
+        noise_model=thermal_relaxation_model_V2(),
+        shots=1024*8
     ).result()
     print(results.get_counts())
     # print(times)
