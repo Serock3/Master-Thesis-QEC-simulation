@@ -12,7 +12,7 @@ from simulator_program.stabilizers import (encode_input_v2,
                                            get_empty_stabilizer_circuit)
 from simulator_program.custom_transpiler import *
 from simulator_program.custom_noise_models import WACQT_gate_times, GateTimes
-
+from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 # %%
 
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
@@ -161,20 +161,23 @@ def get_circuit_time(circ, gate_times={}):
 
     return time_at_snapshots_and_end
 
-
+# Crashes when transpile=True
+# Cannot handle transpiled circuits
 def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
-        gate_times={}, T1=40e3, T2=60e3):
+        gate_times={}, T1=40e3, T2=60e3, transpile=False):
     """Returns a circuit with only idle noise and snapshots that matches the
     times from add_idle_noise_to_circuit. Assumes that all involved qubtits
     are at the same time at snapshots.
     """
 
     if encode_logical:
-        circ = encode_input_v2(registers)
+        circ = get_empty_stabilizer_circuit(registers)
+        circ += encode_input_v2(registers)
+        
     else:
         circ = get_empty_stabilizer_circuit(registers)
 
-    # Add snapshots and idle_noise
+    # Add snapshots and idle noise
     time_passed = get_circuit_time(circ, gate_times=gate_times)['end']
     for key in snapshot_times:
         time_diff = snapshot_times[key]-time_passed
@@ -186,29 +189,76 @@ def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
         circ.append(Snapshot(key, 'density_matrix', num_qubits=5), registers.QubitRegister)
         time_passed = snapshot_times[key]
 
+    if transpile:
+        return shortest_transpile_from_distribution(circ, print_cost=False,
+            repeats=10, routing_method='sabre', initial_layout=None,
+            translation_method=None, layout_method='sabre',
+            optimization_level=1, **WAQCT_device_properties)
     return circ
 
+# This one should work with transpilation when encode_logical=True
+def get_empty_noisy_circuit_v2(circ, snapshot_times, encode_logical=False,
+        gate_times={}, T1=40e3, T2=60e3):
 
-# NOTE: Kanske bör ligga i custom_transpiler? Osäker
-def get_standard_gate_times():
-    """Return a dict of standard gate times (ns) used for simulator purposes."""
-    return {
-        'x': 20, 'y': 20, 'z': 0, 'h': 20, 'u1': 0, 'u2': 20, 'u3': 20,
-        'cx': 200, 'cz': 200, 'swap': 200, 'iswap': 200,
-        'barrier': 0, 'measure': 500, 'snapshot': 0
-    }
+    new_circ = QuantumCircuit()
+    time_passed = 0
+    for reg in circ.qregs + circ.cregs:
+        new_circ.add_register(reg)
 
-# TODO: Detta kan väl vara ett argumment i funktionen ovan?
-def add_standard_gate_times(incomplete_gate_times={}):
-    """Add the standard gate times to a dict with missing entries"""
-    standard_gate_times = get_standard_gate_times()
-    # TODO: Add an if-statement that checks for keys 'single' and 'double' in
-    #   incomplete list. If they exist, apply its value to all single/two qubit
-    #   gates instead of using standard times
-    for key in standard_gate_times:
-        if key not in incomplete_gate_times:
-            incomplete_gate_times[key] = standard_gate_times[key]
-    return incomplete_gate_times
+    if encode_logical:
+        new_circ += rebuild_circuit_up_to_barrier(circ, gate_times=gate_times)
+        time_passed = snapshot_times['post_encoding']
+
+    # Append all snapshots from the circuit
+    dag = circuit_to_dag(circ)
+    snapshots = []    
+    for node in dag.op_nodes():
+        if node.name == 'snapshot':
+            snapshots.append(node)
+
+    # Add all snapshots from previous circuit
+    index = 0
+    for key in snapshot_times:
+        if key == 'end':
+            break
+        time_diff = snapshot_times[key]-time_passed
+        if time_diff > 0:
+            thrm_relax = thermal_relaxation_error(
+                    T1, T2, time_diff).to_instruction()
+            for qubit in new_circ.qubits:
+                new_circ.append(thrm_relax, [qubit])
+        new_circ.append(snapshots[index].op, snapshots[index].qargs, snapshots[index].cargs)
+        time_passed = snapshot_times[key]
+        index += 1
+    return new_circ
+    
+def rebuild_circuit_up_to_barrier(circ, gate_times={}):
+    """Build a copy of a circuit up until (and inculding) the first barrier."""
+
+    # Get gate times missing from input
+    if isinstance(gate_times, dict):
+        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times = gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+        full_gate_times = WACQT_gate_times
+
+    # Convert circuit to DAG
+    dag = circuit_to_dag(circ)
+
+    # New circuit to be generated
+    new_circ = QuantumCircuit()
+    for reg in circ.qregs + circ.cregs:
+        new_circ.add_register(reg)
+
+    for node in dag.op_nodes():
+        new_circ.append(node.op, node.qargs, node.cargs)
+        if node.name == 'barrier':
+            break
+
+    new_circ._layout = circ._layout
+    return new_circ
 
 
 # %% Internal testing with a standard stabilizer circuit

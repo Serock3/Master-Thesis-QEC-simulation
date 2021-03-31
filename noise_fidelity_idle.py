@@ -24,7 +24,7 @@ from idle_noise import *
 def get_testing_circuit(registers, reset, n_cycles):
     circ = encode_input_v2(registers)
     circ.barrier()
-    circ.append(Snapshot('post_encoding','density_matrix', num_qubits=5), registers.QubitRegister)
+    circ.append(Snapshot('post_encoding', 'density_matrix', num_qubits=5), registers.QubitRegister)
     circ += get_repeated_stabilization(registers, n_cycles=n_cycles, reset=reset,
     recovery=True, flag=False, snapshot_type='density_matrix')
     return circ
@@ -36,7 +36,8 @@ def get_standard_transpilation(circ):
         optimization_level=1, **WAQCT_device_properties)
 
 def get_running_fidelity_data_den_mat_mod(results, trivial_state, n_cycles):
-    """Modified version used in this file"""
+    """Modified version of get_running_fidelity_data_den_mat used in this file
+    for correcting errors"""
     # Missing: results, 
     fidelities = []
     cl_reg_size = len(list(results.get_counts().keys())[0].split()[1])
@@ -70,7 +71,7 @@ def get_running_fidelity_idle_circuit(results, trivial_state, n_cycles):
 reset = True
 recovery = True
 flag = False
-n_cycles = 10
+n_cycles = 15
 
 # Registers
 qb = QuantumRegister(5, 'code_qubit')
@@ -96,10 +97,13 @@ trivial = get_trivial_state(circ)
 trivial_t = get_trivial_state(circ_t)
 trivial_res = get_trivial_state(circ_res_t)
 
-circ_empty = get_empty_noisy_circuit(registers, time, encode_logical=True)
+circ_empty = get_empty_noisy_circuit(registers, time, encode_logical=True,
+    transpile=False)
+#circ_empty = get_empty_noisy_circuit_v2(circ_i, time, encode_logical=True)
+
 #%% Run circuits
 noise_model = thermal_relaxation_model()
-n_shots = 1024
+n_shots = 512
 print('Running simulations')
 results = execute(circ, Aer.get_backend('qasm_simulator'),
     noise_model=noise_model, shots=n_shots).result()
@@ -158,10 +162,10 @@ for i in MSE:
 #%% Plotting
 fig, ax = plt.subplots(1, figsize=(10, 6))
 x_dis = np.arange(1,n_cycles+1)
-ax.plot(x_dis, fid, 'o', color='red', label='No idle noise')
-ax.plot(x_dis, fid_i, 'o', color='blue', label='Recovery with idle noise')
+ax.plot(x_dis, fid, 'o', color='red', label='QEC, no idle noise')
+ax.plot(x_dis, fid_i, 'o', color='blue', label='QEC with idle noise')
 ax.plot(x_dis, fid_empty, 'o', color='black', label='Empty encoded circuit')
-ax.plot(x_dis, fid_t, 'o', color='green', label='Transpiled, no idle noise')
+ax.plot(x_dis, fid_t, 'o', color='green', label='Transpiled QEC, no idle noise')
 #ax.plot(x_dis, fid_res, 'o', color='green')
 #ax.plot(x_dis, fid_res_i, 'o', color='orange')
 
