@@ -38,6 +38,11 @@ coupling_map = CouplingMap(
     description='A hexagoal 7qb code with two ancillas')
 
 # Dict with device properties of the WAQCT QC to be used for transpilation.
+WAQCT_device_properties_old = {
+    "basis_gates": basis_gates, "coupling_map": coupling_map}
+
+# WAQCT 7 qb UPDATED BASIS
+basis_gates = ['id', 'u1', 'x','y','z','sx','sy','iswap', 'cz']
 WAQCT_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map}
 
