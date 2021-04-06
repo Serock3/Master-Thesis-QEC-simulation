@@ -4,10 +4,11 @@ from qiskit.visualization import plot_circuit_layout
 from qiskit.circuit.equivalence_library import SessionEquivalenceLibrary
 from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZGate
 from qiskit import QuantumCircuit, QuantumRegister
+from idle_noise import get_circuit_time
 import warnings
 
 
-def default_cost_func(circ, t_single=15, t_multi=300):
+def weighted_gate_time_cost_fun(circ, t_single=15, t_multi=300):
     num_single_qb_gates = circ.size()-circ.num_nonlocal_gates()
     num_multi_qb_gates = circ.num_nonlocal_gates()
     return num_single_qb_gates*t_single+num_multi_qb_gates*t_multi
@@ -17,10 +18,16 @@ def depth_cost_func(circ, t_single=15, t_multi=300):
     return circ.depth()
 
 
-def shortest_transpile_from_distribution(circuit, repeats=40, cost_func=default_cost_func, print_cost=True,
-                                         routing_method='sabre', initial_layout=None,
-                                         translation_method=None, layout_method='sabre',
-                                         optimization_level=1, **kwargs):
+def shortest_transpile_from_distribution(circuit,
+                                         repeats=40,
+                                         cost_func=lambda circ: get_circuit_time(circ)['end'],
+                                         print_cost=True,
+                                         routing_method='sabre',
+                                         initial_layout=None,
+                                         translation_method=None,
+                                         layout_method='sabre',
+                                         optimization_level=1,
+                                         **kwargs):
     kwargs.update(WACQT_device_properties)
     kwargs['routing_method'] = routing_method
     kwargs['initial_layout'] = initial_layout
