@@ -1,4 +1,4 @@
-# This file contains all neccessary functions for compiling and running the
+# This file contains all necessary functions for compiling and running the
 # [[5,1,3]] error correction code, both with or without flagging. Most functions
 # take optional arguments for whether to perform recovery, use flags, or reset
 # the ancilla qubit. An example of how to use the functions is shown at the
@@ -42,7 +42,7 @@ class StabilizerRegisters:
 
 
 def get_full_stabilizer_circuit(registers, n_cycles=1,
-                                reset=True, recovery=False, flag=True):
+                                reset=True, recovery=False, flag=True, **kwargs):
     """Returns the circuit for a full repeating stabilizer circuit, including encoding,
     n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
     """
@@ -65,7 +65,7 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
 
     # Stabilizer
     circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-                                       reset=reset, recovery=recovery, flag=flag)
+                                       reset=reset, recovery=recovery, flag=flag, **kwargs)
 
     # Final readout
     circ.measure(qbReg, readout)
@@ -75,7 +75,7 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
 
 
 def get_repeated_stabilization(registers, n_cycles=1,
-                               reset=True, recovery=False, flag=True, snapshot_type='statevector'):
+                               reset=True, recovery=False, flag=False, snapshot_type='density_matrix', **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -104,7 +104,8 @@ def get_repeated_stabilization(registers, n_cycles=1,
             circ += unflagged_stabilizer_cycle(registers,
                                                reset=reset,
                                                recovery=recovery,
-                                               current_cycle=current_cycle
+                                               current_cycle=current_cycle,
+                                               **kwargs
                                                )
         if snapshot_type:# TODO: Maybe a nice looking solution?
             if snapshot_type == 'density_matrix':
@@ -540,17 +541,17 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     recovery. The input current_step is only relevant for flagged cycles, and
     should be set to 0 otherwise.
 
-    NOTE: Maybe use a list if ancilla idices instead? E.g. ancillas = [1,2,1,2]
+    NOTE: Maybe use a list if ancilla indices instead? E.g. ancillas = [1,2,1,2]
     Args:
-        num_ancillas: Specifies how many acillas to spread the measurements over
+        num_ancillas: Specifies how many ancillas to spread the measurements over
     """
 
-    # Use the previous behaviour if num_ancillas=None
+    # Use the previous behavior if num_ancillas=None
     if not num_ancillas:
         if registers.AncillaRegister.size == 2:
             anQb_list = [registers.AncillaRegister[1]]*4
         elif registers.AncillaRegister.size >= 4:
-            # I don't like this really, we don't use the flagged ciruit anymore so it shouldn't get the 0 stop by default
+            # I don't like this really, we don't use the flagged circuit anymore so it shouldn't get the 0 spot by default
             anQb_list = [registers.AncillaRegister[n] for n in [1, 2, 3, 4]]
         else:
             Warning("Ancilla reg too small (this should never happen)")
@@ -1013,7 +1014,7 @@ def logical_states(include_ancillas='front') -> List[List[float]]:
     """Returns the logical states for the [[5,1,3]] code.
 
     Args:
-        include_ancillas (str/None, optional): Whether to append the acillas by tensor product to the end. Defaults to True.
+        include_ancillas (str/None, optional): Whether to append the ancillas by tensor product to the end. Defaults to True.
 
     Returns:
         List[List[float]]: List of both logical states
