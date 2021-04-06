@@ -7,46 +7,7 @@ from qiskit import QuantumCircuit, QuantumRegister
 from idle_noise import get_circuit_time
 import warnings
 
-
-def weighted_gate_time_cost_fun(circ, t_single=15, t_multi=300):
-    num_single_qb_gates = circ.size()-circ.num_nonlocal_gates()
-    num_multi_qb_gates = circ.num_nonlocal_gates()
-    return num_single_qb_gates*t_single+num_multi_qb_gates*t_multi
-
-
-def depth_cost_func(circ, t_single=15, t_multi=300):
-    return circ.depth()
-
-
-def shortest_transpile_from_distribution(circuit,
-                                         repeats=40,
-                                         cost_func=lambda circ: get_circuit_time(circ)['end'],
-                                         print_cost=True,
-                                         routing_method='sabre',
-                                         initial_layout=None,
-                                         translation_method=None,
-                                         layout_method='sabre',
-                                         optimization_level=1,
-                                         **kwargs):
-    kwargs.update(WACQT_device_properties)
-    kwargs['routing_method'] = routing_method
-    kwargs['initial_layout'] = initial_layout
-    kwargs['translation_method'] = translation_method
-    kwargs['layout_method'] = layout_method
-    kwargs['optimization_level'] = optimization_level
-
-    depth = 10000
-    for _ in range(repeats):
-        with warnings.catch_warnings():  # sabre causes deprecation warning, this will ignore them
-            warnings.simplefilter("ignore")
-            transpiled_circuit_tmp = transpile(circuit, **kwargs)
-        if print_cost:
-            print('cost: ', cost_func(transpiled_circuit_tmp))
-        if transpiled_circuit_tmp.depth() < depth:
-            depth = transpiled_circuit_tmp.depth()
-            transpiled_circuit = transpiled_circuit_tmp
-    return transpiled_circuit
-
+#%% Constants
 
 # WACQT 7 qb
 basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap', 'cz']
@@ -86,10 +47,52 @@ coupling_map_triangle = CouplingMap(
     couplinglist=couplinglist_triangle+reverse_triangle_couplinglist,
     description='A triangular 10qb chip')
 
-# Dict with device properties of the WACQT QC to be used for transpilation.
+# Dict with device properties of "triangle 10 qb" chip to be used for transpilation.
 triangle_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map_triangle}
 
+#%% Functions
+
+def weighted_gate_time_cost_fun(circ, t_single=15, t_multi=300):
+    num_single_qb_gates = circ.size()-circ.num_nonlocal_gates()
+    num_multi_qb_gates = circ.num_nonlocal_gates()
+    return num_single_qb_gates*t_single+num_multi_qb_gates*t_multi
+
+
+def depth_cost_func(circ, t_single=15, t_multi=300):
+    return circ.depth()
+
+def shortest_transpile_from_distribution(circuit,
+                                         repeats=40,
+                                         cost_func=lambda circ: get_circuit_time(circ)['end'],
+                                         print_cost=True,
+                                         routing_method='sabre',
+                                         initial_layout=None,
+                                         translation_method=None,
+                                         layout_method='sabre',
+                                         optimization_level=1,
+                                         **kwargs):
+    for key in WACQT_device_properties:
+        if key not in kwargs:
+            kwargs[key] = WACQT_device_properties[key]
+
+    kwargs['routing_method'] = routing_method
+    kwargs['initial_layout'] = initial_layout
+    kwargs['translation_method'] = translation_method
+    kwargs['layout_method'] = layout_method
+    kwargs['optimization_level'] = optimization_level
+
+    depth = 10000
+    for _ in range(repeats):
+        with warnings.catch_warnings():  # sabre causes deprecation warning, this will ignore them
+            warnings.simplefilter("ignore")
+            transpiled_circuit_tmp = transpile(circuit, **kwargs)
+        if print_cost:
+            print('cost: ', cost_func(transpiled_circuit_tmp))
+        if transpiled_circuit_tmp.depth() < depth:
+            depth = transpiled_circuit_tmp.depth()
+            transpiled_circuit = transpiled_circuit_tmp
+    return transpiled_circuit
 
 def _add_custom_device_equivalences():
     """ Ads custom gate equivalences to the SessionEquivalenceLibrary for transpilation
