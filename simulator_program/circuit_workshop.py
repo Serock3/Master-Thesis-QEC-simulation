@@ -1,5 +1,5 @@
 # Script to transpile and manage circuits
-# Includes funtionality to e.g. save circuits and very transpilation
+# Includes functionality to e.g. save circuits and very transpilation
 
 # %% Imports
 from qiskit.quantum_info import purity
@@ -12,7 +12,7 @@ from IPython.display import display
 from matplotlib import pyplot as plt
 from qiskit import QuantumCircuit, QuantumRegister, AncillaRegister, ClassicalRegister, Aer, execute
 from custom_transpiler import *
-from custom_transpiler import WAQCT_device_properties
+from custom_transpiler import WACQT_device_properties
 from qiskit.quantum_info.states.densitymatrix import DensityMatrix
 from qiskit.quantum_info.states.statevector import Statevector
 
@@ -35,7 +35,7 @@ def print_vec_diffs(state_vec1, state_vec2):
 
 def comp_states_mat(results1, results2):
     """Compares two versions of circuits supposed to be identical. 
-    Looks at desity matrix snapshots and measurement counts.
+    Looks at density matrix snapshots and measurement counts.
     Works even if register sizer are different and permuted.
 
     TODO: Make it work for non-trivial measurement outcomes
@@ -94,7 +94,7 @@ def verify_transpilation(circ, transpiled_circuit):
     comp_states_mat(results1, results2)
 
 
-display(WAQCT_device_properties['coupling_map'].draw())
+display(WACQT_device_properties['coupling_map'].draw())
 # %% Transpile the (v2) encoding circuit for [[5,1,3]]
 n_cycles = 0
 reset = False
@@ -140,9 +140,9 @@ circ_t = shortest_transpile_from_distribution(circ,
                                               layout_method=layout_method, 
                                               translation_method=translation_method, 
                                               optimization_level=optimization_level, 
-                                              # ,coupling_map = WAQCT_device_properties['coupling_map']
+                                              # ,coupling_map = WACQT_device_properties['coupling_map']
                                               # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
-                                              **WAQCT_device_properties)
+                                              **WACQT_device_properties)
 
 print('Final depth = ', circ_t.depth())
 print('Final #2qb gates = ', circ_t.num_nonlocal_gates())
