@@ -21,6 +21,7 @@ from simulator_program.custom_noise_models import (thermal_relaxation_model,
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 from simulator_program.post_select import *
+from simulator_program.post_process import *
 from simulator_program.idle_noise import *
 
 # %%
@@ -72,13 +73,24 @@ def get_running_fidelity_idle_circuit(results, trivial_state, n_cycles):
         fidelities.append(state_fidelity(current_state, trivial_state))
     return fidelities
 
-def fidelity_from_scratch(n_cycles, noise_model, n_shots, reset=True, flag=False,
-        transpile=False, recovery=True, post_select=False, idle_noise=True):
+def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=True,
+        recovery=True, post_select=False, post_process=False, idle_noise=True, 
+        empty_circuit=False):
+
+
+    # Get gate times missing from input
+    if isinstance(gate_times, dict):
+        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+        full_gate_times = WACQT_gate_times
 
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
-    cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=flag)
+    cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=False)
     readout = ClassicalRegister(5, 'readout')
     registers = StabilizerRegisters(qb, an, cr, readout)
 
@@ -89,43 +101,57 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, reset=True, flag=False
     # Get the correct (no errors) state
     trivial = get_trivial_state(circ)
 
-    # Add idle noise
-    if idle_noise:
-        circ, time = add_idle_noise_to_circuit(circ,
-            gate_times=WACQT_target_times, return_time=True)
+    # Create empty encoded circuit
+    if empty_circuit:
+        time = get_circuit_time(circ, gate_times)
+        circ = get_empty_noisy_circuit_v3(circ, time, gate_times)
+        # TODO: Make this part of get_empty_circuit to remove warnings
+        circ = add_idle_noise_to_circuit(circ, gate_times)
+
+        results = execute(circ, Aer.get_backend('qasm_simulator'),
+            noise_model=noise_model, shots=n_shots).result()
+        fid = get_running_fidelity_idle_circuit(results, trivial, n_cycles)
+        return fid
+
+    # Add idle noise (empty_circuit does this automatically)
+    elif idle_noise:
+        circ = add_idle_noise_to_circuit(circ, gate_times=gate_times)
 
     # Run the circuit
     results = execute(circ, Aer.get_backend('qasm_simulator'),
         noise_model=noise_model, shots=n_shots).result()
     if recovery:
         fid = get_running_fidelity_data_den_mat_mod(results, trivial, n_cycles)
-#    elif post_select:
-#       somethingsomethingpostselect
-    return fid
-#%% Check fidelity with and without idle noise =================================
-# Options
-reset = True
-recovery = False
-flag = False
-n_cycles = 1
+        return fid
 
-# Registers
-qb = QuantumRegister(5, 'code_qubit')
-an = AncillaRegister(2, 'ancilla_qubit')
-cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=flag)
-readout = ClassicalRegister(5, 'readout')
-registers = StabilizerRegisters(qb, an, cr, readout)
+    if post_select:
+        fidelities = [state_fidelity(post_selected_state, trivial) for post_selected_state
+            in get_trivial_post_select_den_mat(results, n_cycles)]
+        select_counts = get_trivial_post_select_counts(
+            results.get_counts(), n_cycles)
+        return fidelities, select_counts
+    if post_process:
 
-# Circuits
-circ = get_testing_circuit(registers, reset=True, recovery=False, n_cycles=n_cycles)
+        correct_state = logical_states(include_ancillas=None)[1]
+        running_fid = []
+        for current_cycle in range(n_cycles):
+            counts = get_subsystem_counts_up_to_cycle(
+                results.get_counts(), current_cycle)
+            fid = 0
+            count_sum = 0
+            for selected_state in results.data()['snapshots']['density_matrix']['stabilizer_' + str(current_cycle)]:
+                den_mat = selected_state['value']
+                memory = selected_state['memory']
+                fid += state_fidelity(correct_state, post_process_den_mat(
+                    den_mat, memory, current_cycle))*counts[int(memory, 16)]
+                count_sum += counts[int(memory, 16)]
+            running_fid.append(fid/n_shots)
+        return running_fid
+    else:
+        fid = get_running_fidelity_data_den_mat_mod(results, trivial, n_cycles)
+        return fid
+    return
 
-# Transpilation
-circ_t = get_standard_transpilation(circ)
-
-# Add idle noise
-circ_i, time = add_idle_noise_to_circuit(circ_t, gate_times=WACQT_target_times, return_time=True)
-
-# Get a completely empty circuit
 def get_idle_single_qubit(snapshot_times, T1=40e3, T2=60e3):
     """Generates a single qubit-circuit initialized in the |1> state with
     snapshots at given times
@@ -148,59 +174,90 @@ def get_idle_single_qubit(snapshot_times, T1=40e3, T2=60e3):
         index += 1
     return circ
 
-circ_single = get_idle_single_qubit(time)
+def fid_single_qubit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3):
 
-# Get the correct (no errors) state
-trivial = get_trivial_state(circ)
-trivial_t = get_trivial_state(circ_t)
+    # Get gate times missing from input
+    if isinstance(gate_times, dict):
+        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+        full_gate_times = WACQT_gate_times
 
-circ_empty = get_empty_noisy_circuit(registers, time, encode_logical=True,
-    transpile=False)
-#circ_empty = get_empty_noisy_circuit_v2(circ_i, time, encode_logical=True)
+    # Registers
+    qb = QuantumRegister(5, 'code_qubit')
+    an = AncillaRegister(2, 'ancilla_qubit')
+    cr = get_classical_register(n_cycles, reset=False, recovery=False, flag=False)
+    readout = ClassicalRegister(5, 'readout')
+    registers = StabilizerRegisters(qb, an, cr, readout)
 
-#%% Run circuits
-noise_model = thermal_relaxation_model_V2(gate_times=WACQT_target_times)
-n_shots = 512
-print('Running simulations')
-results = execute(circ, Aer.get_backend('qasm_simulator'),
-    noise_model=noise_model, shots=n_shots).result()
-fid = get_running_fidelity_data_den_mat_mod(results, trivial, n_cycles)
-print('Check!')
-results = execute(circ_empty, Aer.get_backend('qasm_simulator'),
-    noise_model=noise_model, shots=n_shots).result()
-fid_empty = get_running_fidelity_idle_circuit(results, trivial, n_cycles)
-print('Check!')
-results = execute(circ_i, Aer.get_backend('qasm_simulator'),
-    noise_model=noise_model, shots=n_shots).result()
-fid_i = get_running_fidelity_data_den_mat_mod(results, trivial, n_cycles)
-print('Check!')
-results = execute(circ_t, Aer.get_backend('qasm_simulator'),
-    noise_model=noise_model, shots=n_shots).result()
-fid_t = get_running_fidelity_data_den_mat_mod(results, trivial_t, n_cycles)
+    # Circuits
+    circ = get_testing_circuit(registers, reset=False, recovery=False, n_cycles=n_cycles)
+    circ = get_standard_transpilation(circ)
+    circ, time = add_idle_noise_to_circuit(circ, gate_times=gate_times,return_time=True)
+
+    circ_single = get_idle_single_qubit(time)
+    results = execute(circ_single, Aer.get_backend('qasm_simulator'),
+        noise_model=None, shots=n_shots).result()
+    fid_single = []
+    correct_state = results.data()['snapshots']['density_matrix']['start'][0]['value']
+    for i in range(len(time)-2):
+        current_state = results.data()['snapshots']['density_matrix'][
+            'snap_'+str(i+1)][0]['value']
+        fid_single.append(state_fidelity(current_state,correct_state))
+    return fid_single
+
 
 #%% Single qubit decay
-circ_single = get_idle_single_qubit(time)
-results = execute(circ_single, Aer.get_backend('qasm_simulator'),
-    noise_model=None, shots=n_shots).result()
-fid_single = []
-correct_state = results.data()['snapshots']['density_matrix']['start'][0]['value']
-for i in range(len(time)-2):
-    current_state = results.data()['snapshots']['density_matrix'][
-        'snap_'+str(i+1)][0]['value']
-    fid_single.append(state_fidelity(current_state,correct_state))
+fid_target_single = fid_single_qubit(n_cycles, n_shots, gate_times=WACQT_target_times)
+fid_demonstrated_single = fid_single_qubit(n_cycles, n_shots, gate_times=WACQT_demonstrated_times)
+
 #%%
-n_cycles = 10
-n_shots = 512
+n_cycles = 15
+n_shots = 4096
 target_noise = thermal_relaxation_model_V2(gate_times=WACQT_target_times)
 current_noise = thermal_relaxation_model_V2(gate_times=WACQT_demonstrated_times)
-fid_target_idle = fidelity_from_scratch(n_cycles, target_noise, n_shots, reset=True,
-        transpile=False, recovery=True, post_select=False, idle_noise=True)
-fid_current_idle = fidelity_from_scratch(n_cycles, current_noise, n_shots, reset=True,
-        transpile=False, recovery=True, post_select=False, idle_noise=True)
-#fid_target = fidelity_from_scratch(n_cycles, target_noise, n_shots, reset=True,
-#        transpile=False, recovery=True, post_select=False, idle_noise=False)
-#fid_current = fidelity_from_scratch(n_cycles, current_noise, n_shots, reset=True,
-#        transpile=False, recovery=True, post_select=False, idle_noise=False)
+fid_target_QEC = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_demonstrated_QEC = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_target_PS, count_target_PS = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=False, post_select=True,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_demonstrated_PS, count_demonstrated_PS = fidelity_from_scratch(9, current_noise, 16000, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=False, post_select=True,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_target_PP = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=False, post_select=False,
+    post_process=True, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_demonstrated_PP = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=False, post_select=False,
+    post_process=True, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_target_stab = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=False, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_demonstrated_stab = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=False, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_target_empty = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=True)
+print('Check!')
+fid_demonstrated_empty = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=True)
+print('Check!')
 #%% Curve fitting with OLS
 fid_list = [fid, fid_i, fid_res, fid_res_i]
 theta_list = []
@@ -230,32 +287,51 @@ print('MSE: ')
 for i in MSE:
     print(i)
 #%% Plotting
-fig, ax = plt.subplots(1, figsize=(10, 6))
+fig, ax = plt.subplots(2, figsize=(10, 10))
 x_dis = np.arange(1,n_cycles+1)
-#ax.plot(x_dis, fid, 'o', color='red', label='QEC, no idle noise')
-#ax.plot(x_dis, fid_i, 'o', color='blue', label='QEC with idle noise')
-#ax.plot(x_dis, fid_empty, 'o', color='black', label='Empty encoded circuit')
-#ax.plot(x_dis, fid_t, 'o', color='green', label='Transpiled QEC, no idle noise')
-#ax.plot(x_dis, fid_res, 'o', color='green')
-#ax.plot(x_dis, fid_res_i, 'o', color='orange')
-ax.plot(x_dis, fid_target_idle, 'o', color='red', label='Target with idle')
-ax.plot(x_dis, fid_current_idle, 'o', color='blue', label='Demonstrated with idle')
-ax.plot(x_dis, fid_single, 'o', color='black', label='Single qubit decay')
+ax1, ax2 = ax
 
-#ax.plot(x_dis, fid_target, 'o', color='green', label='Target without idle')
-#ax.plot(x_dis, fid_current, 'o', color='purple', label='Demonstrated without idle')
-ax.set(ylim=(0.0, 1.0))
+ax1.plot(x_dis, fid_target_QEC, '-o', label='Error correction')
+ax1.plot(x_dis, fid_target_PS, '-o', label='Post select correct states')
+#ax1.plot(x_dis, fid_target_PP, '-o', label='Post processing data')
+ax1.plot(x_dis, fid_target_stab, '-o', label='Only measurements, no correction')
+#ax1.plot(x_dis, fid_target_empty, '-o', label='Decay of [[5,1,3]] logical state')
+ax1.plot(x_dis, fid_target_single, '-o', label='Decay of single qubit in |1>')
 
-#ax.plot(x, y_pred_list[0], color='red', label=f'No idle noise. k={theta_list[0][1]}')
-#ax.plot(x, y_pred_list[1], color='blue',label=f'With idle noise. k={theta_list[1][1]}')
-#ax.plot(x, y_pred_list[2], color='green', label=f'No idle noise, with reset. k={theta_list[2][1]}')
-#ax.plot(x, y_pred_list[3], color='orange', label=f'With idle noise and reset. k={theta_list[3][1]}')
-ax.set_xlabel('Number of cycles')
-ax.set_ylabel('Average fidelity')
-ax.set_title('Average fidelites with no reset, no transpilation')
-ax.legend()
+ax2.plot(x_dis, fid_demonstrated_QEC, '-o', label='Error correction')
+ax2.plot(x_dis[0:7], fid_demonstrated_PS[0:7], '-o', label='Post select correct states')
+#ax2.plot(x_dis, fid_demonstrated_PP, '-o', label='Post processing data')
+ax2.plot(x_dis, fid_demonstrated_stab, '-o', label='Only measurements, no correction')
+#ax2.plot(x_dis, fid_demonstrated_empty, '-o', label='Decay of [[5,1,3]] logical state')
+ax2.plot(x_dis, fid_demonstrated_empty, '-o', label='Decay of single qubit in |1>')
+
+ax1.set(ylim=(0.0, 1.0))
+ax2.set(ylim=(0.0, 1.0))
+
+ax1.set_xlabel('Number of stabilizer cycles (2960 ns each)')
+ax1.set_ylabel('Average fidelity')
+ax1.set_title('Average fidelity of simulated [[5,1,3]] QEC code using target gate times')
+ax1.legend()
+
+ax2.set_xlabel('Number of stabilizer cycles (14160 ns each)')
+ax2.set_ylabel('Average fidelity')
+ax2.set_title('Average fidelity, experimentally demonstrated gate times')
+ax2.legend()
+#fig.savefig('fidelities.pdf')
 
 #%% Other stuff: Checking time difference between cycles
+# Registers
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(2, 'ancilla_qubit')
+cr = get_classical_register(n_cycles, reset=False, recovery=False, flag=False)
+readout = ClassicalRegister(5, 'readout')
+registers = StabilizerRegisters(qb, an, cr, readout)
+
+# Circuits
+circ = get_testing_circuit(registers, reset=False, recovery=False, n_cycles=n_cycles)
+circ = get_standard_transpilation(circ)
+circ, time = add_idle_noise_to_circuit(circ, gate_times=WACQT_demonstrated_times,return_time=True)
+
 time_diff = 0
 a = True
 for key in time:

@@ -7,11 +7,11 @@ from qiskit.providers.aer.noise import thermal_relaxation_error
 from qiskit.converters import circuit_to_dag
 import numpy as np
 
-from custom_noise_models import thermal_relaxation_model
-from stabilizers import (encode_input_v2,
+from .custom_noise_models import thermal_relaxation_model
+from .stabilizers import (encode_input_v2,
                                            get_empty_stabilizer_circuit)
-from custom_transpiler import *
-from custom_noise_models import WACQT_gate_times, GateTimes
+from .custom_transpiler import *
+from .custom_noise_models import WACQT_gate_times, GateTimes
 from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 # %%
 
@@ -232,8 +232,8 @@ def get_empty_noisy_circuit_v2(circ, snapshot_times, encode_logical=False,
         index += 1
     return new_circ
     
-def get_empty_noisy_circuit_v3(circ, snapshot_times, encode_logical=False,
-        gate_times={}, T1=40e3, T2=60e3):
+def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={}, 
+        T1=40e3, T2=60e3):
 
     new_circ = QuantumCircuit()
     time_passed = 0
@@ -241,9 +241,8 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, encode_logical=False,
         new_circ.add_register(reg)
 
     # Encode the logical qubit
-    new_circ += rebuild_circuit_up_to_encoding(circ, gate_times=gate_times)
-    time_passed = snapshot_times['post_encoding']
-    # TODO: Change this to get_circuit_time(new_circ)
+    new_circ += rebuild_circuit_up_to_encoding(circ)
+    time_passed = get_circuit_time(new_circ, gate_times=gate_times)['end']
 
     # Append all snapshots from the circuit
     dag = circuit_to_dag(circ)
@@ -257,6 +256,9 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, encode_logical=False,
     for key in snapshot_times:
         if key == 'end':
             break
+        elif key == 'post_encoding':
+            index +=1
+            continue # Skip the post_encoding snapshot due to changes in encode
         time_diff = snapshot_times[key]-time_passed
         if time_diff > 0:
             thrm_relax = thermal_relaxation_error(
