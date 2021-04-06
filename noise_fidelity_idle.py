@@ -21,7 +21,7 @@ from simulator_program.custom_noise_models import (thermal_relaxation_model,
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 from simulator_program.post_select import *
-from idle_noise import *
+from simulator_program.idle_noise import *
 
 # %%
 def get_testing_circuit(registers, reset, recovery=True, n_cycles=15):
@@ -105,9 +105,9 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, reset=True, flag=False
 #%% Check fidelity with and without idle noise =================================
 # Options
 reset = True
-recovery = True
+recovery = False
 flag = False
-n_cycles = 10
+n_cycles = 1
 
 # Registers
 qb = QuantumRegister(5, 'code_qubit')
@@ -117,7 +117,7 @@ readout = ClassicalRegister(5, 'readout')
 registers = StabilizerRegisters(qb, an, cr, readout)
 
 # Circuits
-circ = get_testing_circuit(registers, reset=True, recovery=True, n_cycles=n_cycles)
+circ = get_testing_circuit(registers, reset=True, recovery=False, n_cycles=n_cycles)
 
 # Transpilation
 circ_t = get_standard_transpilation(circ)
