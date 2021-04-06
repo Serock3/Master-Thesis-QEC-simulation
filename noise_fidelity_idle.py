@@ -33,7 +33,7 @@ def get_standard_transpilation(circ):
     return shortest_transpile_from_distribution(circ, print_cost=False,
         repeats=10, routing_method='sabre', initial_layout=None,
         translation_method=None, layout_method='sabre',
-        optimization_level=1, **WAQCT_device_properties)
+        optimization_level=1, **WACQT_device_properties)
 
 def get_running_fidelity_data_den_mat_mod(results, trivial_state, n_cycles):
     """Modified version of get_running_fidelity_data_den_mat used in this file

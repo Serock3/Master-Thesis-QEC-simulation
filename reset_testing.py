@@ -549,7 +549,7 @@ def get_standard_transpilation(circ):
     return shortest_transpile_from_distribution(circ, print_cost=False,
         repeats=10, routing_method='sabre', initial_layout=None,
         translation_method=None, layout_method='sabre',
-        optimization_level=1, **WAQCT_device_properties)
+        optimization_level=1, **WACQT_device_properties)
 
 circ_rec_WACQT = get_standard_transpilation(circ_rec)
 circ_res_rec_WACQT = get_standard_transpilation(circ_res_rec)

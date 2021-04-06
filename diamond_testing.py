@@ -80,7 +80,7 @@ circ_WACQT = shortest_transpile_from_distribution(
     layout_method=layout_method,
     translation_method=translation_method,
     optimization_level=optimization_level,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 #circ_WACQT.draw(output='mpl')
 #circ_diamond.draw(output='mpl')

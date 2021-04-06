@@ -3,7 +3,7 @@ from qiskit.transpiler import TransformationPass
 from qiskit.transpiler import PassManager
 from qiskit.circuit import Clbit
 from qiskit.converters import dag_to_circuit, circuit_to_dag
-from simulator_program.custom_transpiler import WAQCT_device_properties, _add_custom_device_equivalences, shortest_transpile_from_distribution
+from simulator_program.custom_transpiler import WACQT_device_properties, _add_custom_device_equivalences, shortest_transpile_from_distribution
 from qiskit import *
 from IPython.core.display import display
 from qiskit.visualization.state_visualization import plot_bloch_multivector
@@ -229,7 +229,7 @@ def transpile_circuit(circuit, optimization_level=2, repeats=1):
     transpiled_circuit = shortest_transpile_from_distribution(circuit, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
                                                               # ,coupling_map = WAQCT_device_properties['coupling_map'])
                                                               # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
-                                                              layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WAQCT_device_properties)
+                                                              layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WACQT_device_properties)
 
     print('Final depth = ', transpiled_circuit.depth())
     print('Final gates = ', transpiled_circuit.count_ops())
@@ -374,7 +374,7 @@ layout_method = 'trivial'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
 transpiled_circ = transpile(circuit, callback=get_callback('0001'), optimization_level=optimization_level, initial_layout=initial_layout,
                             # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
-                            layout_method=layout_method, routing_method=routing_method, translation_method=None, **WAQCT_device_properties)
+                            layout_method=layout_method, routing_method=routing_method, translation_method=None, **WACQT_device_properties)
 print('Final depth = ', transpiled_circ.depth())
 print('Final gates = ', transpiled_circ.count_ops())
 
@@ -408,7 +408,7 @@ layout_method = 'trivial'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
 transpiled_circ = transpile(circuit, optimization_level=optimization_level, initial_layout=initial_layout,
                             # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
-                            layout_method=layout_method, routing_method=routing_method, translation_method=None, **WAQCT_device_properties)
+                            layout_method=layout_method, routing_method=routing_method, translation_method=None, **WACQT_device_properties)
 # %%
 n_shots = 10
 results1 = execute(transpiled_circ, Aer.get_backend(
@@ -435,7 +435,7 @@ initial_layout = None  # Overwriting the above layout
 translation_method = None  # 'unroller',  translator , synthesis
 transpiled_circ = transpile(circuit, optimization_level=optimization_level, initial_layout=initial_layout,
                             # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
-                            layout_method=layout_method, routing_method=routing_method, translation_method=None, **WAQCT_device_properties)
+                            layout_method=layout_method, routing_method=routing_method, translation_method=None, **WACQT_device_properties)
 # %%
 n_shots = 10
 results1 = execute(transpiled_circ, Aer.get_backend(
@@ -496,7 +496,7 @@ circuit_list = []
 dag_list = []
 transpiled_circ = transpile(circuit, callback=get_callback('1000000', circuit_list, dag_list), optimization_level=optimization_level, initial_layout=initial_layout,
                             # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
-                            layout_method=layout_method, routing_method=routing_method, translation_method=None, **WAQCT_device_properties)
+                            layout_method=layout_method, routing_method=routing_method, translation_method=None, **WACQT_device_properties)
 # %%
 n_shots = 10
 results1 = execute(transpiled_circ, Aer.get_backend(
@@ -630,7 +630,7 @@ translation_method = None  # 'unroller',  translator , synthesis
 transpiled_circuit = shortest_transpile_from_distribution(circuit, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
                                                           # ,coupling_map = WAQCT_device_properties['coupling_map'])
                                                           # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
-                                                          layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WAQCT_device_properties)
+                                                          layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WACQT_device_properties)
 
 # print('Final depth = ', transpiled_circuit.depth())
 # print('Final gates = ', transpiled_circuit.count_ops())

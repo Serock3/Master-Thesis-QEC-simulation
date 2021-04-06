@@ -22,7 +22,7 @@ from IPython.display import display
 from matplotlib import pyplot as plt
 from qiskit import QuantumCircuit, QuantumRegister, AncillaRegister, ClassicalRegister, Aer, execute
 from simulator_program.custom_transpiler import *
-from simulator_program.custom_transpiler import WAQCT_device_properties
+from simulator_program.custom_transpiler import WACQT_device_properties
 from qiskit.quantum_info.states.densitymatrix import DensityMatrix
 from qiskit.quantum_info.states.statevector import Statevector
 
@@ -145,7 +145,7 @@ circ_t = shortest_transpile_from_distribution(circ, cost_func=depth_cost_func,
                                               translation_method=translation_method, 
                                               optimization_level=optimization_level, 
                                             #   **WAQCT_device_properties)
-                                              coupling_map = WAQCT_device_properties['coupling_map']
+                                              coupling_map = WACQT_device_properties['coupling_map']
                                               ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap','swap']})
 print('Final depth = ', circ_t.depth())
 print('Final gates = ', circ_t.count_ops())

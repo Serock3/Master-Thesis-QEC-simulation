@@ -75,7 +75,7 @@ for optimization_level in optimization_levels:
         layout_method=layout_method,
         translation_method=translation_method,
         optimization_level=0,
-        **WAQCT_device_properties
+        **WACQT_device_properties
     )
     circuit_list.append(circ_t)
 
@@ -487,7 +487,7 @@ circ_WACQT = shortest_transpile_from_distribution(
     layout_method=layout_method,
     translation_method=translation_method,
     optimization_level=1,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 
 print("transpilation done for circ_WACQT, dept")
@@ -605,32 +605,32 @@ circ_WACQT = shortest_transpile_from_distribution(circ,
     print_cost=False, repeats=repeats, routing_method=routing_method,
     initial_layout=initial_layout, layout_method=layout_method,
     translation_method=translation_method, optimization_level=optimization_level,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 circ_rec_WACQT = shortest_transpile_from_distribution(circ_rec, 
     print_cost=False, repeats=repeats, routing_method=routing_method,
     initial_layout=initial_layout, layout_method=layout_method,
     translation_method=translation_method, optimization_level=optimization_level,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 circ_res_WACQT = shortest_transpile_from_distribution(circ_res, 
     print_cost=False, repeats=repeats, routing_method=routing_method,
     initial_layout=initial_layout, layout_method=layout_method,
     translation_method=translation_method, optimization_level=optimization_level,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 circ_res_rec_WACQT = shortest_transpile_from_distribution(circ_res_rec, 
     print_cost=False, repeats=repeats, routing_method=routing_method,
     initial_layout=initial_layout, layout_method=layout_method,
     translation_method=translation_method, optimization_level=optimization_level,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 
 circ_rec_new_WACQT = shortest_transpile_from_distribution(circ_rec_new, 
     print_cost=False, repeats=repeats, routing_method=routing_method,
     initial_layout=initial_layout, layout_method=layout_method,
     translation_method=translation_method, optimization_level=optimization_level,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 print('Starting to run 12 different processes')
 # %% Run it
@@ -1015,25 +1015,25 @@ circ_WACQT = shortest_transpile_from_distribution(circ,
     print_cost=False, repeats=repeats, routing_method=routing_method,
     initial_layout=initial_layout, layout_method=layout_method,
     translation_method=translation_method, optimization_level=optimization_level,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 circ_rec_WACQT = shortest_transpile_from_distribution(circ_rec, 
     print_cost=False, repeats=repeats, routing_method=routing_method,
     initial_layout=initial_layout, layout_method=layout_method,
     translation_method=translation_method, optimization_level=optimization_level,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 circ_res_WACQT = shortest_transpile_from_distribution(circ_res, 
     print_cost=False, repeats=repeats, routing_method=routing_method,
     initial_layout=initial_layout, layout_method=layout_method,
     translation_method=translation_method, optimization_level=optimization_level,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 circ_res_rec_WACQT = shortest_transpile_from_distribution(circ_res_rec, 
     print_cost=False, repeats=repeats, routing_method=routing_method,
     initial_layout=initial_layout, layout_method=layout_method,
     translation_method=translation_method, optimization_level=optimization_level,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 
 #%%

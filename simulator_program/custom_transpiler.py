@@ -28,22 +28,22 @@ def shortest_transpile_from_distribution(circuit, repeats=40, cost_func=default_
     return transpiled_circuit
 
 
-# WAQCT 7 qb
+# WACQT 7 qb
 basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap', 'cz']
 couplinglist = [[0, 1], [0, 6], [1, 6], [2, 3],
                 [2, 6], [3, 6], [4, 5], [4, 6], [5, 6]]
 reverse_couplinglist = [[y, x] for [x, y] in couplinglist]
 coupling_map = CouplingMap(
     couplinglist=couplinglist+reverse_couplinglist,
-    description='A hexagoal 7qb code with two ancillas')
+    description='A hexagonal 7qb code with two ancillas')
 
-# Dict with device properties of the WAQCT QC to be used for transpilation.
-WAQCT_device_properties_old = {
+# Dict with device properties of the WACQT QC to be used for transpilation.
+WACQT_device_properties_old = {
     "basis_gates": basis_gates, "coupling_map": coupling_map}
 
-# WAQCT 7 qb UPDATED BASIS
+# WACQT 7 qb UPDATED BASIS
 basis_gates = ['id', 'u1', 'x','y','z','sx','sy','iswap', 'cz']
-WAQCT_device_properties = {
+WACQT_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map}
 
 # Diamond 7 qb
@@ -66,7 +66,7 @@ coupling_map_triangle = CouplingMap(
     couplinglist=couplinglist_triangle+reverse_triangle_couplinglist,
     description='A triangular 10qb chip')
 
-# Dict with device properties of the WAQCT QC to be used for transpilation.
+# Dict with device properties of the WACQT QC to be used for transpilation.
 triangle_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map_triangle}
 

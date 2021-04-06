@@ -857,7 +857,7 @@ circ_t0 = shortest_transpile_from_distribution(
     layout_method=layout_method,
     translation_method=translation_method,
     optimization_level=0,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 circ_t1 = shortest_transpile_from_distribution(
     circ,
@@ -868,7 +868,7 @@ circ_t1 = shortest_transpile_from_distribution(
     layout_method=layout_method,
     translation_method=translation_method,
     optimization_level=1,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 circ_t2 = shortest_transpile_from_distribution(
     circ,
@@ -879,7 +879,7 @@ circ_t2 = shortest_transpile_from_distribution(
     layout_method=layout_method,
     translation_method=translation_method,
     optimization_level=2,
-    **WAQCT_device_properties
+    **WACQT_device_properties
 )
 
 # Error free run for fidelity measurements

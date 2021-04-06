@@ -23,7 +23,7 @@ from qiskit import *
 
 from simulator_program.custom_noise_models import thermal_relaxation_model
 from qiskit.providers.aer.extensions.snapshot_density_matrix import *
-from simulator_program.custom_transpiler import shortest_transpile_from_distribution, WAQCT_device_properties
+from simulator_program.custom_transpiler import shortest_transpile_from_distribution, WACQT_device_properties
 # %% Temporary circuit for testing
 qb = QuantumRegister(3, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
@@ -42,7 +42,7 @@ circ.append(Snapshot('asd', "density_matrix", num_qubits=2), [qb[2],qb[0]])
 circ.draw()
 
 circ_t = shortest_transpile_from_distribution(circ, print_cost=False, layout_method='sabre',
-        repeats=1, optimization_level=1, **WAQCT_device_properties)
+        repeats=1, optimization_level=1, **WACQT_device_properties)
 circ_t.draw()
 
 circ_t._layout

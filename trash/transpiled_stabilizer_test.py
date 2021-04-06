@@ -337,7 +337,7 @@ optimization_level = 3
 transpiled_circuit = shortest_transpile_from_distribution(circ2, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
                                                           # ,coupling_map = WAQCT_device_properties['coupling_map']
                                                           # ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
-                                                          layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WAQCT_device_properties)
+                                                          layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WACQT_device_properties)
 
 
 print('Final depth = ', transpiled_circuit.depth())
@@ -471,7 +471,7 @@ circuit.cz(qreg_qubit[0], qreg_qubit[1])
 circuit.snapshot('post_encoding', 'density_matrix')
 
 circuit_t = shortest_transpile_from_distribution(circuit,cost_func=depth_cost_func, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
-                                              layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WAQCT_device_properties)
+                                              layout_method=layout_method, translation_method=translation_method, optimization_level=optimization_level, **WACQT_device_properties)
 verify_transpilation(circuit, circuit_t)
 circuit_t.draw()
 # %%

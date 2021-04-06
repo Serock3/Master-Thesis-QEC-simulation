@@ -36,7 +36,7 @@ from qiskit import *
 import matplotlib.pyplot as plt
 from qiskit.circuit.classicalregister import Clbit
 from simulator_program.custom_noise_models import pauli_noise_model
-from simulator_program.custom_transpiler import shortest_transpile_from_distribution, WAQCT_device_properties
+from simulator_program.custom_transpiler import shortest_transpile_from_distribution, WACQT_device_properties
 from simulator_program.simulator import *
 # %matplotlib inline
 
@@ -621,7 +621,7 @@ def transpile_circuit(circuit, optimization_level=2, repeats=3):
     translation_method = None  # 'unroller',  translator , synthesis
     transpiled_circuit = shortest_transpile_from_distribution(circuit, repeats=repeats, routing_method=routing_method, initial_layout=initial_layout,
                                                               layout_method=layout_method, translation_method=translation_method,optimization_level=optimization_level
-                                                              ,coupling_map = WAQCT_device_properties['coupling_map']
+                                                              ,coupling_map = WACQT_device_properties['coupling_map']
                                                             #   , **WAQCT_device_properties)
       ,**{'basis_gates': ['id', 'u1', 'u2', 'u3', 'cz','iswap']})
 
