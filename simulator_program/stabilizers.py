@@ -75,7 +75,9 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
 
 
 def get_repeated_stabilization(registers, n_cycles=1,
-                               reset=True, recovery=False, flag=False, snapshot_type='density_matrix', **kwargs):
+                               reset=True, recovery=False, 
+                               flag=False, snapshot_type='density_matrix', 
+                               include_barriers = True, **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -105,13 +107,16 @@ def get_repeated_stabilization(registers, n_cycles=1,
                                                reset=reset,
                                                recovery=recovery,
                                                current_cycle=current_cycle,
+                                               include_barriers=include_barriers,
                                                **kwargs
                                                )
         if snapshot_type:# TODO: Maybe a nice looking solution?
             if snapshot_type == 'density_matrix':
-                circ.barrier()
+                if include_barriers:
+                    circ.barrier()
                 circ.append(Snapshot('stabilizer_' + str(current_cycle), snapshot_type, num_qubits=5), registers.QubitRegister)
-                circ.barrier()
+                if include_barriers:
+                    circ.barrier()
             else:
                 circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
     return circ
@@ -172,7 +177,7 @@ def encode_input(registers):
     return circ
 
 
-def encode_input_v2(registers):
+def encode_input_v2(registers, include_barriers = True):
     """Encode the input into logical 0 and 1 for the [[5,1,3]] code. This
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>.
 
@@ -201,7 +206,8 @@ def encode_input_v2(registers):
     circ.cz(qbReg[1], qbReg[2])
     circ.cz(qbReg[3], qbReg[4])
     circ.cz(qbReg[0], qbReg[4])
-    circ.barrier()
+    if include_barriers:
+        circ.barrier()
     return circ
 
 
@@ -536,7 +542,7 @@ def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
 
 # %% All unflagged stabilizers
 def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
-                               current_cycle=0, current_step=0, num_ancillas=None):
+                               current_cycle=0, current_step=0, num_ancillas=None, include_barriers = True):
     """Run all four stabilizers without flags, as well as an optional
     recovery. The input current_step is only relevant for flagged cycles, and
     should be set to 0 otherwise.
@@ -576,19 +582,22 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     for i in range(4):
         circ += stabilizer_list[i](registers, anQb=anQb_list[i],
                                    syn_bit=syn_bit_list[i], reset=reset)
-        circ.barrier()
+        if include_barriers:
+            circ.barrier()
     # Add an extra measurement to the next syndrome register
     # TODO: Make this compatible with using more than 1 ancilla
     if recovery and not reset:
         if current_cycle < len(registers.SyndromeRegister[0])-1:
             circ.measure(anQb_list[-1],
                          registers.SyndromeRegister[0][current_cycle+1][current_step][4])
-            circ.barrier()
+            if include_barriers:
+                circ.barrier()
 
     # Recovery
     if recovery is True:
         circ += unflagged_recovery(registers, reset, current_cycle)
-        circ.barrier
+        if include_barriers:
+            circ.barrier
     return circ
 
 
