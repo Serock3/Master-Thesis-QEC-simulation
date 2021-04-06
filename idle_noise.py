@@ -113,7 +113,7 @@ def get_circuit_time(circ, gate_times={}):
 
     Args:
         circ: Qiskit circuit object to be measured
-        gate_times: Dict containing all gate times in ns. If left empty or 
+        gate_times: Dict containing gate times in ns. If left empty or 
             missing elements, standard values will be added.
 
     Returns:
