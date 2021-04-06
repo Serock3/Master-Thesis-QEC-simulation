@@ -82,15 +82,16 @@ def shortest_transpile_from_distribution(circuit,
     kwargs['layout_method'] = layout_method
     kwargs['optimization_level'] = optimization_level
 
-    depth = 10000
+    cost = 10000
     for _ in range(repeats):
         with warnings.catch_warnings():  # sabre causes deprecation warning, this will ignore them
             warnings.simplefilter("ignore")
             transpiled_circuit_tmp = transpile(circuit, **kwargs)
+        new_cost = cost_func(transpiled_circuit_tmp)
         if print_cost:
-            print('cost: ', cost_func(transpiled_circuit_tmp))
-        if transpiled_circuit_tmp.depth() < depth:
-            depth = transpiled_circuit_tmp.depth()
+            print('cost: ', new_cost)
+        if new_cost < cost:
+            cost = new_cost
             transpiled_circuit = transpiled_circuit_tmp
     return transpiled_circuit
 
