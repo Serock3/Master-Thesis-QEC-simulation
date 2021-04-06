@@ -7,11 +7,11 @@ from qiskit.providers.aer.noise import thermal_relaxation_error
 from qiskit.converters import circuit_to_dag
 import numpy as np
 
-from simulator_program.custom_noise_models import thermal_relaxation_model
-from simulator_program.stabilizers import (encode_input_v2,
+from custom_noise_models import thermal_relaxation_model
+from stabilizers import (encode_input_v2,
                                            get_empty_stabilizer_circuit)
-from simulator_program.custom_transpiler import *
-from simulator_program.custom_noise_models import WACQT_gate_times, GateTimes
+from custom_transpiler import *
+from custom_noise_models import WACQT_gate_times, GateTimes
 from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 # %%
 
