@@ -2,7 +2,7 @@
 from qiskit.circuit.library import XGate, ZGate
 from qiskit import QuantumCircuit, execute, Aer
 import numpy as np
-from post_select import get_subsystem_counts_up_to_cycle
+from .post_select import get_subsystem_counts_up_to_cycle
 # %%
 syndrome_table = [[],
                   [(XGate, 1)],
