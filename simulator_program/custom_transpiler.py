@@ -7,7 +7,7 @@ from qiskit import QuantumCircuit, QuantumRegister
 from idle_noise import get_circuit_time
 import warnings
 
-#%% Constants
+#%% Device transpiling properties
 
 # WACQT 7 qb
 basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap', 'cz']

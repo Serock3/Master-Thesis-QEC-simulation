@@ -115,8 +115,8 @@ def get_unitary_matrix_for_correction(syndromes, include_ancillas=False):
         dim = 7
     circ = QuantumCircuit(dim)
     for syndrome in syndromes:
-        for correction_stratagy in syndrome_table[syndrome]:
-            circ.append(correction_stratagy[0](), [correction_stratagy[1]])
+        for correction_strategy in syndrome_table[syndrome]:
+            circ.append(correction_strategy[0](), [correction_strategy[1]])
 
     results = execute(
         circ,
@@ -170,7 +170,7 @@ def post_process_den_mat(den_mat, memory, current_cycle):
     return apply_unitary_to_den_mat(den_mat, correction_unitary)
 
 def get_states_and_counts_in_cycle(results, current_cycle, post_process=True):
-    """Generator for touples of states and their counts for the density matrix snapshots at current cycle in results"""
+    """Generator for tuples of states and their counts for the density matrix snapshots at current cycle in results"""
 
     subsystem_counts = get_subsystem_counts_up_to_cycle(
         results.get_counts(), current_cycle)
@@ -182,7 +182,7 @@ def get_states_and_counts_in_cycle(results, current_cycle, post_process=True):
         yield (state, subsystem_counts[int(memory, 16)])
 
 def get_states_and_counts(results, n_cycles, post_process=True):
-    """Generator for touples of states and their counts for the density matrix snapshots for each cycle.
+    """Generator for tuples of states and their counts for the density matrix snapshots for each cycle.
     This is a double generator, use it as if it returned a 2D list where the first index specifies
     the cycle, and the resulting 'list' contains pairs of density matrices and corresponding counts"""
 
@@ -191,12 +191,12 @@ def get_states_and_counts(results, n_cycles, post_process=True):
         yield get_states_and_counts_in_cycle(results, current_cycle, post_process)
 
 
-# NOTE: I made the funtion yield instead, if it doesn't work revert to the code below, to be removed
+# NOTE: I made the function yield instead, if it doesn't work revert to the code below, to be removed
 # def get_states_and_counts(results, n_cycles, post_process=True):
 #     # NOTE: Should this be responsible for post_process = False? Can you split it into several funcs?
-#     # NOTE: If this becomes too heavy (since it douplicates the amount of memory needed to store the matrices)
+#     # NOTE: If this becomes too heavy (since it duplicates the amount of memory needed to store the matrices)
 #     # then maybe have it yield one at a time instead of returning?
-#     # Or reimplement the fidelity calculation commented out below
+#     # Or re-implement the fidelity calculation commented out below
 
 #     # running_fid = []
 #     states_and_counts = [None]*n_cycles

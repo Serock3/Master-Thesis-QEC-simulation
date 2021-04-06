@@ -22,7 +22,7 @@ TODO:
 
 def reformat_density_snapshot(results) -> dict:
     """
-    DEPRICATED
+    DEPRECATED
     Reformats the snapshot data of the results object to be a
     dictionary with the measurement results as keys
     """
@@ -37,7 +37,7 @@ def reformat_density_snapshot(results) -> dict:
 
 
 def get_trivial_subsystem_counts_at_cycle(results, n_shots, cycle):
-    # Depricated
+    # Deprecated
     subsys_counts = get_subsystems_counts(results.get_counts())
     syndrome_reg_counts = subsys_counts[len(subsys_counts)-1-cycle]
     count_trivial_syndrome = 0
@@ -106,7 +106,7 @@ def get_trivial_state(circ):
 def get_running_fidelity_data_den_mat(circ, n_cycles, n_shots=2048,
                                       noise_model=thermal_relaxation_model(), post_select=True):
     '''
-    Depricated?
+    Deprecated?
     Inputs:
     circ: The circuit to be tested
     correct_state: The correct state for comparison
