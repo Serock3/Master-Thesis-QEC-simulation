@@ -232,6 +232,42 @@ def get_empty_noisy_circuit_v2(circ, snapshot_times, encode_logical=False,
         index += 1
     return new_circ
     
+def get_empty_noisy_circuit_v3(circ, snapshot_times, encode_logical=False,
+        gate_times={}, T1=40e3, T2=60e3):
+
+    new_circ = QuantumCircuit()
+    time_passed = 0
+    for reg in circ.qregs + circ.cregs:
+        new_circ.add_register(reg)
+
+    # Encode the logical qubit
+    new_circ += rebuild_circuit_up_to_encoding(circ, gate_times=gate_times)
+    time_passed = snapshot_times['post_encoding']
+    # TODO: Change this to get_circuit_time(new_circ)
+
+    # Append all snapshots from the circuit
+    dag = circuit_to_dag(circ)
+    snapshots = []    
+    for node in dag.op_nodes():
+        if node.name == 'snapshot':
+            snapshots.append(node)
+
+    # Add all snapshots from previous circuit
+    index = 0
+    for key in snapshot_times:
+        if key == 'end':
+            break
+        time_diff = snapshot_times[key]-time_passed
+        if time_diff > 0:
+            thrm_relax = thermal_relaxation_error(
+                    T1, T2, time_diff).to_instruction()
+            for qubit in new_circ.qubits:
+                new_circ.append(thrm_relax, [qubit])
+        new_circ.append(snapshots[index].op, snapshots[index].qargs, snapshots[index].cargs)
+        time_passed = snapshot_times[key]
+        index += 1
+    return new_circ
+
 def rebuild_circuit_up_to_barrier(circ, gate_times={}):
     """Build a copy of a circuit up until (and inculding) the first barrier."""
 
@@ -260,6 +296,52 @@ def rebuild_circuit_up_to_barrier(circ, gate_times={}):
     new_circ._layout = circ._layout
     return new_circ
 
+def rebuild_circuit_up_to_encoding(circ):
+    """Build a copy of a circuit up until (and inculding) final iSwap, plus the
+    following cz and u1 gates that are part of it. This function works as a
+    band-aid solution to extract only the encoding from a transpiled circuit.
+
+    It makes a fair amount of assumptions:
+    - Assume that the encoding is finished by a barrier. This barrier is moved
+    to after the final iswap.
+    - Assume that the second iSwap comes after
+    - Assume that the iswap+cz+u1 gates that makes the swap, are all adjacent
+    in the list of DAG nodes.
+    - Ignores any other gates between the barrier and second iSwap.
+
+    For a better solution, it is probably necessary to go further back and look
+    at either transpiling certain sections individually, or choosing a transpied
+    circuit and sticking to that (not transpiling a new one every round).
+    """
+
+    # Convert circuit to DAG
+    dag = circuit_to_dag(circ)
+
+    # New circuit to be generated
+    new_circ = QuantumCircuit()
+    for reg in circ.qregs + circ.cregs:
+        new_circ.add_register(reg)
+
+    # Rebuild up to the final iSwap
+    nodes = dag.op_nodes()
+    barrier_reached = False
+    for i in range(len(nodes)):
+        if nodes[i].name == 'barrier':
+            barrier_reached = True
+        if not barrier_reached:
+            new_circ.append(nodes[i].op, nodes[i].qargs, nodes[i].cargs)
+        
+        # Find the next iSwap
+        if barrier_reached and nodes[i].name == 'iswap':
+            new_circ.append(nodes[i].op, nodes[i].qargs, nodes[i].cargs)
+            new_circ.append(nodes[i+1].op, nodes[i+1].qargs, nodes[i+1].cargs)
+            new_circ.append(nodes[i+2].op, nodes[i+2].qargs, nodes[i+2].cargs)
+            new_circ.append(nodes[i+3].op, nodes[i+3].qargs, nodes[i+3].cargs)
+            new_circ.barrier()
+            break
+
+    new_circ._layout = circ._layout
+    return new_circ
 
 # %% Internal testing with a standard stabilizer circuit
 if __name__ == '__main__':
