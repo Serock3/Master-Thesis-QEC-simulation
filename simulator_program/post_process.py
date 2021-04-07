@@ -23,7 +23,6 @@ syndrome_table = [[],
 
 # %% Misc functions
 
-
 def _filter_readout_errors_v1(syndromes, P_e, P_r):
     # TODO: Make this?
     pass
@@ -36,7 +35,7 @@ def _get_new_syndromes(syndromes):
                              for i in range(1, len(syndromes))]
 
 # %% Post processing statevectors
-def post_process_statvec(statevector, syndromes):
+def post_process_statevec(statevector, syndromes):
     """Version two of post-processing. Takes one statevector and it corresponding syndrome,
     applies post-processing and returns a corrected statevector.
 
@@ -58,8 +57,8 @@ def post_process_statvec(statevector, syndromes):
                                   for i in range(7)])  # [2,3,4,5,6,0,1]
 
     for syndrome in syndromes:
-        for correction_stratagy in syndrome_table[syndrome]:
-            circ.append(correction_stratagy[0](), [correction_stratagy[1]])
+        for correction_strategy in syndrome_table[syndrome]:
+            circ.append(correction_strategy[0](), [correction_strategy[1]])
     results = execute(
         circ,
         Aer.get_backend('statevector_simulator'),
@@ -96,7 +95,7 @@ def post_process_statevec_all_shots(results, n_cycles):
             # Convert the text format to integers. The order is from right to left, and the last entry is for final measurements ans should be removed
             syndromes = [int(syn, 2) for syn in reversed(
                 mem[shot].split()[-(1+current_cycle):])]
-            post_processed_states[current_cycle][shot] = post_process_statvec(
+            post_processed_states[current_cycle][shot] = post_process_statevec(
                 statevectors[shot], syndromes)
 
     return post_processed_states
