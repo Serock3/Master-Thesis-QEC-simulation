@@ -165,7 +165,10 @@ def get_circuit_time(circ, gate_times={}):
 # Cannot handle transpiled circuits
 def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
         gate_times={}, T1=40e3, T2=60e3, transpile=False):
-    """Returns a circuit with only idle noise and snapshots that matches the
+    """
+    DEPRECATED
+
+    Returns a circuit with only idle noise and snapshots that matches the
     times from add_idle_noise_to_circuit. Assumes that all involved qubtits
     are at the same time at snapshots.
     """
@@ -199,6 +202,14 @@ def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
 # This one should work with transpilation when encode_logical=True
 def get_empty_noisy_circuit_v2(circ, snapshot_times, encode_logical=False,
         gate_times={}, T1=40e3, T2=60e3):
+    """
+    DEPRECATED
+
+    Returns a circuit with only idle noise and snapshots that matches the
+    times from add_idle_noise_to_circuit. Assumes that all involved qubtits
+    are at the same time at snapshots.
+    """
+
 
     new_circ = QuantumCircuit()
     time_passed = 0
@@ -234,7 +245,25 @@ def get_empty_noisy_circuit_v2(circ, snapshot_times, encode_logical=False,
     
 def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={}, 
         T1=40e3, T2=60e3):
+    """Creates a circuit with only idle noise and snapshots that matches the
+    times from get_circuit_time. Assumes that all involved qubtits
+    are at the same time at snapshots.
 
+    Args:
+        circ: Qiskit circuit object to mimic.
+        snapshot_times (dict): The times for each snapshot to be added.
+        gate_times: Can be either a dict with some gate times (in ns), or a
+                    GateTimes object. If it is a dict, gate times not included 
+                    will be added from standard gate times.
+        T1 (float): T1 thermal relaxation in ns, defaults to 40e3.
+        T2 (float): T2 thermal relaxation in ns, defaults to 60e3.
+
+    Returns:
+        new_circ: Qiskit circuit object containing only the encoding and snap
+                  from the input circuit.
+    """
+
+    # Create the new circuit
     new_circ = QuantumCircuit()
     time_passed = 0
     for reg in circ.qregs + circ.cregs:
@@ -244,14 +273,14 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
     new_circ += rebuild_circuit_up_to_encoding(circ)
     time_passed = get_circuit_time(new_circ, gate_times=gate_times)['end']
 
-    # Append all snapshots from the circuit
+    # Create a list of all snapshots
     dag = circuit_to_dag(circ)
     snapshots = []    
     for node in dag.op_nodes():
         if node.name == 'snapshot':
             snapshots.append(node)
 
-    # Add all snapshots from previous circuit
+    # Add all snapshots from previous circuit, excluding post_encoding.
     index = 0
     for key in snapshot_times:
         if key == 'end':

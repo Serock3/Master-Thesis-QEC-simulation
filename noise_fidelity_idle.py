@@ -1,3 +1,9 @@
+# The main purpose of this script is to run a range of different simulations
+# on the [[5,1,3]] code. Possible options include whether to add idle noise, if
+# and how to process the data (error correction, post-selection etc), and more.
+# Main function for this is 'fidelity_from_scratch', but for single qubits then
+# 'fid_single_qubit' should be used instead.
+
 # %% Import modules
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -25,9 +31,26 @@ from simulator_program.post_process import *
 from simulator_program.idle_noise import *
 
 # %%
-def get_testing_circuit(registers, reset, recovery=True, n_cycles=15):
+def get_testing_circuit(registers, reset, recovery=True, n_cycles=15,
+        initial_state=0):
+    """Create a [[5,1,3]] stabilizer circuit, including encoding and snapshots.
+    
+    Args:
+        registers (class): StabilizerRegisters class, can be created easily by
+            calling StabilizerRegisters() from simulator_program.stabilizers.py.
+        reset (bool): Option whether or not to reset ancilla between msmnts.
+        recovery (bool): Option whether to perform error correction after each
+            cycle. Defaults to true if left empty.
+        n_cycles (int): The number of stabilizer cycles for the circuit.
+        initial_state (int): The initial state to encode into 5 qubits. Can only
+            be initialized to 0 or 1 currently.
+
+    Returns:
+        circ: Qiskit circuit object, containing the full stabilizer circuit.
+    """
     circ = get_empty_stabilizer_circuit(registers)
-    circ.x(0) #initialize in 1
+    if initial_state == 1:
+        circ.x(0) #initialize in 1
     circ += encode_input_v2(registers)
     circ.barrier()
     circ.append(Snapshot('post_encoding', 'density_matrix', num_qubits=5), registers.QubitRegister)
@@ -36,6 +59,13 @@ def get_testing_circuit(registers, reset, recovery=True, n_cycles=15):
     return circ
 
 def get_standard_transpilation(circ):
+    """
+    DEPRECATED
+
+    Transpiles a circuit using standard settings. This function should be
+    removed, as these settings are now made default when using
+    shortest_transpile_from_distribution.
+    """
     return shortest_transpile_from_distribution(circ, print_cost=False,
         repeats=10, routing_method='sabre', initial_layout=None,
         translation_method=None, layout_method='sabre',
@@ -43,11 +73,26 @@ def get_standard_transpilation(circ):
 
 def get_running_fidelity_data_den_mat_mod(results, trivial_state, n_cycles):
     """Modified version of get_running_fidelity_data_den_mat used in this file
-    for correcting errors"""
-    # Missing: results, 
+    for measuring fidelity when performing quantum error correction.
+    
+    Args:
+        results: result object from a qasm simulation.
+        trivial_state (np.array): density matrix corresponding to the correct,
+            noise free, output of simulation.
+        n_cycles (int): The number of stabilizer cycles performed.
+        
+    Returns:
+        fidelities (list): The average fidelity after each stabilizer cycle.
+    """
+
+    # Get the number of shots and their counts
+    counts = results.get_counts()
+    n_shots = 0
+    for value in counts.values():
+        n_shots += value
+
     fidelities = []
     cl_reg_size = len(list(results.get_counts().keys())[0].split()[1])
-    counts = results.get_counts()
     snapshots = reformat_density_snapshot(results)
     for current_cycle in range(n_cycles):
         fid = 0
@@ -66,6 +111,19 @@ def get_running_fidelity_data_den_mat_mod(results, trivial_state, n_cycles):
     return fidelities
 
 def get_running_fidelity_idle_circuit(results, trivial_state, n_cycles):
+    """Calculates the fidelity of an idle [[5,1,3]] circuit (one without 
+    measurements). Note that this assumes that snapshots are used at certain
+    points in the circuit, as per default in functions from stabilizers.py.
+    
+    Args:
+        results: result object from a qasm simulation.
+        trivial_state (np.array): density matrix corresponding to the correct,
+            noise free, output of simulation.
+        n_cycles (int): The number of stabilizer cycles performed.
+        
+    Returns:
+        fidelities (list): The average fidelity after each stabilizer cycle.
+    """
     fidelities = []
     for current_cycle in range(n_cycles):
         current_state = results.data()['snapshots']['density_matrix'][
@@ -76,7 +134,44 @@ def get_running_fidelity_idle_circuit(results, trivial_state, n_cycles):
 def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=True,
         recovery=True, post_select=False, post_process=False, idle_noise=True, 
         empty_circuit=False):
+    """Get the fidelity of a certain setup/configuration from only its
+    parameters.
+    
+    Args:
+        n_cycles (int): The number of stabilizer cycles to be performed.
+        noise_model: The noise model to be used for simulations. If no noise is
+                     to be present, use noise_model=None.
+        n_shots (int): The number of runs of the circuit.
+        gate_times: Can be either a dict with some gate times (in ns), or a
+                    GateTimes object. If it is a dict, gate times not included 
+                    will be added from standard gate times.
+        reset (bool): Whether or not to reset ancilla between measurements.
+                      defaults to True if left empty.
+        recovery (bool): Whether or not to perform error correction after each
+                         stabilizer cycle. Defaults to true if left empty.
+        post_select (bool): Whether or not to use post-selection after runs,
+                            discarding runs which gave a -1 eigenvalue from 
+                            stabilizers. Note that this will not be performed if
+                            recovery=True. Defaults to False if left empty.
+        post_process (bool): Whether or not to post_process the results after
+                             runs, "correcting" errors as it would have been
+                             done with recovery. Note that this will not be 
+                             performed if recovery or post_select are set to 
+                             True. Defaults to False if left empty.
+        idle_noise (bool): Whether or not to add noise to idle qubits. This
+                           assumes thermal relaxation with T1=40e3 and T2=60e3. 
+                           Defaults to True if left empty.
+        empty_circuit (bool): Whether to create an empty circuit instead,
+                              essentially only containing the encoding and
+                              snapshots at times matching that of a 'normal'
+                              stabilizer circuit with given gate times. Defaults
+                              to False if left empty.
 
+    Returns:
+        fid (list): The average fidelity after each stabilizer cycle.
+        select_counts (list, optional): The remaining runs after each cycle,
+            only returned if using post_select=True.
+    """
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
@@ -155,6 +250,15 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
 def get_idle_single_qubit(snapshot_times, T1=40e3, T2=60e3):
     """Generates a single qubit-circuit initialized in the |1> state with
     snapshots at given times
+
+    Args:
+        snapshot_times (dict): The times in the circuit to add snapshots.
+        T1 (float): T1 thermal relaxation, given in ns.
+        T2 (float): T2 relaxation, given in ns.
+
+    Returns:
+        circ: Qiskit circuit object of a single qubit, with snapshots at given
+              times and thermal relaxation in between.
     """
     qb = QuantumRegister(1,'qubit')
     circ = QuantumCircuit(qb)
@@ -175,6 +279,22 @@ def get_idle_single_qubit(snapshot_times, T1=40e3, T2=60e3):
     return circ
 
 def fid_single_qubit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3):
+    """Calculate the fidelity of a single qubit decay at certain times in a
+    circuit corresponding to the [[5,1,3]] code.
+    
+    Args:
+        n_cycles (int): The number of corresponding stabilizer cycles. After
+                        each cycle a snapshot is performed.
+        n_shots (int): The number of runs for the circuit to measure over
+        gate_times: Can be either a dict with some gate times (in ns), or a
+                    GateTimes object. If it is a dict, gate times not included 
+                    will be added from standard gate times.
+        T1 (float): T1 thermal relaxation, given in ns, defaults to 40e3.
+        T2 (float): T2 thermal relaxation, given in ns, defaults to 60e3.
+        
+    Returns:
+        fid_single (list): The fidelity after each snapshot in the circuit.
+    """
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
@@ -213,11 +333,17 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3):
 fid_target_single = fid_single_qubit(n_cycles, n_shots, gate_times=WACQT_target_times)
 fid_demonstrated_single = fid_single_qubit(n_cycles, n_shots, gate_times=WACQT_demonstrated_times)
 
-#%%
+#%% Running different configurations of the [[5,1,3]] code.
+
+# Settings used across all configurations
 n_cycles = 15
 n_shots = 4096
+
+# Noise models
 target_noise = thermal_relaxation_model_V2(gate_times=WACQT_target_times)
 current_noise = thermal_relaxation_model_V2(gate_times=WACQT_demonstrated_times)
+
+# Quantum error correction for both noise models
 fid_target_QEC = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
     gate_times=WACQT_target_times, reset=True, recovery=True, post_select=False,
     post_process=False, idle_noise=True, empty_circuit=False)
@@ -226,6 +352,10 @@ fid_demonstrated_QEC = fidelity_from_scratch(n_cycles, current_noise, n_shots,
     gate_times=WACQT_demonstrated_times, reset=True, recovery=True, post_select=False,
     post_process=False, idle_noise=True, empty_circuit=False)
 print('Check!')
+
+# Post selection for both noise models. Note that the second one has other 
+# settings for n_cycles and n_shots. Due to the noise model, there is little
+# chance that any single shot remains at the 15th cycle, resulting in an error.
 fid_target_PS, count_target_PS = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
     gate_times=WACQT_target_times, reset=True, recovery=False, post_select=True,
     post_process=False, idle_noise=True, empty_circuit=False)
@@ -234,6 +364,8 @@ fid_demonstrated_PS, count_demonstrated_PS = fidelity_from_scratch(9, current_no
     gate_times=WACQT_demonstrated_times, reset=True, recovery=False, post_select=True,
     post_process=False, idle_noise=True, empty_circuit=False)
 print('Check!')
+
+# Post processing for both noise models.
 fid_target_PP = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
     gate_times=WACQT_target_times, reset=True, recovery=False, post_select=False,
     post_process=True, idle_noise=True, empty_circuit=False)
@@ -242,6 +374,8 @@ fid_demonstrated_PP = fidelity_from_scratch(n_cycles, current_noise, n_shots,
     gate_times=WACQT_demonstrated_times, reset=True, recovery=False, post_select=False,
     post_process=True, idle_noise=True, empty_circuit=False)
 print('Check!')
+
+# No correction, only performing stabilizer measurements for each noise model.
 fid_target_stab = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
     gate_times=WACQT_target_times, reset=True, recovery=False, post_select=False,
     post_process=False, idle_noise=True, empty_circuit=False)
@@ -250,6 +384,8 @@ fid_demonstrated_stab = fidelity_from_scratch(n_cycles, current_noise, n_shots,
     gate_times=WACQT_demonstrated_times, reset=True, recovery=False, post_select=False,
     post_process=False, idle_noise=True, empty_circuit=False)
 print('Check!')
+
+# Running 'empty' stabilizer circuits, only containing the encoding.
 fid_target_empty = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
     gate_times=WACQT_target_times, reset=True, recovery=True, post_select=False,
     post_process=False, idle_noise=True, empty_circuit=True)
@@ -258,39 +394,13 @@ fid_demonstrated_empty = fidelity_from_scratch(n_cycles, current_noise, n_shots,
     gate_times=WACQT_demonstrated_times, reset=True, recovery=True, post_select=False,
     post_process=False, idle_noise=True, empty_circuit=True)
 print('Check!')
-#%% Curve fitting with OLS
-fid_list = [fid, fid_i, fid_res, fid_res_i]
-theta_list = []
-for fidelity in fid_list:
-    x_D = np.ones((n_cycles,2))
-    for i in range(n_cycles):
-        x_D[i][1] += i
-    y = np.log( np.reshape(np.asarray(fidelity), (n_cycles,1)) )
-    theta = np.dot(np.dot(np.linalg.inv(np.dot(x_D.T, x_D)), x_D.T), y)
-    theta_list.append(theta)
 
-x = np.linspace(0,n_cycles+1,100)
-y_pred_list = []
-for theta in theta_list:
-    y_pred = np.exp(theta[0]) * np.exp(x*theta[1])
-    y_pred_list.append(y_pred)
-
-# Calculate MSE
-MSE = []
-for i in range(len(fid_list)):
-    err = 0.
-    for cycle in range(n_cycles):
-        y_pred = np.exp(theta_list[i][0]) * np.exp((cycle+1)*theta_list[i][1])
-        err += (y_pred-fid_list[i][cycle])**2
-    MSE.append(err)
-print('MSE: ')
-for i in MSE:
-    print(i)
 #%% Plotting
 fig, ax = plt.subplots(2, figsize=(10, 10))
 x_dis = np.arange(1,n_cycles+1)
 ax1, ax2 = ax
 
+# Subplot 1: Target gate times
 ax1.plot(x_dis, fid_target_QEC, '-o', label='Error correction')
 ax1.plot(x_dis, fid_target_PS, '-o', label='Post select correct states')
 #ax1.plot(x_dis, fid_target_PP, '-o', label='Post processing data')
@@ -298,6 +408,7 @@ ax1.plot(x_dis, fid_target_stab, '-o', label='Only measurements, no correction')
 #ax1.plot(x_dis, fid_target_empty, '-o', label='Decay of [[5,1,3]] logical state')
 ax1.plot(x_dis, fid_target_single, '-o', label='Decay of single qubit in |1>')
 
+# Subplot 2: Demonstrated gate times
 ax2.plot(x_dis, fid_demonstrated_QEC, '-o', label='Error correction')
 ax2.plot(x_dis[0:7], fid_demonstrated_PS[0:7], '-o', label='Post select correct states')
 #ax2.plot(x_dis, fid_demonstrated_PP, '-o', label='Post processing data')
@@ -345,21 +456,31 @@ for key in time:
     previous_time = time[key]
 
 
+#%% Curve fitting with OLS (Not in use)
+fid_list = [fid, fid_i, fid_res, fid_res_i]
+theta_list = []
+for fidelity in fid_list:
+    x_D = np.ones((n_cycles,2))
+    for i in range(n_cycles):
+        x_D[i][1] += i
+    y = np.log( np.reshape(np.asarray(fidelity), (n_cycles,1)) )
+    theta = np.dot(np.dot(np.linalg.inv(np.dot(x_D.T, x_D)), x_D.T), y)
+    theta_list.append(theta)
 
-    
-# %% Single qubit decay
+x = np.linspace(0,n_cycles+1,100)
+y_pred_list = []
+for theta in theta_list:
+    y_pred = np.exp(theta[0]) * np.exp(x*theta[1])
+    y_pred_list.append(y_pred)
 
-qb = QuantumRegister(1, 'code_qubit')
-circ = QuantumCircuit(qb)
-circ.y(qb[0])
-circ.snapshot('start','density_matrix')
-circ.append(thermal_relaxation_error(t1=40e3, t2=60e3, time=50000),[0])
-circ.snapshot('finish','density_matrix')
-
-results = execute(circ, Aer.get_backend('qasm_simulator'),
-    noise_model=None, shots=n_shots).result()
-dm_start = results.data()['snapshots']['density_matrix']['start'][0]['value']
-dm_end = results.data()['snapshots']['density_matrix']['finish'][0]['value']
-print(state_fidelity(dm_start, dm_end))
-print(circ)
-print(dm_start)
+# Calculate MSE
+MSE = []
+for i in range(len(fid_list)):
+    err = 0.
+    for cycle in range(n_cycles):
+        y_pred = np.exp(theta_list[i][0]) * np.exp((cycle+1)*theta_list[i][1])
+        err += (y_pred-fid_list[i][cycle])**2
+    MSE.append(err)
+print('MSE: ')
+for i in MSE:
+    print(i)
