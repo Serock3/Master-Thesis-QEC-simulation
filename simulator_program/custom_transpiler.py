@@ -4,7 +4,7 @@ from qiskit.visualization import plot_circuit_layout
 from qiskit.circuit.equivalence_library import SessionEquivalenceLibrary
 from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZGate
 from qiskit import QuantumCircuit, QuantumRegister
-from idle_noise import get_circuit_time
+from .idle_noise import get_circuit_time
 import warnings
 
 #%% Constants
