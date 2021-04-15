@@ -15,16 +15,13 @@ from qiskit.circuit.library import standard_gates
 from qiskit.circuit import Gate
 import warnings
 
-# from inspect import getmembers, isfunction, isclass, ismodule
-
 # %%
-
-# Class to contain gate times.
-# Auto populates the gate_times dictionary with default values for single and two qubit gates
 
 
 class GateTimes:
-
+    """Class to contain gate times.
+        Auto populates the gate_times dictionary with (specified) default values for single and two qubit gates.
+    """
     # Lists of gate names included in noise models and their type.
     # Gates not in these sets will not be possible to include in noise models.
     # This will help noise models know how many qubits to apply noise to.
@@ -33,7 +30,8 @@ class GateTimes:
                           'sz', 'sy', 's', 't', 'u1', 'u2', 'u3'}
     two_qubit_gates = {'cx', 'cz', 'swap', 'iswap'}
     special_ops = {'measure', 'reset'}
-    directives = {'barrier', 'set_density_matrix', 'save_density_matrix','snapshot'}
+    directives = {'barrier', 'set_density_matrix',
+                  'save_density_matrix', 'save_expval', 'snapshot'}
 
     def __init__(self, single_qubit_default=0, two_qubit_default=0, custom_gate_times={}):
         """Class to contain a dictionary of gate times. 
@@ -82,8 +80,9 @@ class GateTimes:
         return f"GateTimes(0, 0, {self.gate_times.__repr__()})"
 
     def __str__(self):
-        return "GateTimes object with times (ns)\n"+ self.gate_times.__str__()
-        
+        return "GateTimes object with times (ns)\n" + self.gate_times.__str__()
+
+
 # TODO: Here we can define e.g. WACQT_targeted_gate_times, and other versions
 WACQT_gate_times = GateTimes(
     single_qubit_default=20, two_qubit_default=200,
@@ -115,7 +114,8 @@ def thermal_relaxation_model_V2(T1=40e3, T2=60e3, gate_times=WACQT_gate_times):
 
     # Convert from dict object to GateTimes object
     if isinstance(gate_times, dict):
-        gate_times = GateTimes(0, 0, WACQT_gate_times.get_gate_times(gate_times))
+        gate_times = GateTimes(
+            0, 0, WACQT_gate_times.get_gate_times(gate_times))
 
     noise_damping = NoiseModel()
 
