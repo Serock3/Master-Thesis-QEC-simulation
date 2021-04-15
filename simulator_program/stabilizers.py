@@ -12,7 +12,7 @@
 # %% Import modules
 from IPython.display import display
 from qiskit.visualization import plot_histogram
-from qiskit.quantum_info import state_fidelity
+from qiskit.quantum_info import (state_fidelity, Pauli)
 import numpy as np
 from qiskit import (QuantumCircuit,
                     QuantumRegister,
@@ -117,6 +117,9 @@ def get_repeated_stabilization(registers, n_cycles=1,
                 circ.append(Snapshot('stabilizer_' + str(current_cycle), snapshot_type, num_qubits=5), registers.QubitRegister)
                 if include_barriers:
                     circ.barrier()
+            elif snapshot_type == 'expectation_value':
+                circ.save_expectation_value(Pauli('ZZZZZ'), registers.QubitRegister, 
+                    label='exp_value_'+str(current_cycle))
             else:
                 circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
     return circ
