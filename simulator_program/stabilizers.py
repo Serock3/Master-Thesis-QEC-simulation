@@ -145,6 +145,7 @@ def get_empty_stabilizer_circuit(registers):
 
     return circ
 
+
 def encode_input(registers):
     """Encode the input into logical 0 and 1 for the [[5,1,3]] code. This
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>
@@ -542,7 +543,8 @@ def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
 
 # %% All unflagged stabilizers
 def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
-                               current_cycle=0, current_step=0, num_ancillas=None, include_barriers = True):
+                               current_cycle=0, current_step=0, num_ancillas=None, 
+                               include_barriers=True, pipeline=False):
     """Run all four stabilizers without flags, as well as an optional
     recovery. The input current_step is only relevant for flagged cycles, and
     should be set to 0 otherwise.
@@ -565,10 +567,16 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
         anQb_list = [registers.AncillaRegister[n % num_ancillas]
                      for n in range(4)]
 
-    stabilizer_list = [_unflagged_stabilizer_XZZXI,
-                       _unflagged_stabilizer_IXZZX,
-                       _unflagged_stabilizer_XIXZZ,
-                       _unflagged_stabilizer_ZXIXZ]
+    if pipeline:
+        stabilizer_list = [_pipeline_stabilizer_XZZXI,
+                           _pipeline_stabilizer_IXZZX,
+                           _pipeline_stabilizer_XIXZZ,
+                           _pipeline_stabilizer_ZXIXZ]
+    else:
+        stabilizer_list = [_unflagged_stabilizer_XZZXI,
+                           _unflagged_stabilizer_IXZZX,
+                           _unflagged_stabilizer_XIXZZ,
+                           _unflagged_stabilizer_ZXIXZ]
 
     # Create list of syndrome bits
     if isinstance(registers.SyndromeRegister, list):
@@ -595,9 +603,10 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
 
     # Recovery
     if recovery is True:
+        circ.barrier()
         circ += unflagged_recovery(registers, reset, current_cycle)
-        if include_barriers:
-            circ.barrier
+        #if include_barriers:
+        circ.barrier()
     return circ
 
 
@@ -788,6 +797,186 @@ def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
 
     return circ
 
+# %% Pipelined stabilizers. To call these, use unflagged_stabilizer_cycle with
+# pipeline=True, DO NOT use num_ancillas=2. This is due to the transpiler not
+# handling it correctly, thus forcing this 'fix'.
+def _pipeline_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
+    """Gives the circuit for running the regular XZZXI stabilizer in a pipelined
+    scheme. Note that this assumes ancilla reset, as there currently is no
+    lookup table to handle no-reset for this purpose.
+
+    Args:
+        registers (StabilizerRegister): Register object
+        anQb (AncillaQubit, optional): Specifies the ancilla to use for the measurement. Defaults to None.
+        reset (bool, optional): Whether to reset ancillas between measurements. Defaults to True.
+        current_cycle (int, optional): [description]. Defaults to 0.
+        current_step (int, optional): [description]. Defaults to 0.
+
+    Returns:
+        [type]: [description]
+    """
+
+    # Create a circuit
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
+    circ = get_empty_stabilizer_circuit(registers)
+    # NOTE: Use the empty circuit below instead? It doesn't add the readout register
+    # circ = QuantumCircuit(qbReg,anReg,clReg)
+    if not anQb:
+        if anReg.size == 2:
+            anQb = anReg[1]
+        else:
+            anQb = anReg[1]
+
+    # X
+    circ.h(anQb)
+    circ.h(qbReg[0])
+    circ.cz(anQb, qbReg[0])
+    circ.h(qbReg[0])
+
+    # Z
+    circ.cz(anQb, qbReg[1])
+
+    # Z
+    circ.cz(anQb, qbReg[2])
+
+    # X
+    circ.h(qbReg[3])
+    circ.cz(anQb, qbReg[3])
+    circ.h(qbReg[3])
+    circ.h(anQb)
+
+    # Measure and reset
+    circ.swap(anReg[0], anReg[1])
+    circ.measure(anReg[0], syn_bit)
+    circ.reset(anReg[0])
+    return circ
+
+def _pipeline_stabilizer_IXZZX(registers, anQb=None, syn_bit=None, reset=True):
+    """Gives the circuit for running the regular IXZZX stabilizer in a pipelined
+    scheme. Note that this assumes ancilla reset, as there currently is no
+    lookup table to handle no-reset for this purpose.
+    """
+
+    # Create a circuit
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
+    circ = get_empty_stabilizer_circuit(registers)
+    if not anQb:
+        if anReg.size == 2:
+            anQb = anReg[1]
+        else:
+            anQb = anReg[2]
+
+    # X
+    circ.h(anQb)
+    circ.h(qbReg[1])
+    circ.cz(anQb, qbReg[1])
+    circ.h(qbReg[1])
+
+    # Z
+    circ.cz(anQb, qbReg[2])
+
+    # Z
+    circ.cz(anQb, qbReg[3])
+
+    # X
+    circ.h(qbReg[4])
+    circ.cz(anQb, qbReg[4])
+    circ.h(qbReg[4])
+    circ.h(anQb)
+
+    # Measure and reset
+    circ.swap(anReg[0], anReg[1])
+    circ.measure(anReg[0], syn_bit)
+    circ.reset(anReg[0])
+    return circ
+
+def _pipeline_stabilizer_XIXZZ(registers, anQb=None, syn_bit=None, reset=True):
+    """Gives the circuit for running the regular XIXZZ stabilizer in a pipelined
+    scheme. Note that this assumes ancilla reset, as there currently is no
+    lookup table to handle no-reset for this purpose.
+    """
+    # Create a circuit
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
+    circ = get_empty_stabilizer_circuit(registers)
+
+    if not anQb:
+        if anReg.size == 2:
+            anQb = anReg[1]
+        else:
+            anQb = anReg[3]
+
+    # X
+    circ.h(anQb)
+    circ.h(qbReg[0])
+    circ.cz(anQb, qbReg[0])
+    circ.h(qbReg[0])
+
+    # X
+    circ.h(qbReg[2])
+    circ.cz(anQb, qbReg[2])
+    circ.h(qbReg[2])
+
+    # Z
+    circ.cz(anQb, qbReg[3])
+
+    # Z
+    circ.cz(anQb, qbReg[4])
+    circ.h(anQb)
+
+    # Measure and reset
+    circ.swap(anReg[0], anReg[1])
+    circ.measure(anReg[0], syn_bit)
+    circ.reset(anReg[0])
+    return circ
+
+def _pipeline_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
+    """Gives the circuit for running the regular ZXIXZ stabilizer in a pipelined
+    scheme. Note that this assumes ancilla reset, as there currently is no
+    lookup table to handle no-reset for this purpose. 
+
+    As this is the final stabilizer in a cycle, this one does not include a
+    swap before measurements, as it is essentially useless.
+    """
+    # Create a circuit
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
+    circ = get_empty_stabilizer_circuit(registers)
+
+    if not anQb:
+        if anReg.size == 2:
+            anQb = anReg[1]
+        else:
+            anQb = anReg[4]
+
+    # Z
+    circ.h(anQb)
+    circ.cz(anQb, qbReg[0])
+
+    # X
+    circ.h(qbReg[1])
+    circ.cz(anQb, qbReg[1])
+    circ.h(qbReg[1])
+
+    # X
+    circ.h(qbReg[3])
+    circ.cz(anQb, qbReg[3])
+    circ.h(qbReg[3])
+
+    # Z
+    circ.cz(anQb, qbReg[4])
+    circ.h(anQb)
+
+    # Measure and reset
+    circ.measure(anReg[1], syn_bit)
+    circ.reset(anReg[1])
+    return circ
 
 # %% All recoveries
 def unflagged_recovery(registers, reset=True, current_cycle=0, current_step=0):
