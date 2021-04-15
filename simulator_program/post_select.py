@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 from qiskit import execute, Aer
 from qiskit.aqua.utils import get_subsystems_counts
 from qiskit.quantum_info import state_fidelity
-
+import warnings
 #%%
 """
 TODO:
@@ -77,26 +77,43 @@ def get_subsystem_counts_up_to_cycle(counts, cycle):
             subsys_counts[formated_outcome] = counts[outcome]
     return subsys_counts
 
+def get_trivial_post_select_counts(counts, n_cycles, trivial_key:str = None):
+    # TODO: allow str trivial_key?
+    if trivial_key is None:
+        return [get_subsystem_counts_up_to_cycle(
+            counts, current_cycle)[0]
+            for current_cycle in range(n_cycles)]
+    else:
+        trivial_key_list = [int(trivial_key*(current_cycle+1),2) for current_cycle in range(n_cycles)]
+        return [get_subsystem_counts_up_to_cycle(
+            counts, current_cycle)[trivial_key_list[current_cycle]]
+            for current_cycle in range(n_cycles)]
 
-def get_trivial_post_select_den_mat_at_cycle(results, current_cycle):
-    return [state['value'] for state in
-            results.data()[
-        'snapshots']['density_matrix']['stabilizer_' + str(current_cycle)]
-        if int(state['memory'], 16) == 0][0]
+def get_trivial_post_select_den_mat_at_cycle(results, current_cycle, trivial_key = '0x0'):
+    # TODO: May not need a separate func anymore
+    # TODO: This may catch the wrong KeyError
+    try:
+        return results.data()['stabilizer_' + str(current_cycle)][trivial_key]
+    except KeyError:
+        warnings.warn("Attempting to use density_matrix snapshot, switch to save state", DeprecationWarning)
+        # No support for trivial_key, always selects '0x0'
+        return [state['value'] for state in
+                results.data()[
+            'snapshots']['density_matrix']['stabilizer_' + str(current_cycle)]
+            if int(state['memory'], 16) == 0][0]
 
-
-def get_trivial_post_select_den_mat(results, n_cycles):
+def get_trivial_post_select_den_mat(results, n_cycles:int, trivial_key:str = None):
+    # TODO: Make this simpler?
+    if trivial_key:
+        #NOTE: This would work for e.g. trivial_key = '0000', so maybe no if statement is clearer?
+        trivial_key_list = [hex(int(trivial_key*(current_cycle+1),2)) for current_cycle in range(n_cycles)]
+        return [get_trivial_post_select_den_mat_at_cycle(results, current_cycle, trivial_key)
+            for current_cycle, trivial_key in enumerate(trivial_key_list)]
     return [get_trivial_post_select_den_mat_at_cycle(results, current_cycle)
             for current_cycle in range(n_cycles)]
 
-
-def get_trivial_post_select_counts(counts, n_cycles):
-    return [get_subsystem_counts_up_to_cycle(
-        counts, current_cycle)[0]
-        for current_cycle in range(n_cycles)]
-
-
 def get_trivial_state(circ):
+    warnings.warn("Use logical statevec instead", DeprecationWarning)
     results = execute(
         circ,
         Aer.get_backend('qasm_simulator'),
