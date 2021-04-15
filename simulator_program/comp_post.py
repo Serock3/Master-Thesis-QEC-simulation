@@ -1,8 +1,13 @@
 #%%
-from post_process import *
-from post_select import *
+if __package__:
+    from .post_process import *
+    from .post_select import *
+    from .stabilizers import logical_states
+else:
+    from post_process import *
+    from post_select import *
+    from stabilizers import logical_states
 import numpy as np
-from stabilizers import logical_states
 from matplotlib import pyplot as plt
 from qiskit.providers.aer.noise.errors import ReadoutError
 from qiskit.providers.aer.noise.noise_model import NoiseModel
@@ -29,9 +34,9 @@ circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
 n_shots = 100
 p1given0 = 0.1
 p0given1 = p1given0
-noise_model = NoiseModel() #thermal_relaxation_model()
+noise_model = thermal_relaxation_model()#NoiseModel()#
 read_error = ReadoutError([[1 - p1given0, p1given0], [p0given1, 1 - p0given1]])
-noise_model.add_all_qubit_readout_error(read_error, ['measure'])
+# noise_model.add_all_qubit_readout_error(read_error, ['measure'])
 results = execute(
     circ,
     Aer.get_backend('qasm_simulator'),

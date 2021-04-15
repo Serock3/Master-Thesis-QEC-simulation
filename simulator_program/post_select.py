@@ -1,12 +1,18 @@
 # %%
+
+if __package__:
+    from .stabilizers import encode_input_v2, get_classical_register, StabilizerRegisters, get_repeated_stabilization
+    from .custom_noise_models import thermal_relaxation_model
+else:
+    from stabilizers import encode_input_v2, get_classical_register, StabilizerRegisters, get_repeated_stabilization
+    from custom_noise_models import thermal_relaxation_model
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister
 from matplotlib import pyplot as plt
-from .stabilizers import encode_input_v2, get_classical_register, StabilizerRegisters, get_repeated_stabilization
 from qiskit import execute, Aer
 from qiskit.aqua.utils import get_subsystems_counts
-from .custom_noise_models import thermal_relaxation_model
 from qiskit.quantum_info import state_fidelity
 
+#%%
 """
 TODO:
 1. Make selection work for every syndrome
