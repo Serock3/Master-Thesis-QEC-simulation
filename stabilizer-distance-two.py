@@ -17,6 +17,8 @@ from typing import List
 from qiskit.quantum_info import Statevector, state_fidelity
 from simulator_program.custom_noise_models import *
 from simulator_program.idle_noise import *
+from simulator_program.post_select import get_trivial_post_select_counts, get_trivial_post_select_den_mat
+from matplotlib import pyplot as plt
 # %% Logical states (for initialization)
 
 
@@ -51,11 +53,14 @@ def logical_states(include_ancillas='front') -> List[List[float]]:
     return [Statevector(logical_0), Statevector(logical_1)]
 
 # %% Custom circuits
-def pipelined_delft(n_cycles=1, reset = True, **kwargs):
+
+
+def pipelined_delft(n_cycles=1, reset=True, **kwargs):
     qbReg = QuantumRegister(4, 'code_qubit')
     anReg = AncillaRegister(3, 'ancilla_qubit')
 
-    clRegs = [ClassicalRegister(3, 'syndrome_cycle_' + str(i)) for i in range(n_cycles)]
+    clRegs = [ClassicalRegister(3, 'syndrome_cycle_' + str(i))
+              for i in range(n_cycles)]
     # clReg = ClassicalRegister(3, 'syndrome_bit')
     # readout = ClassicalRegister(4, 'readout')
 
@@ -79,7 +84,7 @@ def pipelined_delft(n_cycles=1, reset = True, **kwargs):
             circ.ry(np.pi/2, D)
         circ.ry(np.pi/2, anReg[1])
         # Order of stabs are {Z1Z3,XXXX ,Z2Z4}
-        circ.measure(anReg[1],clRegs[cycle][1])
+        circ.measure(anReg[1], clRegs[cycle][1])
         if reset:
             circ.reset(anReg[1])
         circ.barrier()
@@ -92,54 +97,64 @@ def pipelined_delft(n_cycles=1, reset = True, **kwargs):
         circ.cz(qbReg[3], anReg[2])
         circ.ry(np.pi/2, anReg[0])
         circ.ry(np.pi/2, anReg[2])
-        circ.measure(anReg[0],clRegs[cycle][0])
-        circ.measure(anReg[2],clRegs[cycle][2])
+        circ.measure(anReg[0], clRegs[cycle][0])
+        circ.measure(anReg[2], clRegs[cycle][2])
         if reset:
             circ.reset(anReg[0])
             circ.reset(anReg[2])
         circ.barrier()
-        circ.save_density_matrix(qubits = list(qbReg),label='stabilizer_'+ str(cycle),conditional=True)
+        circ.save_density_matrix(qubits=list(
+            qbReg), label='stabilizer_' + str(cycle), conditional=True)
     return circ
 # %% Custom noise models
 
 # Info of T1/T2 and gate times is the Mendeley paper
 
 
-#%% Demo
+# %% Demo
 if __name__ == '__main__':
-    circ = pipelined_delft(5)
+    n_cycles = 5
+    circ = pipelined_delft(n_cycles)
     display(circ.draw(output='mpl'))
 
     n_shots = 100
-    simulator = Aer.get_backend('aer_simulator') # qasm_simulator
-    simulator.set_option("method",'density_matrix')
+    simulator = Aer.get_backend('aer_simulator')  # qasm_simulator
+    simulator.set_option("method", 'density_matrix')
     # circ = transpile(circ, simulator)
 
     # Run and get saved data
-    results = simulator.run(add_idle_noise_to_circuit(circ,{'ry':200}),
-                    shots=n_shots,
-                    noise_model=thermal_relaxation_model_V2()).result()
-    # results = execute(
-    #     circ,
-    #     Aer.get_backend('aer_simulator_density_matrix'),
-    #     noise_model=None,
-    #     shots=n_shots
-    # ).result()
-    print('counts',results.get_counts())
-    try:
-        state = results.data()['snapshots']['statevector']['post_encoding'][0]
-        print('snapshots')
-    except:
-        state = results.data()['stabilizer_4']
-        print('save_state')
-    print('post encoding fid',state_fidelity(state['0x5b6d'],logical_states(None)[0]))
-    print('post select fraction', results.get_counts()['101 101 101 101 101']/n_shots)
+    results = simulator.run(add_idle_noise_to_circuit(circ, {'ry': 200}),
+                            shots=n_shots,
+                            noise_model=thermal_relaxation_model_V2()).result()
+    correct_state = logical_states(None)[0]
+    fidelities_select = [state_fidelity(post_selected_state, correct_state) for post_selected_state
+                         in get_trivial_post_select_den_mat(results, n_cycles, '101')]
+    select_counts = get_trivial_post_select_counts(
+        results.get_counts(), n_cycles, '101')
+    fig, axs = plt.subplots(2, figsize=(14, 10))
+    ax1 = axs[0]
+    ax2 = axs[1]
+
+    # ax1.plot(range(n_cycles), fidelities_normal, 'o-', label='No processing')
+    ax1.plot(range(n_cycles), fidelities_select, 'o-', label='Post select')
+    # ax1.plot(range(n_cycles), fidelities_post_process, 'o-', label='Post process')
+    ax1.set_xlabel(r'Error detection cycle $n$')
+    ax1.set_ylabel('Post selected count')
+    ax1.legend()
+    ax1.grid(linewidth=1)
+
+
+    ax2.plot(range(n_cycles), select_counts, 'o-', label='No transpilation')
+    ax2.set_xlabel(r'Error detection cycle $n$')
+    ax2.set_ylabel(r'Post select fraction')
+    ax2.legend()
+    ax2.grid(linewidth=1)
 # %%
 Aer.backends()
 # %%
-results.data()['post_encoding']
-#%%
-qbReg.instances_counter
+
 # %%
 # TODO: implement code similar to in comp_post. Fix in post_process/post_select so that it can handle the new format
 # Note, trivial syndrome is now '101'
+
+# %%
