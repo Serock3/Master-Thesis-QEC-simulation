@@ -19,6 +19,7 @@ from simulator_program.custom_noise_models import *
 from simulator_program.idle_noise import *
 from simulator_program.post_select import get_trivial_post_select_counts, get_trivial_post_select_den_mat
 from matplotlib import pyplot as plt
+from qiskit.quantum_info.operators.symplectic.pauli import Pauli
 # %% Logical states (for initialization)
 
 
@@ -105,6 +106,7 @@ def pipelined_delft(n_cycles=1, reset=True, **kwargs):
         circ.barrier()
         circ.save_density_matrix(qubits=list(
             qbReg), label='stabilizer_' + str(cycle), conditional=True)
+        circ.save_expectation_value(Pauli('ZZII'), qbReg, label='exp_value_'+str(cycle), conditional=True)
     return circ
 # %% Custom noise models
 
@@ -115,7 +117,7 @@ def pipelined_delft(n_cycles=1, reset=True, **kwargs):
 if __name__ == '__main__':
     n_cycles = 5
     circ = pipelined_delft(n_cycles)
-    display(circ.draw(output='mpl'))
+    # display(circ.draw(output='mpl'))
 
     n_shots = 100
     simulator = Aer.get_backend('aer_simulator')  # qasm_simulator
@@ -126,20 +128,27 @@ if __name__ == '__main__':
     results = simulator.run(add_idle_noise_to_circuit(circ, {'ry': 200}),
                             shots=n_shots,
                             noise_model=thermal_relaxation_model_V2()).result()
+    
+    trivial_key = '101' # A trivial syndrome is given by 101 and not 000 here
     correct_state = logical_states(None)[0]
     fidelities_select = [state_fidelity(post_selected_state, correct_state) for post_selected_state
-                         in get_trivial_post_select_den_mat(results, n_cycles, '101')]
+                         in get_trivial_post_select_den_mat(results, n_cycles, trivial_key)]
     select_counts = get_trivial_post_select_counts(
-        results.get_counts(), n_cycles, '101')
+        results.get_counts(), n_cycles, trivial_key)
+
+    trivial_key_list = [hex(int(trivial_key*(current_cycle+1),2)) for current_cycle in range(n_cycles)]
+    exp_values = [results.data()['exp_value_'+str(cycle)][trivial_key_list[cycle]] for cycle in range(n_cycles)]
     fig, axs = plt.subplots(2, figsize=(14, 10))
     ax1 = axs[0]
     ax2 = axs[1]
 
     # ax1.plot(range(n_cycles), fidelities_normal, 'o-', label='No processing')
     ax1.plot(range(n_cycles), fidelities_select, 'o-', label='Post select')
+    ax1.plot(range(n_cycles), exp_values, 'o-', label='Post select exp')
     # ax1.plot(range(n_cycles), fidelities_post_process, 'o-', label='Post process')
     ax1.set_xlabel(r'Error detection cycle $n$')
     ax1.set_ylabel('Post selected count')
+    ax1.set_ylim(0,1)
     ax1.legend()
     ax1.grid(linewidth=1)
 
@@ -149,12 +158,5 @@ if __name__ == '__main__':
     ax2.set_ylabel(r'Post select fraction')
     ax2.legend()
     ax2.grid(linewidth=1)
-# %%
-Aer.backends()
-# %%
-
-# %%
-# TODO: implement code similar to in comp_post. Fix in post_process/post_select so that it can handle the new format
-# Note, trivial syndrome is now '101'
 
 # %%
