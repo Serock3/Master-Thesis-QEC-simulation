@@ -32,7 +32,7 @@ from simulator_program.idle_noise import *
 
 # %%
 def get_testing_circuit(registers, reset, recovery=True, n_cycles=15,
-        initial_state=0):
+        initial_state=0, **kwargs):
     """Create a [[5,1,3]] stabilizer circuit, including encoding and snapshots.
     
     Args:
@@ -55,7 +55,7 @@ def get_testing_circuit(registers, reset, recovery=True, n_cycles=15,
     circ.barrier()
     circ.append(Snapshot('post_encoding', 'density_matrix', num_qubits=5), registers.QubitRegister)
     circ += get_repeated_stabilization(registers, n_cycles=n_cycles, reset=reset,
-    recovery=recovery, flag=False, snapshot_type='density_matrix')
+    recovery=recovery, flag=False, snapshot_type='density_matrix', **kwargs)
     return circ
 
 def get_standard_transpilation(circ):
@@ -133,7 +133,7 @@ def get_running_fidelity_idle_circuit(results, trivial_state, n_cycles):
 
 def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=True,
         recovery=True, post_select=False, post_process=False, idle_noise=True, 
-        empty_circuit=False):
+        empty_circuit=False, transpile=True, **kwargs):
     """Get the fidelity of a certain setup/configuration from only its
     parameters.
     
@@ -190,8 +190,9 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
     registers = StabilizerRegisters(qb, an, cr, readout)
 
     # Circuits
-    circ = get_testing_circuit(registers, reset, recovery, n_cycles)
-    circ = get_standard_transpilation(circ)
+    circ = get_testing_circuit(registers, reset, recovery, n_cycles, **kwargs)
+    if transpile:
+        circ = shortest_transpile_from_distribution(circ, print_cost=False)
 
     # Get the correct (no errors) state
     trivial = get_trivial_state(circ)
@@ -328,13 +329,33 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3):
         fid_single.append(state_fidelity(current_state,correct_state))
     return fid_single
 
+#%% Test woop woop
+# Settings used across all configurations
+n_cycles = 10
+n_shots = 2048
+
+# Noise models
+target_noise = thermal_relaxation_model_V2(gate_times=WACQT_target_times)
+current_noise = thermal_relaxation_model_V2(gate_times=WACQT_demonstrated_times)
+
+# Quantum error correction for both noise models
+fid_standard_target_QEC = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False)
+fid_pipeline_target_QEC = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False, pipeline=True)
+fid_standard_dem_QEC = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False)
+fid_pipeline_dem_QEC = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False, pipeline=True)
 
 #%% Single qubit decay
 fid_target_single = fid_single_qubit(n_cycles, n_shots, gate_times=WACQT_target_times)
 fid_demonstrated_single = fid_single_qubit(n_cycles, n_shots, gate_times=WACQT_demonstrated_times)
-
-#%% Running different configurations of the [[5,1,3]] code.
-
+#%%
 # Settings used across all configurations
 n_cycles = 15
 n_shots = 4096
@@ -396,34 +417,22 @@ fid_demonstrated_empty = fidelity_from_scratch(n_cycles, current_noise, n_shots,
 print('Check!')
 
 #%% Plotting
-fig, ax = plt.subplots(2, figsize=(10, 10))
+fig, ax1 = plt.subplots(1, figsize=(10, 6))
 x_dis = np.arange(1,n_cycles+1)
-ax1, ax2 = ax
+
 
 # Subplot 1: Target gate times
-ax1.plot(x_dis, fid_target_QEC, '-o', label='Error correction')
-ax1.plot(x_dis, fid_target_PS, '-o', label='Post select correct states')
-#ax1.plot(x_dis, fid_target_PP, '-o', label='Post processing data')
-ax1.plot(x_dis, fid_target_stab, '-o', label='Only measurements, no correction')
-#ax1.plot(x_dis, fid_target_empty, '-o', label='Decay of [[5,1,3]] logical state')
-ax1.plot(x_dis, fid_target_single, '-o', label='Decay of single qubit in |1>')
-
-# Subplot 2: Demonstrated gate times
-ax2.plot(x_dis, fid_demonstrated_QEC, '-o', label='Error correction')
-ax2.plot(x_dis[0:7], fid_demonstrated_PS[0:7], '-o', label='Post select correct states')
-#ax2.plot(x_dis, fid_demonstrated_PP, '-o', label='Post processing data')
-ax2.plot(x_dis, fid_demonstrated_stab, '-o', label='Only measurements, no correction')
-#ax2.plot(x_dis, fid_demonstrated_empty, '-o', label='Decay of [[5,1,3]] logical state')
-ax2.plot(x_dis, fid_demonstrated_empty, '-o', label='Decay of single qubit in |1>')
-
+ax1.plot(x_dis, fid_standard_target_QEC, '-o', label='Normal, target times')
+ax1.plot(x_dis, fid_pipeline_target_QEC, '-o', label='Pipeline, target times')
+ax1.plot(x_dis, fid_standard_dem_QEC, '-o', label='Normal, dem. times')
+ax1.plot(x_dis, fid_pipeline_dem_QEC, '-o', label='Pipeline, dem. times')
 ax1.set(ylim=(0.0, 1.0))
-ax2.set(ylim=(0.0, 1.0))
 
 ax1.set_xlabel('Number of stabilizer cycles (2960 ns each)')
 ax1.set_ylabel('Average fidelity')
 ax1.set_title('Average fidelity of simulated [[5,1,3]] QEC code using target gate times')
 ax1.legend()
-
+#%%
 ax2.set_xlabel('Number of stabilizer cycles (14160 ns each)')
 ax2.set_ylabel('Average fidelity')
 ax2.set_title('Average fidelity, experimentally demonstrated gate times')
@@ -484,3 +493,104 @@ for i in range(len(fid_list)):
 print('MSE: ')
 for i in MSE:
     print(i)
+
+#%% RUNS AND SETTINGS USED IN PLOTS FOR BASUDHA
+
+# Single qubit decay
+fid_target_single = fid_single_qubit(n_cycles, n_shots, gate_times=WACQT_target_times)
+fid_demonstrated_single = fid_single_qubit(n_cycles, n_shots, gate_times=WACQT_demonstrated_times)
+
+# Settings used across all configurations
+n_cycles = 15
+n_shots = 4096
+
+# Noise models
+target_noise = thermal_relaxation_model_V2(gate_times=WACQT_target_times)
+current_noise = thermal_relaxation_model_V2(gate_times=WACQT_demonstrated_times)
+
+# Quantum error correction for both noise models
+fid_target_QEC = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_demonstrated_QEC = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+
+# Post selection for both noise models. Note that the second one has other 
+# settings for n_cycles and n_shots. Due to the noise model, there is little
+# chance that any single shot remains at the 15th cycle, resulting in an error.
+fid_target_PS, count_target_PS = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=False, post_select=True,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_demonstrated_PS, count_demonstrated_PS = fidelity_from_scratch(9, current_noise, 16000, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=False, post_select=True,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+
+# Post processing for both noise models.
+fid_target_PP = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=False, post_select=False,
+    post_process=True, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_demonstrated_PP = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=False, post_select=False,
+    post_process=True, idle_noise=True, empty_circuit=False)
+print('Check!')
+
+# No correction, only performing stabilizer measurements for each noise model.
+fid_target_stab = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=False, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+fid_demonstrated_stab = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=False, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=False)
+print('Check!')
+
+# Running 'empty' stabilizer circuits, only containing the encoding.
+fid_target_empty = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=True)
+print('Check!')
+fid_demonstrated_empty = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, recovery=True, post_select=False,
+    post_process=False, idle_noise=True, empty_circuit=True)
+print('Check!')
+
+# Plotting
+fig, ax = plt.subplots(2, figsize=(10, 10))
+x_dis = np.arange(1,n_cycles+1)
+ax1, ax2 = ax
+
+# Subplot 1: Target gate times
+ax1.plot(x_dis, fid_target_QEC, '-o', label='Error correction')
+ax1.plot(x_dis, fid_target_PS, '-o', label='Post select correct states')
+#ax1.plot(x_dis, fid_target_PP, '-o', label='Post processing data')
+ax1.plot(x_dis, fid_target_stab, '-o', label='Only measurements, no correction')
+#ax1.plot(x_dis, fid_target_empty, '-o', label='Decay of [[5,1,3]] logical state')
+ax1.plot(x_dis, fid_target_single, '-o', label='Decay of single qubit in |1>')
+
+# Subplot 2: Demonstrated gate times
+ax2.plot(x_dis, fid_demonstrated_QEC, '-o', label='Error correction')
+ax2.plot(x_dis[0:7], fid_demonstrated_PS[0:7], '-o', label='Post select correct states')
+#ax2.plot(x_dis, fid_demonstrated_PP, '-o', label='Post processing data')
+ax2.plot(x_dis, fid_demonstrated_stab, '-o', label='Only measurements, no correction')
+#ax2.plot(x_dis, fid_demonstrated_empty, '-o', label='Decay of [[5,1,3]] logical state')
+ax2.plot(x_dis, fid_demonstrated_empty, '-o', label='Decay of single qubit in |1>')
+
+ax1.set(ylim=(0.0, 1.0))
+ax2.set(ylim=(0.0, 1.0))
+
+ax1.set_xlabel('Number of stabilizer cycles (2960 ns each)')
+ax1.set_ylabel('Average fidelity')
+ax1.set_title('Average fidelity of simulated [[5,1,3]] QEC code using target gate times')
+ax1.legend()
+
+ax2.set_xlabel('Number of stabilizer cycles (14160 ns each)')
+ax2.set_ylabel('Average fidelity')
+ax2.set_title('Average fidelity, experimentally demonstrated gate times')
+ax2.legend()
+#fig.savefig('fidelities.pdf')

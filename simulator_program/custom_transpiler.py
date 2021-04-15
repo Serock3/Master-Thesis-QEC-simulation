@@ -82,7 +82,7 @@ def shortest_transpile_from_distribution(circuit,
     kwargs['layout_method'] = layout_method
     kwargs['optimization_level'] = optimization_level
 
-    cost = 10000
+    cost = 1000000
     for _ in range(repeats):
         with warnings.catch_warnings():  # sabre causes deprecation warning, this will ignore them
             warnings.simplefilter("ignore")
