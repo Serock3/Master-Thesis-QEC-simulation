@@ -125,13 +125,13 @@ def get_repeated_stabilization(registers, n_cycles=1,
                 circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
 
         #if snapshot_type:
-        #    if not isinstance(snapshot_type, list):
-        #        snapshot_type = [snapshot_type]
-        #        
-        #    add_snapshot_to_circuit(circ, snapshot_type, registers.QubitRegister)
+            #if not isinstance(snapshot_type, list):
+            #    snapshot_type = [snapshot_type]
+            #        
+            #add_snapshot_to_circuit(circ, snapshot_type, registers.QubitRegister)
     return circ
 
-def add_snapshot_to_circuit(circ, snapshot_label, qubits=None, pauliop=Pauli('ZZZZZ')):
+def add_snapshot_to_circuit(circ, snapshot_label=None, qubits=None, pauliop='ZZZZZ'):
     """Appends a snapshot to circuit, given a specific label.
     
     Args:
@@ -159,7 +159,7 @@ def add_snapshot_to_circuit(circ, snapshot_label, qubits=None, pauliop=Pauli('ZZ
         if label_keywords[0] == 'dm':
             circ.save_density_matrix(qubits, label=snap, conditional=conditional)
         elif label_keywords[0] == 'exp':
-            circ.save_expectation_value(Pauli('ZZZZZ'), qubits, 
+            circ.save_expectation_value(Pauli(pauliop), qubits, 
                 label=snap, conditional=conditional)
 
     return
