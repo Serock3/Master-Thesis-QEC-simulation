@@ -19,6 +19,8 @@ from idle_noise import get_circuit_time
 from qiskit.visualization import array_to_latex, latex
 # from qiskit.visualization.latex import math
 # %%
+
+
 def print_vec_diffs(state_vec1, state_vec2):
     state1 = DensityMatrix(state_vec1).to_statevector()
     state2 = DensityMatrix(state_vec2).to_statevector()
@@ -34,7 +36,7 @@ def print_vec_diffs(state_vec1, state_vec2):
             state1.data, 3)[i], '->', np.round(state2.data, 3)[i])
 
 
-def comp_states_mat(results1, results2):
+def comp_states_mat(results1, results2, n_cycles):
     """Compares two versions of circuits supposed to be identical. 
     Looks at density matrix snapshots and measurement counts.
     Works even if register sizes are different and permuted.
@@ -45,22 +47,15 @@ def comp_states_mat(results1, results2):
         results1 (result): result() from a qasm execution
         results2 (result): result() from a qasm execution
     """
-    snapshot_type = 'density_matrix' # TODO: Make this automatic
-    snapshot_list1 = [(name, state[0]['value']) for (name, state) in results1.data()[
-        'snapshots'][snapshot_type].items()]
-    snapshot_list2 = [(name, state[0]['value']) for (name, state) in results2.data()[
-        'snapshots'][snapshot_type].items()]
-
-    # print('Purity of encoded state = ', purity(snapshot_list2[0][1][0]['value']))
-
-    for i in range(len(snapshot_list1)):
+    for current_cycle in range(n_cycles):
+        label = get_snapshot_label("dm", False, current_cycle)
         fidelity = np.round(state_fidelity(
-            snapshot_list2[i][1], snapshot_list1[i][1]), 3)
-
-        print('Fidelity', snapshot_list2[i][0], fidelity)
+            results1.data()[label], results2.data()[label]), 3)
+        print('Fidelity', label, fidelity)
         if fidelity != 1:
             print_vec_diffs(
-                snapshot_list1[i][1], snapshot_list2[i][1])
+                results1.data()[label], results2.data()[label])
+    # print('Purity of encoded state = ', purity(snapshot_list2[0][1][0]['value']))
     # TODO: Do something useful with this information
     try:
         counts = results1.get_counts()
@@ -74,19 +69,19 @@ def comp_states_mat(results1, results2):
         pass
 
 
-def verify_transpilation(circ, transpiled_circuit):
+def verify_transpilation(circ, transpiled_circuit, n_cycles):
     results1 = execute(
         transpiled_circuit,
-        Aer.get_backend('qasm_simulator'),
+        Aer.get_backend('aer_simulator'),
         shots=1
     ).result()
     results2 = execute(
         circ,
-        Aer.get_backend('qasm_simulator'),
+        Aer.get_backend('aer_simulator'),
         shots=1
     ).result()
 
-    comp_states_mat(results1, results2)
+    comp_states_mat(results1, results2, n_cycles)
 
 
 # display(WACQT_device_properties['coupling_map'].draw())
@@ -97,15 +92,20 @@ flag = False
 recovery = False
 
 registers = StabilizerRegisters()
-circ = QuantumCircuit()
-circ += encode_input_v2(registers)
-circ.snapshot('post_encoding', 'density_matrix')
+# circ = QuantumCircuit()
+# circ += encode_input_v2(registers)
+# circ.snapshot('post_encoding', 'density_matrix')
 
-circ += get_repeated_stabilization(registers,
-                                   n_cycles=n_cycles,
-                                   reset=reset,
+# circ += get_repeated_stabilization(registers,
+#                                    n_cycles=n_cycles,
+#                                    reset=reset,
+#                                    recovery=recovery,
+#                                    num_ancillas=1)
+circ = get_full_stabilizer_circuit(registers, n_cycles, reset=reset,
                                    recovery=recovery,
-                                   num_ancillas=1)
+                                   num_ancillas=1,
+                                   snapshot_type=['exp','dm'],
+                                   conditional=False)
 
 routing_method = 'sabre'  # basic lookahead stochastic sabre
 # initial_layout = {qb[0]: 0,
@@ -126,7 +126,7 @@ initial_layout = None  # Overwriting the above layout
 layout_method = 'sabre'  # trivial 'dense', 'noise_adaptive' sabre
 translation_method = None  # 'unroller',  translator , synthesis
 repeats = 10
-optimization_level = 3
+optimization_level = 1
 circ_t = shortest_transpile_from_distribution(circ,
                                               #   cost_func=depth_cost_func,
                                               repeats=repeats,
@@ -135,15 +135,15 @@ circ_t = shortest_transpile_from_distribution(circ,
                                               layout_method=layout_method,
                                               translation_method=translation_method,
                                               optimization_level=optimization_level,
-                                              coupling_map = WACQT_device_properties['coupling_map']
-                                              ,**{'basis_gates': ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy','swap' ,'cz']})
-                                            #   **WACQT_device_properties)
+                                              coupling_map=WACQT_device_properties['coupling_map'], **{'basis_gates': ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy', 'iswap', 'cz', 'barrier', 'set_density_matrix',
+                                                                                                                       'save_density_matrix', 'save_expval', 'snapshot']})
+#   **WACQT_device_properties)
 
 print(f'Final circuit time = {get_circuit_time(circ_t)["end"]} ns')
 print('Final depth = ', circ_t.depth())
 print('Final #2qb gates = ', circ_t.num_nonlocal_gates())
 print('Final gates = ', circ_t.count_ops())
-verify_transpilation(circ, circ_t)
+verify_transpilation(circ, circ_t,n_cycles)
 # %% print to qasm to make circuit exportable to IBM quantum experience
 display(circ_t.draw(output='mpl'))  # output='mpl'
 # print(circ_t)
