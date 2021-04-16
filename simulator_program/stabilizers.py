@@ -43,7 +43,9 @@ class StabilizerRegisters:
 
 
 def get_full_stabilizer_circuit(registers, n_cycles=1,
-                                reset=True, recovery=False, flag=True, **kwargs):
+                                reset=True, recovery=False, flag=False,
+                                snapshot_type='density_matrix',
+                                include_barriers=True, conditional=True, **kwargs):
     """Returns the circuit for a full repeating stabilizer circuit, including encoding,
     n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
     """
@@ -63,15 +65,19 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
     # TODO: Fix this for new version
     # Encode the state
     circ = encode_input_v2(registers)
-    circ.snapshot('post_encoding', 'statevector')
+    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qbReg,
+                            conditional=conditional, include_barriers=include_barriers)
 
     # Stabilizer
     circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-                                       reset=reset, recovery=recovery, flag=flag, **kwargs)
+                                       reset=reset, recovery=recovery, flag=flag,
+                                       snapshot_type=snapshot_type,
+                                       conditional=conditional, include_barriers=include_barriers,
+                                       **kwargs)
 
     # Final readout
     circ.measure(qbReg, readout)
-    circ.snapshot_statevector('post_measure')
+    # circ.snapshot_statevector('post_measure')
 
     return circ
 
@@ -79,7 +85,7 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
 def get_repeated_stabilization(registers, n_cycles=1,
                                reset=True, recovery=False,
                                flag=False, snapshot_type='density_matrix',
-                               include_barriers=True, **kwargs):
+                               include_barriers=True, conditional=True, **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -113,29 +119,19 @@ def get_repeated_stabilization(registers, n_cycles=1,
                                                **kwargs
                                                )
 
-        if snapshot_type:  # TODO: Maybe a nice looking solution?
-            if snapshot_type == 'density_matrix':
-                if include_barriers:
-                    circ.barrier()
-                circ.append(Snapshot('stabilizer_' + str(current_cycle),
-                                     snapshot_type, num_qubits=5), registers.QubitRegister)
-                if include_barriers:
-                    circ.barrier()
-            elif snapshot_type == 'expectation_value':
-                circ.save_expectation_value(Pauli('ZZZZZ'), registers.QubitRegister,
-                                            label='exp_value_'+str(current_cycle))
-            else:
-                circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
-
-        #if snapshot_type:
+        add_snapshot_to_circuit(
+            circ, snapshot_type, current_cycle+1, registers.QubitRegister, conditional=conditional)
+        # if snapshot_type:
         #    if not isinstance(snapshot_type, list):
         #        snapshot_type = [snapshot_type]
-        #        
+        #
         #    add_snapshot_to_circuit(circ, snapshot_type, registers.QubitRegister)
     return circ
 
-def add_snapshot_to_circuit(circ, snapshot_type, current_cycle, 
-        qubits=None, conditional=False, pauliop='ZZZZZ'):
+
+def add_snapshot_to_circuit(circ, snapshot_type, current_cycle,
+                            qubits=None, conditional=False,
+                            pauliop='ZZZZZ', include_barriers=True):
     """Appends a snapshot to circuit."""
 
     if not isinstance(snapshot_type, list):
@@ -144,25 +140,31 @@ def add_snapshot_to_circuit(circ, snapshot_type, current_cycle,
         conditional = [conditional]
 
     # Append snapshots
-    for snap in snapshot_type:
-        for con in conditional:
-            snap_label = get_snapshot_label(snap, con,
-                    current_cycle)
-            if snap=='dm' or snap=='density_matrix':
-                circ.save_density_matrix(
-                    qubits, label=snap_label, conditional=con)
-            elif snap=='exp' or snap=='expectation_value':
-                circ.save_expectation_value(Pauli(pauliop), qubits,
-                    label=snap_label, conditional=con)
+    if snapshot_type:
+        for snap in snapshot_type:
+            for con in conditional:
+                snap_label = get_snapshot_label(snap, con,
+                                                current_cycle)
+                if include_barriers:
+                    circ.barrier()
+                if snap == 'dm' or snap == 'density_matrix':
+                    circ.save_density_matrix(
+                        qubits, label=snap_label, conditional=con)
+                elif snap == 'exp' or snap == 'expectation_value':
+                    circ.save_expectation_value(Pauli(pauliop), qubits,
+                                                label=snap_label, conditional=con)
+                if include_barriers:
+                    circ.barrier()
     return circ
+
 
 def get_snapshot_label(snapshot_type, conditional, current_cycle):
     """Generate a label for snapshots, given its instructions"""
 
     # Define snapshot type
-    if snapshot_type=='dm' or snapshot_type=='density_matrix':
+    if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
         snap_label = 'dm_'
-    elif snapshot_type=='exp' or snapshot_type=='expectation_value':
+    elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
         snap_label = 'exp_'
 
     # Add conditional
@@ -172,6 +174,7 @@ def get_snapshot_label(snapshot_type, conditional, current_cycle):
     # Add the current cycle
     snap_label += str(current_cycle)
     return snap_label
+
 
 def get_empty_stabilizer_circuit(registers):
     """Create an empty qiskit circuit adapted for stabilizer circuits"""
