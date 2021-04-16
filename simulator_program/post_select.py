@@ -1,10 +1,10 @@
 # %%
 
 if __package__:
-    from .stabilizers import encode_input_v2, get_classical_register, StabilizerRegisters, get_repeated_stabilization
+    from .stabilizers import get_snapshot_label
     from .custom_noise_models import thermal_relaxation_model
 else:
-    from stabilizers import encode_input_v2, get_classical_register, StabilizerRegisters, get_repeated_stabilization
+    from stabilizers import get_snapshot_label
     from custom_noise_models import thermal_relaxation_model
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister
 from matplotlib import pyplot as plt
@@ -45,7 +45,8 @@ def reformat_density_snapshot(results) -> dict:
 
 def get_trivial_subsystem_counts_at_cycle(results, n_shots, cycle):
     # Deprecated
-    warnings.warn("Not maintained. Only filters at the current cycle.", DeprecationWarning)
+    warnings.warn(
+        "Not maintained. Only filters at the current cycle.", DeprecationWarning)
     subsys_counts = get_subsystems_counts(results.get_counts())
     syndrome_reg_counts = subsys_counts[len(subsys_counts)-1-cycle]
     count_trivial_syndrome = 0
@@ -94,22 +95,25 @@ def get_trivial_post_select_counts(counts, n_cycles, trivial_key: str = None):
             for current_cycle in range(n_cycles+1)]
 
 
-def get_trivial_post_select_den_mat_at_cycle(results, current_cycle, trivial_key='0x0'):
-    # TODO: May not need a separate func anymore
-    # TODO: This may catch the wrong KeyError
-    try:
-        return results.data()['stabilizer_' + str(current_cycle)][trivial_key]
-    except KeyError:
-        warnings.warn(
-            "Attempting to use density_matrix snapshot, switch to save state", DeprecationWarning)
-        # No support for trivial_key, always selects '0x0'
-        return [state['value'] for state in
-                results.data()[
-            'snapshots']['density_matrix']['stabilizer_' + str(current_cycle)]
-            if int(state['memory'], 16) == 0][0]
+def get_trivial_exp_value(results, n_cycles: int, trivial_key: str = '0000'):
+    """Get the expectation values corresponding to only trivial stabilizer measurements 
+    (so far).
 
+    Args:
+        results (Results object): Simulation result
+        n_cycles (int): 
+        trivial_key (str, optional): Measurement bitstring corresponding to what a trivial measurement
+        is for the given code, e.g. '101' for the distance two code. Defaults to '0000'.
 
-def get_trivial_post_select_den_mat(results, n_cycles: int, trivial_key: str = None):
+    Returns:
+        List[float]: List of expectation values post selected for trivial stabilizer outcomes.
+    """
+    trivial_key_list = [hex(int((trivial_key*current_cycle).zfill(1), 2))
+                        for current_cycle in range(n_cycles+1)]
+    return [results.data()[get_snapshot_label(snapshot_type='exp', conditional=True, current_cycle=current_cycle)][trivial_key]
+            for current_cycle, trivial_key in enumerate(trivial_key_list)]
+
+def get_trivial_post_select_den_mat(results, n_cycles: int, trivial_key: str = '0000'):
     """Get the density matrices corresponding to only trivial stabilizer measurements 
     (so far).
 
@@ -117,20 +121,15 @@ def get_trivial_post_select_den_mat(results, n_cycles: int, trivial_key: str = N
         results (Results object): Simulation result
         n_cycles (int): 
         trivial_key (str, optional): Measurement bitstring corresponding to what a trivial measurement
-        is for the given code, e.g. '0110'. Leave a None if the trivial syndrome consists of only zeros. Defaults to None.
+        is for the given code, e.g. '101' for the distance two code. Defaults to '0000'.
 
     Returns:
         List[np.ndarray]: List of density matrices post selected for trivial stabilizer outcomes.
     """
-    # TODO: Make this simpler?
-    if trivial_key:
-        # NOTE: This would work for e.g. trivial_key = '0000', so maybe no if statement is clearer?
-        trivial_key_list = [hex(int(trivial_key*(current_cycle+1), 2))
-                            for current_cycle in range(n_cycles)]
-        return [get_trivial_post_select_den_mat_at_cycle(results, current_cycle, trivial_key)
-                for current_cycle, trivial_key in enumerate(trivial_key_list)]
-    return [get_trivial_post_select_den_mat_at_cycle(results, current_cycle)
-            for current_cycle in range(n_cycles)]
+    trivial_key_list = [hex(int((trivial_key*current_cycle).zfill(1), 2))
+                        for current_cycle in range(n_cycles+1)]
+    return [results.data()[get_snapshot_label(snapshot_type='dm', conditional=True, current_cycle=current_cycle)][trivial_key]
+            for current_cycle, trivial_key in enumerate(trivial_key_list)]
 
 
 def get_trivial_state(circ):
@@ -150,14 +149,15 @@ def get_trivial_state(circ):
 def get_running_fidelity_data_den_mat(circ, n_cycles, n_shots=2048,
                                       noise_model=thermal_relaxation_model(), post_select=True):
     '''
-    Deprecated?
+    Deprecated
     Inputs:
     circ: The circuit to be tested
     correct_state: The correct state for comparison
     param_list: The error model parameters, currently only [T2, t_cz]
     n_shots: Number of shots to average over
     '''
-
+    warnings.warn(
+        "Not maintained, use exp. Also not updated to Aer 0.8.0", DeprecationWarning)
     # Get correct state
     results = execute(
         circ,
@@ -224,6 +224,7 @@ def get_running_fidelity_data_den_mat(circ, n_cycles, n_shots=2048,
 
 # %% Code to test above, to be removed
 if __name__ == "__main__":
+    from stabilizers import encode_input_v2, get_repeated_stabilization, StabilizerRegisters, get_classical_register, logical_states, get_full_stabilizer_circuit
     reset = False
     recovery = True
     flag = False
@@ -239,11 +240,11 @@ if __name__ == "__main__":
 
     # circ = get_empty_stabilizer_circuit(registers)
 
-    circ = encode_input_v2(registers)
-    circ.snapshot('post_encoding', 'density_matrix')
-    # Stabilizer
-    circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-                                       reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
+    circ = get_full_stabilizer_circuit(registers, n_cycles)
+    # circ = encode_input_v2(registers)
+    # # Stabilizer
+    # circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
+    #                                    reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
 
     n_shots = 100
     results = execute(
@@ -253,7 +254,8 @@ if __name__ == "__main__":
         shots=n_shots
     ).result()
 
-    correct_state = get_trivial_state(circ)
+    # correct_state = get_trivial_state(circ)
+    correct_state = logical_states(None)[0]
     fidelities = [state_fidelity(post_selected_state, correct_state) for post_selected_state
                   in get_trivial_post_select_den_mat(results, n_cycles)]
     select_counts = get_trivial_post_select_counts(
@@ -263,13 +265,13 @@ if __name__ == "__main__":
     ax1 = axs[0]
     ax2 = axs[1]
 
-    ax1.plot(range(n_cycles), fidelities, 'o-', label='No transpilation')
+    ax1.plot(range(n_cycles+1), fidelities, 'o-', label='No transpilation')
     ax1.set_xlabel(r'Error detection cycle $n$')
     ax1.set_ylabel('Post selected count')
     ax1.legend()
     ax1.grid(linewidth=1)
 
-    ax2.plot(range(n_cycles), select_counts, 'o-', label='No transpilation')
+    ax2.plot(range(n_cycles+1), select_counts, 'o-', label='No transpilation')
     ax2.set_xlabel(r'Error detection cycle $n$')
     ax2.set_ylabel(r'Post select fraction')
     ax2.legend()
