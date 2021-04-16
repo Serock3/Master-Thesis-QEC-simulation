@@ -134,7 +134,7 @@ def get_repeated_stabilization(registers, n_cycles=1,
         #    add_snapshot_to_circuit(circ, snapshot_type, registers.QubitRegister)
     return circ
 
-def add_snapshot_to_circuit(registers, snapshot_type, current_cycle, 
+def add_snapshot_to_circuit(circ, snapshot_type, current_cycle, 
         qubits=None, conditional=False, pauliop='ZZZZZ'):
     """Appends a snapshot to circuit."""
 
@@ -144,10 +144,9 @@ def add_snapshot_to_circuit(registers, snapshot_type, current_cycle,
         conditional = [conditional]
 
     # Append snapshots
-    circ = get_empty_stabilizer_circuit(registers)
     for snap in snapshot_type:
         for con in conditional:
-            snap_label = get_snapshot_label(snapshot_type, conditional,
+            snap_label = get_snapshot_label(snap, conditional,
                     current_cycle)
             if snap=='dm' or snap=='density_matrix':
                 circ.save_density_matrix(
