@@ -125,18 +125,29 @@ def get_repeated_stabilization(registers, n_cycles=1,
                 circ.save_expectation_value(Pauli('ZZZZZ'), registers.QubitRegister,
                                             label='exp_value_'+str(current_cycle))
             else:
-                circ.snapshot('stabilizer_' +
-                              str(current_cycle), snapshot_type)
+                circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
+
+        #if snapshot_type:
+        #    if not isinstance(snapshot_type, list):
+        #        snapshot_type = [snapshot_type]
+        #        
+        #    add_snapshot_to_circuit(circ, snapshot_type, registers.QubitRegister)
     return circ
 
-
-def add_snapshot_to_circuit(circ, snapshot_label, qubits=None):
+def add_snapshot_to_circuit(circ, snapshot_label, qubits=None, pauliop=Pauli('ZZZZZ')):
     """Appends a snapshot to circuit, given a specific label.
 
     Args:
         circ: QuantumCircuit object to append snapshot to.
         snapshot_label (str): The label for snapshot. Can also be a list
-            of strings """
+            of strings. The label must be formatted as detailed below:
+            '[type]_[conditional, optional]_[current_cycle]'
+            type: The type of snapshot. Either 'exp' or 'dm'.
+            conditional: If snapshot shoudl be conditional, add 'con'.
+            current_cycle: The stabilizer cycle the snapshot belongs to.
+            Example: 'dm_2' or 'exp_con_0'.
+        qubits (list): List of qubits (or a register) to apply the snapshot to.
+    """    
 
     if not isinstance(snapshot_label, list):
         snapshot_label = [snapshot_label]
