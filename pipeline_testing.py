@@ -27,6 +27,14 @@ registers = StabilizerRegisters(qb, an, cr, readout)
 # Circuits
 circ = encode_input_v2(registers)
 circ.barrier()
+#circ.append(Snapshot('stabilizer_' + str(current_cycle), snapshot_type, num_qubits=5), registers.QubitRegister)
+#circ.save_expectation_value(Pauli('ZZZZZ'), registers.QubitRegister)
+circ.save_density_matrix(registers.QubitRegister, label='test_label')
+
+results = execute(circ, Aer.get_backend('qasm_simulator'),
+        noise_model=None, shots=2048).result()
+#%%
+
 circ.append(Snapshot('post_encoding', 'density_matrix', num_qubits=5), registers.QubitRegister)
 
 circ.compose(get_repeated_stabilization(registers, n_cycles=n_cycles, reset=reset, 

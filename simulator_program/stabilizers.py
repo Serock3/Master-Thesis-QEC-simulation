@@ -110,6 +110,7 @@ def get_repeated_stabilization(registers, n_cycles=1,
                                                include_barriers=include_barriers,
                                                **kwargs
                                                )
+
         if snapshot_type:# TODO: Maybe a nice looking solution?
             if snapshot_type == 'density_matrix':
                 if include_barriers:
@@ -123,6 +124,34 @@ def get_repeated_stabilization(registers, n_cycles=1,
             else:
                 circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
     return circ
+
+def add_snapshot_to_circuit(circ, snapshot_label, qubits=None):
+    """Appends a snapshot to circuit, given a specific label.
+    
+    Args:
+        circ: QuantumCircuit object to append snapshot to.
+        snapshot_label (str): The label for snapshot. Can also be a list
+            of strings """    
+
+    if not isinstance(snapshot_type, list):
+        snapshot_label = [snapshot_label]
+
+    for snap in snapshot_label):
+        # Decode the label
+        label_keywords = snap.split('_')
+        if label_keywords[1] == 'con':
+            conditional = True
+        else:
+            conditional = False
+        if label_keywords[0] == 'dm':
+            circ.save_density_matrix(qubits, label=snap, conditional=conditional)
+        elif label_keywords[0] == 'exp':
+            circ.save_expectation_value(Pauli('ZZZZZ'), qubits, 
+                label=snap, conditional=conditional)
+
+    return
+            
+
 
 
 def get_empty_stabilizer_circuit(registers):
@@ -1328,4 +1357,3 @@ if __name__ == "__main__":
     counts = results.get_counts()
     plot_histogram(counts)
 
-# %%
