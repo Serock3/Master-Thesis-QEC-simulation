@@ -152,7 +152,7 @@ def add_snapshot_to_circuit(registers, snapshot_type, current_cycle,
             if snap=='dm' or snap=='density_matrix':
                 circ.save_density_matrix(
                     qubits, label=snap_label, conditional=con)
-            elif snap=='exp' or snap=='expectation_value'
+            elif snap=='exp' or snap=='expectation_value':
                 circ.save_expectation_value(Pauli(pauliop), qubits,
                     label=snap_label, conditional=conditional)
     return circ
