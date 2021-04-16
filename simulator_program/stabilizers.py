@@ -24,6 +24,7 @@ from qiskit import (QuantumCircuit,
 from qiskit.providers.aer.extensions.snapshot_statevector import *
 from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 from typing import List
+import warnings
 # %% General functions
 
 
@@ -59,6 +60,7 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
     # Define the circuit
     # circ = get_empty_stabilizer_circuit(registers)
 
+    # TODO: Fix this for new version
     # Encode the state
     circ = encode_input_v2(registers)
     circ.snapshot('post_encoding', 'statevector')
@@ -75,9 +77,9 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
 
 
 def get_repeated_stabilization(registers, n_cycles=1,
-                               reset=True, recovery=False, 
-                               flag=False, snapshot_type='density_matrix', 
-                               include_barriers = True, **kwargs):
+                               reset=True, recovery=False,
+                               flag=False, snapshot_type='density_matrix',
+                               include_barriers=True, **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -111,32 +113,35 @@ def get_repeated_stabilization(registers, n_cycles=1,
                                                **kwargs
                                                )
 
-        if snapshot_type:# TODO: Maybe a nice looking solution?
+        if snapshot_type:  # TODO: Maybe a nice looking solution?
             if snapshot_type == 'density_matrix':
                 if include_barriers:
                     circ.barrier()
-                circ.append(Snapshot('stabilizer_' + str(current_cycle), snapshot_type, num_qubits=5), registers.QubitRegister)
+                circ.append(Snapshot('stabilizer_' + str(current_cycle),
+                                     snapshot_type, num_qubits=5), registers.QubitRegister)
                 if include_barriers:
                     circ.barrier()
             elif snapshot_type == 'expectation_value':
-                circ.save_expectation_value(Pauli('ZZZZZ'), registers.QubitRegister, 
-                    label='exp_value_'+str(current_cycle))
+                circ.save_expectation_value(Pauli('ZZZZZ'), registers.QubitRegister,
+                                            label='exp_value_'+str(current_cycle))
             else:
-                circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
+                circ.snapshot('stabilizer_' +
+                              str(current_cycle), snapshot_type)
     return circ
+
 
 def add_snapshot_to_circuit(circ, snapshot_label, qubits=None):
     """Appends a snapshot to circuit, given a specific label.
-    
+
     Args:
         circ: QuantumCircuit object to append snapshot to.
         snapshot_label (str): The label for snapshot. Can also be a list
-            of strings """    
+            of strings """
 
-    if not isinstance(snapshot_type, list):
+    if not isinstance(snapshot_label, list):
         snapshot_label = [snapshot_label]
 
-    for snap in snapshot_label):
+    for snap in snapshot_label:
         # Decode the label
         label_keywords = snap.split('_')
         if label_keywords[1] == 'con':
@@ -144,14 +149,13 @@ def add_snapshot_to_circuit(circ, snapshot_label, qubits=None):
         else:
             conditional = False
         if label_keywords[0] == 'dm':
-            circ.save_density_matrix(qubits, label=snap, conditional=conditional)
+            circ.save_density_matrix(
+                qubits, label=snap, conditional=conditional)
         elif label_keywords[0] == 'exp':
-            circ.save_expectation_value(Pauli('ZZZZZ'), qubits, 
-                label=snap, conditional=conditional)
+            circ.save_expectation_value(Pauli('ZZZZZ'), qubits,
+                                        label=snap, conditional=conditional)
 
     return
-            
-
 
 
 def get_empty_stabilizer_circuit(registers):
@@ -183,6 +187,7 @@ def encode_input(registers):
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>
     """
 
+    warnings.wars("Use V2, it's smaller", DeprecationWarning)
     # Unpack registers
     qbReg = registers.QubitRegister
     circ = get_empty_stabilizer_circuit(registers)
@@ -210,7 +215,7 @@ def encode_input(registers):
     return circ
 
 
-def encode_input_v2(registers, include_barriers = True):
+def encode_input_v2(registers, include_barriers=True):
     """Encode the input into logical 0 and 1 for the [[5,1,3]] code. This
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>.
 
@@ -575,7 +580,7 @@ def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
 
 # %% All unflagged stabilizers
 def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
-                               current_cycle=0, current_step=0, num_ancillas=None, 
+                               current_cycle=0, current_step=0, num_ancillas=None,
                                include_barriers=True, pipeline=False):
     """Run all four stabilizers without flags, as well as an optional
     recovery. The input current_step is only relevant for flagged cycles, and
@@ -637,7 +642,7 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     if recovery is True:
         circ.barrier()
         circ += unflagged_recovery(registers, reset, current_cycle)
-        #if include_barriers:
+        # if include_barriers:
         circ.barrier()
     return circ
 
@@ -832,6 +837,8 @@ def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
 # %% Pipelined stabilizers. To call these, use unflagged_stabilizer_cycle with
 # pipeline=True, DO NOT use num_ancillas=2. This is due to the transpiler not
 # handling it correctly, thus forcing this 'fix'.
+
+
 def _pipeline_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular XZZXI stabilizer in a pipelined
     scheme. Note that this assumes ancilla reset, as there currently is no
@@ -885,6 +892,7 @@ def _pipeline_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
     circ.reset(anReg[0])
     return circ
 
+
 def _pipeline_stabilizer_IXZZX(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular IXZZX stabilizer in a pipelined
     scheme. Note that this assumes ancilla reset, as there currently is no
@@ -926,6 +934,7 @@ def _pipeline_stabilizer_IXZZX(registers, anQb=None, syn_bit=None, reset=True):
     circ.reset(anReg[0])
     return circ
 
+
 def _pipeline_stabilizer_XIXZZ(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular XIXZZ stabilizer in a pipelined
     scheme. Note that this assumes ancilla reset, as there currently is no
@@ -966,6 +975,7 @@ def _pipeline_stabilizer_XIXZZ(registers, anQb=None, syn_bit=None, reset=True):
     circ.measure(anReg[0], syn_bit)
     circ.reset(anReg[0])
     return circ
+
 
 def _pipeline_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular ZXIXZ stabilizer in a pipelined
@@ -1011,6 +1021,8 @@ def _pipeline_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
     return circ
 
 # %% All recoveries
+
+
 def unflagged_recovery(registers, reset=True, current_cycle=0, current_step=0):
     """Lookup table for recovery from a
     single qubit error on code qubits"""
@@ -1356,4 +1368,3 @@ if __name__ == "__main__":
     # Plot results
     counts = results.get_counts()
     plot_histogram(counts)
-
