@@ -124,10 +124,11 @@ def get_repeated_stabilization(registers, n_cycles=1,
             else:
                 circ.snapshot('stabilizer_' + str(current_cycle), snapshot_type)
 
-        if snapshot_type:
-            if not isinstance(snapshot_type, list):
-                
-            add_snapshot_to_circuit(circ, snapshot_type, registers.QubitRegister)
+        #if snapshot_type:
+        #    if not isinstance(snapshot_type, list):
+        #        snapshot_type = [snapshot_type]
+        #        
+        #    add_snapshot_to_circuit(circ, snapshot_type, registers.QubitRegister)
     return circ
 
 def add_snapshot_to_circuit(circ, snapshot_label, qubits=None, pauliop=Pauli('ZZZZZ')):
