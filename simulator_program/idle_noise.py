@@ -5,14 +5,21 @@
 from qiskit import QuantumCircuit
 from qiskit.providers.aer.noise import thermal_relaxation_error
 from qiskit.converters import circuit_to_dag
+from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 import numpy as np
 
-from .custom_noise_models import thermal_relaxation_model
-from .stabilizers import (encode_input_v2,
-                                           get_empty_stabilizer_circuit)
-from .custom_transpiler import *
-from .custom_noise_models import WACQT_gate_times, GateTimes
-from qiskit.providers.aer.extensions.snapshot_density_matrix import *
+if __package__:
+    from .custom_noise_models import thermal_relaxation_model
+    from .stabilizers import (encode_input_v2,
+                                            get_empty_stabilizer_circuit)
+    from .custom_transpiler import *
+    from .custom_noise_models import WACQT_gate_times, GateTimes
+else:
+    from custom_noise_models import thermal_relaxation_model
+    from stabilizers import (encode_input_v2,
+                                            get_empty_stabilizer_circuit)
+    from custom_transpiler import *
+    from custom_noise_models import WACQT_gate_times, GateTimes   
 # %%
 
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
