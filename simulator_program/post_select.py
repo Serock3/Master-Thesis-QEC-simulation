@@ -12,7 +12,7 @@ from qiskit import execute, Aer
 from qiskit.aqua.utils import get_subsystems_counts
 from qiskit.quantum_info import state_fidelity
 import warnings
-#%%
+# %%
 """
 TODO:
 1. Make selection work for every syndrome
@@ -32,6 +32,7 @@ def reformat_density_snapshot(results) -> dict:
     Reformats the snapshot data of the results object to be a
     dictionary with the measurement results as keys
     """
+    warnings.warn("DEPRECATED", DeprecationWarning)
     snap_dict = {}
     for snapshot_name in results.data()['snapshots']['density_matrix']:
         res_dict = {}
@@ -44,6 +45,7 @@ def reformat_density_snapshot(results) -> dict:
 
 def get_trivial_subsystem_counts_at_cycle(results, n_shots, cycle):
     # Deprecated
+    warnings.warn("Not maintained. Only filters at the current cycle.", DeprecationWarning)
     subsys_counts = get_subsystems_counts(results.get_counts())
     syndrome_reg_counts = subsys_counts[len(subsys_counts)-1-cycle]
     count_trivial_syndrome = 0
@@ -69,48 +71,67 @@ def get_subsystem_counts_up_to_cycle(counts, cycle):
 
     subsys_counts = {}
     for outcome in counts:
-        formated_outcome = int(
-            ''.join([key for key in outcome.split()[-(1+cycle):]]), 2)
+        formated_outcome = int(''.join([key for key in outcome.split()[
+                               len(outcome.split())-(cycle):]]).zfill(1), 2)
         if formated_outcome in subsys_counts:
             subsys_counts[formated_outcome] += counts[outcome]
         else:
             subsys_counts[formated_outcome] = counts[outcome]
     return subsys_counts
 
-def get_trivial_post_select_counts(counts, n_cycles, trivial_key:str = None):
-    # TODO: allow str trivial_key?
+
+def get_trivial_post_select_counts(counts, n_cycles, trivial_key: str = None):
+    # TODO: this if statement is unnecessary if instead we use the default trivial_key = '0000'
     if trivial_key is None:
         return [get_subsystem_counts_up_to_cycle(
             counts, current_cycle)[0]
-            for current_cycle in range(n_cycles)]
+            for current_cycle in range(n_cycles+1)]
     else:
-        trivial_key_list = [int(trivial_key*(current_cycle+1),2) for current_cycle in range(n_cycles)]
+        trivial_key_list = [int((trivial_key*current_cycle).zfill(1), 2)
+                            for current_cycle in range(n_cycles+1)]
         return [get_subsystem_counts_up_to_cycle(
             counts, current_cycle)[trivial_key_list[current_cycle]]
-            for current_cycle in range(n_cycles)]
+            for current_cycle in range(n_cycles+1)]
 
-def get_trivial_post_select_den_mat_at_cycle(results, current_cycle, trivial_key = '0x0'):
+
+def get_trivial_post_select_den_mat_at_cycle(results, current_cycle, trivial_key='0x0'):
     # TODO: May not need a separate func anymore
     # TODO: This may catch the wrong KeyError
     try:
         return results.data()['stabilizer_' + str(current_cycle)][trivial_key]
     except KeyError:
-        warnings.warn("Attempting to use density_matrix snapshot, switch to save state", DeprecationWarning)
+        warnings.warn(
+            "Attempting to use density_matrix snapshot, switch to save state", DeprecationWarning)
         # No support for trivial_key, always selects '0x0'
         return [state['value'] for state in
                 results.data()[
             'snapshots']['density_matrix']['stabilizer_' + str(current_cycle)]
             if int(state['memory'], 16) == 0][0]
 
-def get_trivial_post_select_den_mat(results, n_cycles:int, trivial_key:str = None):
+
+def get_trivial_post_select_den_mat(results, n_cycles: int, trivial_key: str = None):
+    """Get the density matrices corresponding to only trivial stabilizer measurements 
+    (so far).
+
+    Args:
+        results (Results object): Simulation result
+        n_cycles (int): 
+        trivial_key (str, optional): Measurement bitstring corresponding to what a trivial measurement
+        is for the given code, e.g. '0110'. Leave a None if the trivial syndrome consists of only zeros. Defaults to None.
+
+    Returns:
+        List[np.ndarray]: List of density matrices post selected for trivial stabilizer outcomes.
+    """
     # TODO: Make this simpler?
     if trivial_key:
-        #NOTE: This would work for e.g. trivial_key = '0000', so maybe no if statement is clearer?
-        trivial_key_list = [hex(int(trivial_key*(current_cycle+1),2)) for current_cycle in range(n_cycles)]
+        # NOTE: This would work for e.g. trivial_key = '0000', so maybe no if statement is clearer?
+        trivial_key_list = [hex(int(trivial_key*(current_cycle+1), 2))
+                            for current_cycle in range(n_cycles)]
         return [get_trivial_post_select_den_mat_at_cycle(results, current_cycle, trivial_key)
-            for current_cycle, trivial_key in enumerate(trivial_key_list)]
+                for current_cycle, trivial_key in enumerate(trivial_key_list)]
     return [get_trivial_post_select_den_mat_at_cycle(results, current_cycle)
             for current_cycle in range(n_cycles)]
+
 
 def get_trivial_state(circ):
     warnings.warn("Use logical statevec instead", DeprecationWarning)
