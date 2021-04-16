@@ -4,7 +4,10 @@ from qiskit.visualization import plot_circuit_layout
 from qiskit.circuit.equivalence_library import SessionEquivalenceLibrary
 from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZGate
 from qiskit import QuantumCircuit, QuantumRegister
-from .idle_noise import get_circuit_time
+if __package__:
+    from .idle_noise import get_circuit_time
+else:
+    from idle_noise import get_circuit_time
 import warnings
 
 #%% Device transpiling properties
