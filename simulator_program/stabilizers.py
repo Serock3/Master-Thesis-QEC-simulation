@@ -134,40 +134,45 @@ def get_repeated_stabilization(registers, n_cycles=1,
         #    add_snapshot_to_circuit(circ, snapshot_type, registers.QubitRegister)
     return circ
 
-def add_snapshot_to_circuit(circ, snapshot_label, qubits=None, pauliop=Pauli('ZZZZZ')):
-    """Appends a snapshot to circuit, given a specific label.
+def add_snapshot_to_circuit(registers, snapshot_type, current_cycle, 
+        qubits=None, pauliop='ZZZZZ'):
+    """Appends a snapshot to circuit."""
 
-    Args:
-        circ: QuantumCircuit object to append snapshot to.
-        snapshot_label (str): The label for snapshot. Can also be a list
-            of strings. The label must be formatted as detailed below:
-            '[type]_[conditional, optional]_[current_cycle]'
-            type: The type of snapshot. Either 'exp' or 'dm'.
-            conditional: If snapshot shoudl be conditional, add 'con'.
-            current_cycle: The stabilizer cycle the snapshot belongs to.
-            Example: 'dm_2' or 'exp_con_0'.
-        qubits (list): List of qubits (or a register) to apply the snapshot to.
-    """    
+    if not isinstance(snapshot_type, list):
+        snapshot_type = [snapshot_type]
+    if not isinstance(conditional, list):
+        conditional = [conditional]
 
-    if not isinstance(snapshot_label, list):
-        snapshot_label = [snapshot_label]
+    # Append snapshots
+    circ = get_empty_stabilizer_circuit(registers)
+    for snap in snapshot_type:
+        for con in conditional:
+            snap_label = get_snapshot_label(snapshot_type, conditional,
+                    current_cycle)
+            if snap=='dm' or snap=='density_matrix':
+                circ.save_density_matrix(
+                    qubits, label=snap_label, conditional=con)
+            elif snap=='exp' or snap=='expectation_value'
+                circ.save_expectation_value(Pauli(pauliop), qubits,
+                    label=snap_label, conditional=conditional)
+    return circ
 
-    for snap in snapshot_label:
-        # Decode the label
-        label_keywords = snap.split('_')
-        if label_keywords[1] == 'con':
-            conditional = True
-        else:
-            conditional = False
-        if label_keywords[0] == 'dm':
-            circ.save_density_matrix(
-                qubits, label=snap, conditional=conditional)
-        elif label_keywords[0] == 'exp':
-            circ.save_expectation_value(Pauli('ZZZZZ'), qubits,
-                                        label=snap, conditional=conditional)
+def get_snapshot_label(snapshot_type, conditional, current_cycle):
+    """Generate a label for snapshots, given its instructions"""
 
-    return
+    # Define snapshot type
+    if snapshot_type=='dm' or snapshot_type=='density_matrix':
+        snap_label = 'dm_'
+    elif snapshot_type=='exp' or snapshot_type=='expectation_value':
+        snap_label = 'exp_'
 
+    # Add conditional
+    if conditional:
+        snap_label += 'con_'
+
+    # Add the current cycle
+    snap_label += str(current_cycle)
+    return snap_label
 
 def get_empty_stabilizer_circuit(registers):
     """Create an empty qiskit circuit adapted for stabilizer circuits"""

@@ -13,30 +13,28 @@ from simulator_program.custom_noise_models import (thermal_relaxation_model,
 
 from qiskit.quantum_info import Pauli
 #%% Compare cycle times: Pipeline vs normal
-n_cycles=3
+n_cycles=2
 recovery=False
-flag=False
+flag=True
 reset=True
 # Registers
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
-cr = get_classical_register(n_cycles, reset=False, recovery=False, flag=False)
+cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=flag)
 readout = ClassicalRegister(5, 'readout')
 registers = StabilizerRegisters(qb, an, cr, readout)
 
 # Circuits
-circ = encode_input_v2(registers)
+circ = get_empty_stabilizer_circuit(registers)
+
+circ.compose(encode_input_v2(registers),inplace=True)
 circ.barrier()
-#circ.append(Snapshot('stabilizer_' + str(current_cycle), snapshot_type, num_qubits=5), registers.QubitRegister)
-#circ.save_expectation_value(Pauli('ZZZZZ'), registers.QubitRegister)
-circ.save_density_matrix(registers.QubitRegister, label='test_label')
-
-results = execute(circ, Aer.get_backend('qasm_simulator'),
-        noise_model=None, shots=2048).result()
-#%%
-
 circ.append(Snapshot('post_encoding', 'density_matrix', num_qubits=5), registers.QubitRegister)
+circ.compose(get_repeated_stabilization(registers, n_cycles=n_cycles, reset=reset, 
+    recovery=recovery, flag=flag),inplace=True)
 
+
+#%%
 circ.compose(get_repeated_stabilization(registers, n_cycles=n_cycles, reset=reset, 
     recovery=recovery, flag=flag, include_barriers=False, pipeline=True),inplace=True)
 
