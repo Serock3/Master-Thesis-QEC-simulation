@@ -99,8 +99,8 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         for gate_arg in gate_args:
             time_passed[gate_arg] = latest_time + gate_time
 
-        if node.name == 'snapshot':
-            time_at_snapshots_and_end[node.op.label] = max(
+        if node.name == 'snapshot' or node.name.split('_')[0] == 'save':
+            time_at_snapshots_and_end[node.op._label] = max(
                 time_passed.values())
 
         # Add the gate
@@ -150,7 +150,6 @@ def get_circuit_time(circ, gate_times={}):
     for node in dag.op_nodes():
         # Set cargs to entire classical conditional register if it exists, otherwise to the cargs
         cargs = node.condition[0] if node.condition else node.cargs
-
         gate_args = []
         for arg in node.qargs+list(cargs):
             gate_args.append(arg)
@@ -160,8 +159,8 @@ def get_circuit_time(circ, gate_times={}):
         for gate_arg in gate_args:
             time_passed[gate_arg] = latest_time + full_gate_times[node.name]
 
-        if node.name == 'snapshot':
-            time_at_snapshots_and_end[node.op.label] = max(
+        if node.name == 'snapshot' or node.name.split('_')[0] == 'save':
+            time_at_snapshots_and_end[node.op._label] = max(
                 time_passed.values())
 
     time_at_snapshots_and_end['end'] = max(time_passed.values())
@@ -279,19 +278,28 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
     # Encode the logical qubit
     new_circ += rebuild_circuit_up_to_encoding(circ)
     time_passed = get_circuit_time(new_circ, gate_times=gate_times)['end']
+    new_circ = add_idle_noise_to_circuit(new_circ, gate_times)
+
+    # Update the time for post encoding snapshot. Assumes label ends with '_0'
+    for key in snapshot_times:
+        if key.split('_')[-1] == '0':
+            snapshot_times[key] = time_passed
 
     # Create a list of all snapshots
     dag = circuit_to_dag(circ)
     snapshots = []    
     for node in dag.op_nodes():
-        if node.name == 'snapshot':
+        if node.name == 'snapshot' or node.name.split('_')[0] == 'save':
             snapshots.append(node)
 
     # Add all snapshots from previous circuit, excluding post_encoding.
     index = 0
+    print(snapshot_times)
     for key in snapshot_times:
         if key == 'end':
             break
+        # TODO: Add functionality for this by updating the post_encoding time
+        # after rebuild_up_to_encdoding().
         elif key == 'post_encoding':
             index +=1
             continue # Skip the post_encoding snapshot due to changes in encode
@@ -301,6 +309,8 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
                     T1, T2, time_diff).to_instruction()
             for qubit in new_circ.qubits:
                 new_circ.append(thrm_relax, [qubit])
+        elif time_diff < 0:
+            print('Time difference less than zero, something might be wrong...')
         new_circ.append(snapshots[index].op, snapshots[index].qargs, snapshots[index].cargs)
         time_passed = snapshot_times[key]
         index += 1
