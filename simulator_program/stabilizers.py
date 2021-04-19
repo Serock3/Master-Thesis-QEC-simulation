@@ -135,7 +135,7 @@ def get_repeated_stabilization(registers, n_cycles=1,
     return circ
 
 def add_snapshot_to_circuit(registers, snapshot_type, current_cycle, 
-        qubits=None, pauliop='ZZZZZ'):
+        qubits=None, conditional=False, pauliop='ZZZZZ'):
     """Appends a snapshot to circuit."""
 
     if not isinstance(snapshot_type, list):
