@@ -76,16 +76,22 @@ def shortest_transpile_from_distribution(circuit,
                                          layout_method='sabre',
                                          optimization_level=1,
                                          **kwargs):
+    
+    # Here we modify the kwargs dict so we can pass it to transpile() with our default values
+
+    # Populate gate times not specified with default values
     for key in WACQT_device_properties:
         if key not in kwargs:
             kwargs[key] = WACQT_device_properties[key]
 
+    # Add remaining settings to kwargs, so it can be passed to transpile in one dict
     kwargs['routing_method'] = routing_method
     kwargs['initial_layout'] = initial_layout
     kwargs['translation_method'] = translation_method
     kwargs['layout_method'] = layout_method
     kwargs['optimization_level'] = optimization_level
 
+    # Here we chose the transpiling with the lower cost out of 'repeats' attempts
     cost = 1000000
     for _ in range(repeats):
         with warnings.catch_warnings():  # sabre causes deprecation warning, this will ignore them
@@ -100,7 +106,8 @@ def shortest_transpile_from_distribution(circuit,
     return transpiled_circuit
 
 def _add_custom_device_equivalences():
-    """ Ads custom gate equivalences to the SessionEquivalenceLibrary for transpilation
+    """ Adds custom gate equivalences to the SessionEquivalenceLibrary for transpilation. 
+    Is run automatically on running file.
     NOTE: One needs to be run once!
     """
     print('Adding custom device equivalences')
