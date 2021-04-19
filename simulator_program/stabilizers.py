@@ -205,7 +205,7 @@ def encode_input(registers):
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>
     """
 
-    warnings.wars("Use V2, it's smaller", DeprecationWarning)
+    warnings.warn("Use V2, it's smaller", DeprecationWarning)
     # Unpack registers
     qbReg = registers.QubitRegister
     circ = get_empty_stabilizer_circuit(registers)
