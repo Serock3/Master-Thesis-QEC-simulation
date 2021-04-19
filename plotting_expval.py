@@ -124,14 +124,12 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
 
     # Create empty encoded circuit
     if empty_circuit:
+
+        # Prepare the circuit
         time = get_circuit_time(circ, gate_times)
         circ = get_empty_noisy_circuit_v3(circ, time, gate_times)
-        # TODO: Make this part of get_empty_circuit to remove warnings
-        #circ = add_idle_noise_to_circuit(circ, gate_times)
-
         results = execute(circ, Aer.get_backend('qasm_simulator'),
             noise_model=noise_model, shots=n_shots).result()
-
 
         # Calculate fidelity at each snapshot
         fidelities = []
@@ -156,7 +154,7 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
 
         return fidelities
 
-    if post_select:
+    elif post_select:
 
         # Get the fidelity for each cycle
         if snapshot_type=='dm' or snapshot_type=='density_matrix':
@@ -173,15 +171,15 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
             results.get_counts(), n_cycles)
         return fidelities, select_counts
 
-    if post_process:
+    elif post_process:
         print('Warning: Post-process not implemented, exiting...')
         return []
     return
 
 # %%
 # Settings used across all configurations
-n_cycles = 2
-n_shots = 1024
+n_cycles = 15
+n_shots = 1024*4
 
 # Noise models
 target_noise = thermal_relaxation_model_V2(gate_times=WACQT_target_times)
@@ -189,6 +187,6 @@ current_noise = thermal_relaxation_model_V2(gate_times=WACQT_demonstrated_times)
 
 # Quantum error correction for both noise models
 fid = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
-    gate_times=WACQT_target_times, reset=True, recovery=False, post_select=True,
+    gate_times=WACQT_target_times, reset=True, recovery=False, post_select=False,
     post_process=False, idle_noise=True, empty_circuit=True, conditional=False,
     snapshot_type='dm')

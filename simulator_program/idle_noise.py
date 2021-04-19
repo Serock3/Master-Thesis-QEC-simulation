@@ -280,11 +280,6 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
     time_passed = get_circuit_time(new_circ, gate_times=gate_times)['end']
     new_circ = add_idle_noise_to_circuit(new_circ, gate_times)
 
-    # Update the time for post encoding snapshot. Assumes label ends with '_0'
-    for key in snapshot_times:
-        if key.split('_')[-1] == '0':
-            snapshot_times[key] = time_passed
-
     # Create a list of all snapshots
     dag = circuit_to_dag(circ)
     snapshots = []    
@@ -298,9 +293,11 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
     for key in snapshot_times:
         if key == 'end':
             break
-        # TODO: Add functionality for this by updating the post_encoding time
-        # after rebuild_up_to_encdoding().
-        elif key == 'post_encoding':
+        # TODO: Add functionality to include post_encoding by updating the time
+        # after rebuild_up_to_encdoding(). Note that an iswap is moved past the
+        # snapshot which messes up the permutation. Maybe some nice solution can
+        # fix this?
+        elif key == 'post_encoding' or key.split('_')[-1] == '0':
             index +=1
             continue # Skip the post_encoding snapshot due to changes in encode
         time_diff = snapshot_times[key]-time_passed
@@ -480,4 +477,3 @@ if __name__ == '__main__':
     # print(times)
     # display(new_circ.draw(output='mpl'))
 
-# %%
