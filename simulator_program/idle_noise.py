@@ -7,19 +7,18 @@ from qiskit.providers.aer.noise import thermal_relaxation_error
 from qiskit.converters import circuit_to_dag
 from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 import numpy as np
+import warnings
 
 if __package__:
-    from .custom_noise_models import thermal_relaxation_model
     from .stabilizers import (encode_input_v2,
                                             get_empty_stabilizer_circuit)
-    from .custom_transpiler import *
+    from . import custom_transpiler
     from .custom_noise_models import WACQT_gate_times, GateTimes
 else:
-    from custom_noise_models import thermal_relaxation_model
     from stabilizers import (encode_input_v2,
                                             get_empty_stabilizer_circuit)
-    from custom_transpiler import *
-    from custom_noise_models import WACQT_gate_times, GateTimes   
+    import custom_transpiler
+    from custom_noise_models import WACQT_gate_times, GateTimes    
 # %%
 
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
@@ -199,10 +198,10 @@ def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
         time_passed = snapshot_times[key]
 
     if transpile:
-        return shortest_transpile_from_distribution(circ, print_cost=False,
+        return custom_transpiler.shortest_transpile_from_distribution(circ, print_cost=False,
             repeats=10, routing_method='sabre', initial_layout=None,
             translation_method=None, layout_method='sabre',
-            optimization_level=1, **WACQT_device_properties)
+            optimization_level=1)
     return circ
 
 # This one should work with transpilation when encode_logical=True
@@ -390,10 +389,10 @@ def rebuild_circuit_up_to_encoding(circ):
 
 # %% Internal testing with a standard stabilizer circuit
 if __name__ == '__main__':
-    from qiskit import execute
-    from simulator_program.stabilizers import *
-    from simulator_program.custom_transpiler import *
-    from simulator_program.custom_noise_models import *
+    from qiskit import execute, QuantumRegister, AncillaRegister, ClassicalRegister, Aer
+    from stabilizers import *
+    from custom_transpiler import *
+    from custom_noise_models import *
 
     qb = QuantumRegister(3, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
@@ -427,7 +426,7 @@ if __name__ == '__main__':
     # # circ_t = transpile(circ, routing_method='sabre', initial_layout=None,
     # #                    translation_method=None, layout_method='sabre',
     # #                    optimization_level=1, **WAQCT_device_properties)
-    # circ_t = shortest_transpile_from_distribution(circ, print_cost=False,
+    # circ_t = custom_transpiler.shortest_transpile_from_distribution(circ, print_cost=False,
     #                                               repeats=1, routing_method='sabre', initial_layout=None,
     #                                               translation_method=None, layout_method='sabre',
     #                                               optimization_level=1, **WAQCT_device_properties)
@@ -467,7 +466,7 @@ if __name__ == '__main__':
     #                                     )
 
     # # Transpile
-    # circ_t = shortest_transpile_from_distribution(circ, print_cost=False,
+    # circ_t = custom_transpiler.shortest_transpile_from_distribution(circ, print_cost=False,
     #                                               repeats=10, routing_method='sabre', initial_layout=None,
     #                                               translation_method=None, layout_method='sabre',
     #                                               optimization_level=1, **WAQCT_device_properties)
@@ -477,3 +476,5 @@ if __name__ == '__main__':
     # print(times)
     # display(new_circ.draw(output='mpl'))
 
+
+# %%

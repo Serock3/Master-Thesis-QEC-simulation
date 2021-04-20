@@ -1,3 +1,4 @@
+#%%
 from qiskit.compiler import transpile
 from qiskit.transpiler import PassManager, CouplingMap, Layout
 from qiskit.visualization import plot_circuit_layout
@@ -5,9 +6,9 @@ from qiskit.circuit.equivalence_library import SessionEquivalenceLibrary
 from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZGate
 from qiskit import QuantumCircuit, QuantumRegister
 if __package__:
-    from .idle_noise import get_circuit_time
+    from . import idle_noise
 else:
-    from idle_noise import get_circuit_time
+    import idle_noise
 import warnings
 
 #%% Device transpiling properties
@@ -68,7 +69,7 @@ def depth_cost_func(circ, t_single=15, t_multi=300):
 
 def shortest_transpile_from_distribution(circuit,
                                          repeats=40,
-                                         cost_func=lambda circ: get_circuit_time(circ)['end'],
+                                         cost_func=lambda circ: idle_noise.get_circuit_time(circ)['end'],
                                          print_cost=True,
                                          routing_method='sabre',
                                          initial_layout=None,
