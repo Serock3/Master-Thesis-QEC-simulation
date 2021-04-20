@@ -25,38 +25,9 @@ from simulator_program.post_process import *
 from simulator_program.idle_noise import *
 
 #%% Useful functions
-def get_testing_circuit(registers, reset, recovery, n_cycles,
-        snapshot_type='dm', initial_state=0, conditional=False, **kwargs):
-    """Create a [[5,1,3]] stabilizer circuit, including encoding and snapshots.
-    
-    Args:
-        registers (class): StabilizerRegisters class, can be created easily by
-            calling StabilizerRegisters() from simulator_program.stabilizers.py.
-        reset (bool): Option whether or not to reset ancilla between msmnts.
-        recovery (bool): Option whether to perform error correction after each
-            cycle. Defaults to true if left empty.
-        n_cycles (int): The number of stabilizer cycles for the circuit.
-        initial_state (int): The initial state to encode into 5 qubits. Can only
-            be initialized to 0 or 1 currently.
-
-    Returns:
-        circ: Qiskit circuit object, containing the full stabilizer circuit.
-    """
-    circ = get_empty_stabilizer_circuit(registers)
-    if initial_state == 1:
-        circ.x(0) #initialize in 1
-    circ.compose(encode_input_v2(registers), inplace=True)
-    add_snapshot_to_circuit(circ, snapshot_type, 0, registers.QubitRegister,
-        conditional=conditional)
-    circ.compose(get_repeated_stabilization(registers, n_cycles,
-        reset, recovery, flag=False, snapshot_type=snapshot_type,
-        conditional=conditional, **kwargs), inplace=True)
-    return circ
-
 def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=True,
-        recovery=True, post_select=False, post_process=False, idle_noise=True, 
-        empty_circuit=False, transpile=True, snapshot_type='dm',
-        conditional=False, **kwargs):
+        data_process_type='recovery', idle_noise=True, transpile=True, 
+        snapshot_type='dm', **kwargs):
     """Get the fidelity of a certain setup/configuration from only its
     parameters.
     
@@ -105,6 +76,17 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
         warnings.warn('Invalid gate times, assuming WACQT_gate_times')
         full_gate_times = WACQT_gate_times
 
+    # Check the data processing method for settings
+    if data_process_type == 'recovery':
+        recovery = True
+        conditional = False
+    elif data_process_type == 'post_select':
+        recovery = False
+        conditional = True
+    elif data_process_type == 'empty_circuit':
+        recovery = False
+        conditional = False
+
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
@@ -113,8 +95,11 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
     registers = StabilizerRegisters(qb, an, cr, readout)
 
     # Circuits
-    circ = get_testing_circuit(registers, reset, recovery, n_cycles, 
-        snapshot_type, conditional=conditional, **kwargs)
+    circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
+                                       recovery=recovery, flag=False,
+                                       snapshot_type=snapshot_type,
+                                       conditional=conditional, **kwargs)
+
     if transpile:
         circ = shortest_transpile_from_distribution(circ, print_cost=False)
 
@@ -123,38 +108,48 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
     trivial = logical_states(include_ancillas=None)[0]
 
     # Create empty encoded circuit
-    if empty_circuit:
+    if data_process_type == 'empty_circuit':
 
         # Prepare the circuit
-        time = get_circuit_time(circ, gate_times)
-        circ = get_empty_noisy_circuit_v3(circ, time, gate_times)
+        time = get_circuit_time(circ, full_gate_times)
+        circ = get_empty_noisy_circuit_v3(circ, time, full_gate_times)
         results = execute(circ, Aer.get_backend('qasm_simulator'),
             noise_model=noise_model, shots=n_shots).result()
 
         # Calculate fidelity at each snapshot
         fidelities = []
-        for current_cycle in range(n_cycles+1):
-            state = results.data()['dm_' + str(current_cycle)]
-            fidelities.append(state_fidelity(state, trivial))
+        if snapshot_type=='dm' or snapshot_type=='density_matrix':
+            for current_cycle in range(n_cycles+1):
+                state = results.data()['dm_' + str(current_cycle)]
+                fidelities.append(state_fidelity(state, trivial))
+        elif snapshot_type=='exp' or snapshot_type=='expectation_value':
+            for current_cycles in range(n_cycles+1):
+                fidelities.append(results.data()['exp_' + str(current_cycle)])
         return fidelities
         
 
     # Add idle noise (empty_circuit does this automatically)
-    elif idle_noise:
-        circ = add_idle_noise_to_circuit(circ, gate_times=gate_times)
+    if idle_noise:
+        circ = add_idle_noise_to_circuit(circ, gate_times=full_gate_times)
 
     # Run the circuit
     results = execute(circ, Aer.get_backend('qasm_simulator'),
         noise_model=noise_model, shots=n_shots).result()
-    if recovery:
+
+
+    if data_process_type == 'recovery':
         fidelities = []
-        for current_cycle in range(n_cycles+1):
-            state = results.data()['dm_' + str(current_cycle)]
-            fidelities.append(state_fidelity(state, trivial))
+        if snapshot_type=='dm' or snapshot_type=='density_matrix':
+            for current_cycle in range(n_cycles+1):
+                state = results.data()['dm_' + str(current_cycle)]
+                fidelities.append(state_fidelity(state, trivial))
+        elif snapshot_type=='exp' or snapshot_type=='expectation_value':
+            for current_cycle in range(n_cycles+1):
+                fidelities.append(results.data()['exp_' + str(current_cycle)])
 
         return fidelities
 
-    elif post_select:
+    elif data_process_type == 'post_select':
 
         # Get the fidelity for each cycle
         if snapshot_type=='dm' or snapshot_type=='density_matrix':
@@ -171,15 +166,113 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
             results.get_counts(), n_cycles)
         return fidelities, select_counts
 
-    elif post_process:
+    elif data_process_type == 'post_process':
         print('Warning: Post-process not implemented, exiting...')
         return []
-    return
+
+    else:
+        print('Warning: No matching data_process_type')
+
+    return []
+
+def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3):
+    """Generates a single qubit-circuit initialized in the |1> state with
+    snapshots at given times
+
+    Args:
+        snapshot_times (dict): The times in the circuit to add snapshots.
+        T1 (float): T1 thermal relaxation, given in ns.
+        T2 (float): T2 relaxation, given in ns.
+
+    Returns:
+        circ: Qiskit circuit object of a single qubit, with snapshots at given
+              times and thermal relaxation in between.
+    """
+    qb = QuantumRegister(1,'qubit')
+    circ = QuantumCircuit(qb)
+    circ.x(qb[0]) # Initialize in |1>
+    #circ.snapshot('start', 'density_matrix') # Correct state for fidelity
+    circ.save_density_matrix(label='start')
+    time_passed = 0
+    index = 0
+    for key in snapshot_times:
+        time_diff = snapshot_times[key]-time_passed
+        if time_diff > 0:
+            thrm_relax = thermal_relaxation_error(
+                        T1, T2, time_diff).to_instruction()
+            circ.append(thrm_relax, [qb[0]])
+        if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
+            circ.save_density_matrix(label='snap_'+str(index))
+        elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
+            circ.save_expectation_value(Pauli('Z'), qb,label='snap_'+str(index))
+        time_passed = snapshot_times[key]
+        index += 1
+    return circ
+
+def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
+                     T1=40e3, T2=60e3, **kwargs):
+    """Calculate the fidelity of a single qubit decay at certain times in a
+    circuit corresponding to the [[5,1,3]] code.
+    
+    Args:
+        n_cycles (int): The number of corresponding stabilizer cycles. After
+                        each cycle a snapshot is performed.
+        n_shots (int): The number of runs for the circuit to measure over
+        gate_times: Can be either a dict with some gate times (in ns), or a
+                    GateTimes object. If it is a dict, gate times not included 
+                    will be added from standard gate times.
+        T1 (float): T1 thermal relaxation, given in ns, defaults to 40e3.
+        T2 (float): T2 thermal relaxation, given in ns, defaults to 60e3.
+        
+    Returns:
+        fid_single (list): The fidelity after each snapshot in the circuit.
+    """
+
+    # Get gate times missing from input
+    if isinstance(gate_times, dict):
+        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+        full_gate_times = WACQT_gate_times
+
+    # Registers
+    qb = QuantumRegister(5, 'code_qubit')
+    an = AncillaRegister(2, 'ancilla_qubit')
+    cr = get_classical_register(n_cycles, reset=False, recovery=False, flag=False)
+    readout = ClassicalRegister(5, 'readout')
+    registers = StabilizerRegisters(qb, an, cr, readout)
+
+    # Circuits
+    circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=False,
+                                       recovery=False, flag=False,
+                                       snapshot_type=snapshot_type,
+                                       conditional=False, **kwargs)
+    circ = shortest_transpile_from_distribution(circ, print_cost=False)
+    circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
+                                           return_time=True)
+
+    circ_single = get_idle_single_qubit(time, snapshot_type, T1, T2)
+    results = execute(circ_single, Aer.get_backend('qasm_simulator'),
+        noise_model=None, shots=n_shots).result()
+    fidelities = []
+    
+    if snapshot_type == 'dm' or snapshot_type =='density_matrix':
+        trivial = results.data()['start']
+        for i in range(len(time)-2):
+            current_state = results.data()['snap_'+str(i+1)]
+            fidelities.append(state_fidelity(current_state, trivial))
+    elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
+        for i in range(len(time)-2):
+            fidelities.append(results.data()['snap_'+str(i+1)])
+    return fidelities
+
 
 # %%
 # Settings used across all configurations
 n_cycles = 15
-n_shots = 1024*4
+n_shots = 1024
 
 # Noise models
 target_noise = thermal_relaxation_model_V2(gate_times=WACQT_target_times)
@@ -187,6 +280,13 @@ current_noise = thermal_relaxation_model_V2(gate_times=WACQT_demonstrated_times)
 
 # Quantum error correction for both noise models
 fid = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
-    gate_times=WACQT_target_times, reset=True, recovery=False, post_select=False,
-    post_process=False, idle_noise=True, empty_circuit=True, conditional=False,
-    snapshot_type='dm')
+    gate_times=WACQT_target_times, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='dm')
+
+#%% Testing single qubit
+fid_target_single = fid_single_qubit(n_cycles, n_shots,
+                                     gate_times=WACQT_target_times,
+                                     snapshot_type='exp')
+fid_demonstrated_single = fid_single_qubit(n_cycles, n_shots, 
+                                           gate_times=WACQT_demonstrated_times,
+                                           snapshot_type='exp')
