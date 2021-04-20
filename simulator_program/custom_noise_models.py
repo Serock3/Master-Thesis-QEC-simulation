@@ -11,12 +11,9 @@ from qiskit.providers.aer.noise import (
 from qiskit.providers.aer.noise import NoiseModel, QuantumError, ReadoutError
 from qiskit.providers.aer import noise
 import numpy as np
-from qiskit.circuit.library import standard_gates
-from qiskit.circuit import Gate
 import warnings
 
 # %%
-
 
 class GateTimes:
     """Class to contain gate times.
