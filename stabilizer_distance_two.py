@@ -10,12 +10,10 @@ from qiskit import (QuantumCircuit,
                     execute,
                     Aer
                     )
-from qiskit.providers.aer.extensions.snapshot_statevector import *
-from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 from simulator_program.custom_transpiler import *
 from typing import List
 from qiskit.quantum_info import Statevector, state_fidelity
-from simulator_program.custom_noise_models import *
+from simulator_program import custom_noise_models
 from simulator_program.idle_noise import *
 from simulator_program.post_select import get_trivial_post_select_counts, get_trivial_post_select_den_mat, get_trivial_exp_value
 from simulator_program.stabilizers import add_snapshot_to_circuit
@@ -116,7 +114,9 @@ def pipelined_delft(n_cycles=1, reset=True, **kwargs):
 # %% Custom noise models
 
 # Info of T1/T2 and gate times is the Mendeley paper
-
+WACQT_gate_times = custom_noise_models.GateTimes(
+    single_qubit_default=20, two_qubit_default=200,
+    custom_gate_times={'u1': 0, 'z': 0, 'measure': 500})
 
 # %% Demo
 if __name__ == '__main__':
@@ -144,6 +144,7 @@ if __name__ == '__main__':
     trivial_key_list = [hex(int(trivial_key*(current_cycle+1), 2))
                         for current_cycle in range(n_cycles)]
     exp_values = get_trivial_exp_value(results, n_cycles, trivial_key)
+    
     fig, axs = plt.subplots(2, figsize=(14, 10))
     ax1 = axs[0]
     ax2 = axs[1]
@@ -163,5 +164,6 @@ if __name__ == '__main__':
     ax2.set_ylabel(r'Post select fraction')
     ax2.legend()
     ax2.grid(linewidth=1)
+    ax2.set_yscale('log')
 
 # %%

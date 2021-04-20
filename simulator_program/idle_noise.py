@@ -5,7 +5,6 @@
 from qiskit import QuantumCircuit
 from qiskit.providers.aer.noise import thermal_relaxation_error
 from qiskit.converters import circuit_to_dag
-from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 import numpy as np
 import warnings
 
