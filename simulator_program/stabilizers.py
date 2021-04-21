@@ -54,31 +54,28 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
     # qbReg, anReg, clReg, readout = registers
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
-    clReg = registers.SyndromeRegister
     readout = registers.ReadoutRegister
     if not anReg.size == 2 and not anReg.size == 5:
         raise Exception('Ancilla register must be of size 2 or 5')
 
     # Define the circuit
-    # circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit(registers)
 
-    # TODO: Fix this for new version
     # Encode the state
-    circ = encode_input_v2(registers)
+    circ.compose(encode_input_v2(registers), inplace=True)
     add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qbReg,
                             conditional=conditional, include_barriers=include_barriers)
 
     # Stabilizer
-    circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-                                       reset=reset, recovery=recovery, flag=flag,
-                                       snapshot_type=snapshot_type,
-                                       conditional=conditional, include_barriers=include_barriers,
-                                       **kwargs)
+    circ.compose(get_repeated_stabilization(registers, n_cycles=n_cycles,
+                                            reset=reset, recovery=recovery, flag=flag,
+                                            snapshot_type=snapshot_type,
+                                            conditional=conditional,
+                                            include_barriers=include_barriers,
+                                            **kwargs), inplace=True)
 
     # Final readout
     circ.measure(qbReg, readout)
-    # circ.snapshot_statevector('post_measure')
-
     return circ
 
 
@@ -105,27 +102,23 @@ def get_repeated_stabilization(registers, n_cycles=1,
 
     for current_cycle in range(n_cycles):
         if flag is True:
-            circ += flagged_stabilizer_cycle(registers,
-                                             reset=reset,
-                                             recovery=recovery,
-                                             current_cycle=current_cycle,
-                                             )
+            circ.compose(flagged_stabilizer_cycle(registers,
+                                                  reset=reset,
+                                                  recovery=recovery,
+                                                  current_cycle=current_cycle,
+                                                  ), inplace=True)
         else:
-            circ += unflagged_stabilizer_cycle(registers,
-                                               reset=reset,
-                                               recovery=recovery,
-                                               current_cycle=current_cycle,
-                                               include_barriers=include_barriers,
-                                               **kwargs
-                                               )
+            circ.compose(unflagged_stabilizer_cycle(registers,
+                                            reset=reset,
+                                            recovery=recovery,
+                                            current_cycle=current_cycle,
+                                            include_barriers=include_barriers,
+                                            **kwargs
+                                            ), inplace=True)
 
-        add_snapshot_to_circuit(
-            circ, snapshot_type, current_cycle+1, registers.QubitRegister, conditional=conditional)
-        # if snapshot_type:
-        #    if not isinstance(snapshot_type, list):
-        #        snapshot_type = [snapshot_type]
-        #
-        #    add_snapshot_to_circuit(circ, snapshot_type, registers.QubitRegister)
+        add_snapshot_to_circuit(circ, snapshot_type, current_cycle+1, 
+                                registers.QubitRegister,conditional=conditional)
+
     return circ
 
 
@@ -643,8 +636,8 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     # Create circuit and run stabilizers
     circ = get_empty_stabilizer_circuit(registers)
     for i in range(4):
-        circ += stabilizer_list[i](registers, anQb=anQb_list[i],
-                                   syn_bit=syn_bit_list[i], reset=reset)
+        circ.compose(stabilizer_list[i](registers, anQb=anQb_list[i],
+                     syn_bit=syn_bit_list[i], reset=reset), inplace=True)
         if include_barriers:
             circ.barrier()
     # Add an extra measurement to the next syndrome register
@@ -659,7 +652,7 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     # Recovery
     if recovery is True:
         circ.barrier()
-        circ += unflagged_recovery(registers, reset, current_cycle)
+        circ.compose(unflagged_recovery(registers, reset, current_cycle), inplace=True)
         # if include_barriers:
         circ.barrier()
     return circ

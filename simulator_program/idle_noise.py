@@ -287,7 +287,6 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
 
     # Add all snapshots from previous circuit, excluding post_encoding.
     index = 0
-    print(snapshot_times)
     for key in snapshot_times:
         if key == 'end':
             break
