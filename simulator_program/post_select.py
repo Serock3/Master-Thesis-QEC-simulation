@@ -81,34 +81,43 @@ def get_subsystem_counts_up_to_cycle(counts, cycle):
     return subsys_counts
 
 
-def get_trivial_post_select_counts(counts, n_cycles, trivial_key: str = None):
+def _expand_key(key: str, current_cycle: int, n_cycles: int):
+    # Expand key into current_cycle copies, e.g. '101'->'101101101'
+    value = int((key*current_cycle).zfill(1), 2)
+    num_measurements = (n_cycles+1)*len(key)
+    # For every 64th measurement, the string will be padded with 16 additional zeros
+    hex_padding = int((num_measurements)/64)*16+3
+    return f"{value:#0{hex_padding}x}"
+
+
+def get_trivial_post_select_counts(counts, n_cycles, trivial_key: str = '0000'):
     # TODO: this if statement is unnecessary if instead we use the default trivial_key = '0000'
-    if trivial_key is None:
-        return [get_subsystem_counts_up_to_cycle(
-            counts, current_cycle)[0]
-            for current_cycle in range(n_cycles+1)]
-    else:
-        trivial_key_list = [int((trivial_key*current_cycle).zfill(1), 2)
-                            for current_cycle in range(n_cycles+1)]
-        return [get_subsystem_counts_up_to_cycle(
-            counts, current_cycle)[trivial_key_list[current_cycle]]
-            for current_cycle in range(n_cycles+1)]
+    # if trivial_key is None:
+    #     return [get_subsystem_counts_up_to_cycle(
+    #         counts, current_cycle)[0]
+    #         for current_cycle in range(n_cycles+1)]
+    # else:
+    trivial_key_list = [int(_expand_key(trivial_key, current_cycle, n_cycles), 16)
+                        for current_cycle in range(n_cycles+1)]
+    return [get_subsystem_counts_up_to_cycle(
+        counts, current_cycle)[trivial_key_list[current_cycle]]
+        for current_cycle in range(n_cycles+1)]
 
 
 def get_trivial_exp_value(results, n_cycles: int, trivial_key: str = '0000'):
-    """Get the expectation values corresponding to only trivial stabilizer measurements 
+    """Get the expectation values corresponding to only trivial stabilizer measurements
     (so far).
 
     Args:
         results (Results object): Simulation result
-        n_cycles (int): 
+        n_cycles (int):
         trivial_key (str, optional): Measurement bitstring corresponding to what a trivial measurement
         is for the given code, e.g. '101' for the distance two code. Defaults to '0000'.
 
     Returns:
         List[float]: List of expectation values post selected for trivial stabilizer outcomes.
     """
-    trivial_key_list = [hex(int((trivial_key*current_cycle).zfill(1), 2))
+    trivial_key_list = [_expand_key(trivial_key, current_cycle, n_cycles)
                         for current_cycle in range(n_cycles+1)]
     return [results.data()[get_snapshot_label(snapshot_type='exp', conditional=True, current_cycle=current_cycle)][trivial_key]
             for current_cycle, trivial_key in enumerate(trivial_key_list)]
@@ -126,7 +135,7 @@ def get_trivial_post_select_den_mat(results, n_cycles: int, trivial_key: str = '
     Returns:
         List[np.ndarray]: List of density matrices post selected for trivial stabilizer outcomes.
     """
-    trivial_key_list = [hex(int((trivial_key*current_cycle).zfill(1), 2))
+    trivial_key_list = [_expand_key(trivial_key, current_cycle, n_cycles)
                         for current_cycle in range(n_cycles+1)]
     return [results.data()[get_snapshot_label(snapshot_type='dm', conditional=True, current_cycle=current_cycle)][trivial_key]
             for current_cycle, trivial_key in enumerate(trivial_key_list)]
@@ -228,7 +237,7 @@ if __name__ == "__main__":
     reset = False
     recovery = True
     flag = False
-    n_cycles = 5
+    n_cycles = 15
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
     # cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
@@ -238,13 +247,7 @@ if __name__ == "__main__":
 
     registers = StabilizerRegisters(qb, an, cr, readout)
 
-    # circ = get_empty_stabilizer_circuit(registers)
-
     circ = get_full_stabilizer_circuit(registers, n_cycles)
-    # circ = encode_input_v2(registers)
-    # # Stabilizer
-    # circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-    #                                    reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
 
     n_shots = 100
     results = execute(
@@ -267,7 +270,7 @@ if __name__ == "__main__":
 
     ax1.plot(range(n_cycles+1), fidelities, 'o-', label='No transpilation')
     ax1.set_xlabel(r'Error detection cycle $n$')
-    ax1.set_ylabel('Post selected count')
+    ax1.set_ylabel('Post selected fidelities')
     ax1.legend()
     ax1.grid(linewidth=1)
 
