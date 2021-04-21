@@ -86,6 +86,9 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
     elif data_process_type == 'empty_circuit':
         recovery = False
         conditional = False
+    else:
+        recovery = False
+        conditional = False
 
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
@@ -137,7 +140,7 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
         noise_model=noise_model, shots=n_shots).result()
 
 
-    if data_process_type == 'recovery':
+    if data_process_type == 'recovery' or data_process_type =='none':
         fidelities = []
         if snapshot_type=='dm' or snapshot_type=='density_matrix':
             for current_cycle in range(n_cycles+1):
@@ -270,43 +273,94 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
 # %%
 # Settings used across all configurations
 n_cycles = 14
-n_shots = 1024
+n_shots = 1024*8
 
 # Noise models
 target_noise = thermal_relaxation_model_V2(gate_times=WACQT_target_times)
 current_noise = thermal_relaxation_model_V2(gate_times=WACQT_demonstrated_times)
 
-# Quantum error correction for both noise models
-fid_target_QEC = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
-    gate_times=WACQT_target_times, reset=True, data_process_type='recovery',
-    idle_noise=True, snapshot_type='dm', device_properties=diamond_device_properties)
-fid_demonstrated_QEC = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
-    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='recovery',
-    idle_noise=True, snapshot_type='dm', device_properties=diamond_device_properties)
-print('Check!')
-#%% PS
-fid_target_PS = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
-    gate_times=WACQT_target_times, reset=True, data_process_type='post_select',
-    idle_noise=True, snapshot_type='dm')
 
-fid_demonstrated_PS = fidelity_from_scratch(9, current_noise, 16000, 
+# Quantum error correction for both noise models
+fid_target_WACQT = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp')
+fid_demonstrated_WACQT = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp')
+
+# Double diamond QEC
+fid_target_DD = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', device_properties=diamond_device_properties)
+fid_demonstrated_DD = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', device_properties=diamond_device_properties)
+print('Check!')
+
+#%%
+# No transpilation QEC
+fid_target_noT = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, data_process_type='recovery',
+    idle_noise=True, transpile=False, snapshot_type='exp')
+fid_demonstrated_noT = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='recovery',
+    idle_noise=True, transpile=False, snapshot_type='exp')
+#%% PS
+fid_target_PS, count_target = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp')
+
+fid_demonstrated_PS, count_demonstrated = fidelity_from_scratch(9, current_noise, 16000, 
     gate_times=WACQT_demonstrated_times, reset=True, data_process_type='post_select',
-    idle_noise=True, snapshot_type='dm')
+    idle_noise=True, snapshot_type='exp')
 print('Check!')
 #%% Empty circuit
 fid_target_empty = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
     gate_times=WACQT_target_times, reset=True, data_process_type='empty_circuit',
-    idle_noise=True, snapshot_type='dm')
+    idle_noise=True, snapshot_type='exp')
 fid_demonstrated_empty = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
     gate_times=WACQT_demonstrated_times, reset=True, data_process_type='empty_circuit',
-    idle_noise=True, snapshot_type='dm')
+    idle_noise=True, snapshot_type='exp')
 
+#%% Only measurements
+fid_target_stab = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, data_process_type='none',
+    idle_noise=True, snapshot_type='exp')
+fid_demonstrated_stab = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='none',
+    idle_noise=True, snapshot_type='exp')
 #%% Testing single qubit
 n_cycles = 14
 n_shots = 1024*8
 fid_target_single = fid_single_qubit(n_cycles, n_shots,
                                      gate_times=WACQT_target_times,
-                                     snapshot_type='dm')
+                                     snapshot_type='exp')
 fid_demonstrated_single = fid_single_qubit(n_cycles, n_shots, 
                                            gate_times=WACQT_demonstrated_times,
-                                           snapshot_type='dm')
+                                           snapshot_type='exp')
+
+
+#%% Plotting
+fig, ax1 = plt.subplots(1, figsize=(10, 6))
+x_dis = np.arange(0,n_cycles+1)
+
+
+# Subplot 1: Target gate times
+ax1.plot(x_dis, fid_target_WACQT, '-o', label='WACQT, target times')
+ax1.plot(x_dis, fid_target_DD, '-o', label='Double diamond, target times')
+ax1.plot(x_dis, fid_target_noT, '-o', label='No transpilation, target times')
+ax1.plot(x_dis[1:15], fid_target_single, '-o', label='Single qubit decay')
+#ax1.plot(x_dis, fid_demonstrated_WACQT, '-o', label='WACQT, dem. times')
+#ax1.plot(x_dis, fid_demonstrated_DD, '-o', label='Double diamond, dem. times')
+#ax1.plot(x_dis, fid_demonstrated_noT, '-o', label='No transpilation, dem. times')
+
+#ax1.plot(x_dis, fid_target_stab, '-o', label='Decay of logical state, target times')
+#ax1.plot(x_dis, fid_demonstrated_stab, '-o', label='Decay of logical state, dem. times')
+
+
+ax1.set(ylim=(-1.0, 1.0))
+
+ax1.set_xlabel('Number of stabilizer cycles')
+ax1.set_ylabel('Expectation value of ZZZZZ')
+ax1.set_title('Expectation value of simulated [[5,1,3]] QEC code')
+ax1.legend()
