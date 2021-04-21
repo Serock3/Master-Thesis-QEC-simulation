@@ -7,7 +7,7 @@ from qiskit.visualization import plot_histogram
 
 # Import from Qiskit Aer noise module
 from qiskit.providers.aer.noise import thermal_relaxation_error
-                                        
+from qiskit.providers.aer.library import save_density_matrix, save_expectation_value                                        
 
 from qiskit.quantum_info import partial_trace
 from qiskit.quantum_info import DensityMatrix
@@ -27,7 +27,7 @@ from simulator_program.idle_noise import *
 #%% Useful functions
 def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=True,
         data_process_type='recovery', idle_noise=True, transpile=True, 
-        snapshot_type='dm', **kwargs):
+        snapshot_type='dm', device_properties=WACQT_device_properties, **kwargs):
     """Get the fidelity of a certain setup/configuration from only its
     parameters.
     
@@ -101,10 +101,10 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
                                        conditional=conditional, **kwargs)
 
     if transpile:
-        circ = shortest_transpile_from_distribution(circ, print_cost=False)
+        circ = shortest_transpile_from_distribution(circ, print_cost=False,
+            **device_properties)
 
     # Get the correct (no errors) state
-    #trivial = get_trivial_state(circ)
     trivial = logical_states(include_ancillas=None)[0]
 
     # Create empty encoded circuit
@@ -119,12 +119,12 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
         # Calculate fidelity at each snapshot
         fidelities = []
         if snapshot_type=='dm' or snapshot_type=='density_matrix':
-            for current_cycle in range(n_cycles+1):
-                state = results.data()['dm_' + str(current_cycle)]
+            for current_cycle in range(n_cycles):
+                state = results.data()['dm_' + str(current_cycle+1)]
                 fidelities.append(state_fidelity(state, trivial))
         elif snapshot_type=='exp' or snapshot_type=='expectation_value':
-            for current_cycles in range(n_cycles+1):
-                fidelities.append(results.data()['exp_' + str(current_cycle)])
+            for current_cycle in range(n_cycles):
+                fidelities.append(results.data()['exp_' + str(current_cycle+1)])
         return fidelities
         
 
@@ -150,7 +150,6 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
         return fidelities
 
     elif data_process_type == 'post_select':
-
         # Get the fidelity for each cycle
         if snapshot_type=='dm' or snapshot_type=='density_matrix':
             fidelities = [state_fidelity(post_selected_state, trivial) for 
@@ -191,8 +190,7 @@ def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3):
     qb = QuantumRegister(1,'qubit')
     circ = QuantumCircuit(qb)
     circ.x(qb[0]) # Initialize in |1>
-    #circ.snapshot('start', 'density_matrix') # Correct state for fidelity
-    circ.save_density_matrix(label='start')
+    circ.save_density_matrix(qb, label='start')
     time_passed = 0
     index = 0
     for key in snapshot_times:
@@ -202,7 +200,7 @@ def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3):
                         T1, T2, time_diff).to_instruction()
             circ.append(thrm_relax, [qb[0]])
         if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
-            circ.save_density_matrix(label='snap_'+str(index))
+            circ.save_density_matrix(qb, label='snap_'+str(index))
         elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
             circ.save_expectation_value(Pauli('Z'), qb,label='snap_'+str(index))
         time_passed = snapshot_times[key]
@@ -271,7 +269,7 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
 
 # %%
 # Settings used across all configurations
-n_cycles = 15
+n_cycles = 14
 n_shots = 1024
 
 # Noise models
@@ -279,14 +277,36 @@ target_noise = thermal_relaxation_model_V2(gate_times=WACQT_target_times)
 current_noise = thermal_relaxation_model_V2(gate_times=WACQT_demonstrated_times)
 
 # Quantum error correction for both noise models
-fid = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+fid_target_QEC = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
     gate_times=WACQT_target_times, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='dm', device_properties=diamond_device_properties)
+fid_demonstrated_QEC = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='dm', device_properties=diamond_device_properties)
+print('Check!')
+#%% PS
+fid_target_PS = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='dm')
+
+fid_demonstrated_PS = fidelity_from_scratch(9, current_noise, 16000, 
+    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='dm')
+print('Check!')
+#%% Empty circuit
+fid_target_empty = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
+    gate_times=WACQT_target_times, reset=True, data_process_type='empty_circuit',
+    idle_noise=True, snapshot_type='dm')
+fid_demonstrated_empty = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
+    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='empty_circuit',
     idle_noise=True, snapshot_type='dm')
 
 #%% Testing single qubit
+n_cycles = 14
+n_shots = 1024*8
 fid_target_single = fid_single_qubit(n_cycles, n_shots,
                                      gate_times=WACQT_target_times,
-                                     snapshot_type='exp')
+                                     snapshot_type='dm')
 fid_demonstrated_single = fid_single_qubit(n_cycles, n_shots, 
                                            gate_times=WACQT_demonstrated_times,
-                                           snapshot_type='exp')
+                                           snapshot_type='dm')
