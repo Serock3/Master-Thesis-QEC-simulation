@@ -152,8 +152,8 @@ def get_circuit_time(circ, gate_times={}):
         for arg in node.qargs+list(cargs):
             gate_args.append(arg)
 
-        latest_time = max(time_passed.values())
-
+        latest_time = max([time_passed[gate_arg] for gate_arg in gate_args])
+        
         for gate_arg in gate_args:
             time_passed[gate_arg] = latest_time + full_gate_times[node.name]
 
