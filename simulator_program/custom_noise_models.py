@@ -11,12 +11,9 @@ from qiskit.providers.aer.noise import (
 from qiskit.providers.aer.noise import NoiseModel, QuantumError, ReadoutError
 from qiskit.providers.aer import noise
 import numpy as np
-from qiskit.circuit.library import standard_gates
-from qiskit.circuit import Gate
 import warnings
 
 # %%
-
 
 class GateTimes:
     """Class to contain gate times.
@@ -27,11 +24,12 @@ class GateTimes:
     # This will help noise models know how many qubits to apply noise to.
     # NOTE: Can this be generated automatically from standard_gates?
     single_qubit_gates = {'x', 'y', 'z', 'h', 'sx',
-                          'sz', 'sy', 's', 't', 'u1', 'u2', 'u3'}
-    two_qubit_gates = {'cx', 'cz', 'swap', 'iswap','ry'}
+                          'sz', 'sy', 's', 't', 'ry', 'u1', 'u2', 'u3'}
+    two_qubit_gates = {'cx', 'cz', 'swap', 'iswap'}
     special_ops = {'measure', 'reset'}
-    directives = {'barrier', 'set_density_matrix', 'save_density_matrix', 'save_expval', 'snapshot'}
-    
+    directives = {'barrier', 'set_density_matrix',
+                  'save_density_matrix', 'save_expval', 'snapshot'}
+
     def __init__(self, single_qubit_default=0, two_qubit_default=0, custom_gate_times={}):
         """Class to contain a dictionary of gate times. 
         Adds the gate times specified in custom_gate_times and 

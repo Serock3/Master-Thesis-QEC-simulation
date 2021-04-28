@@ -1,3 +1,4 @@
+#%%
 from qiskit.compiler import transpile
 from qiskit.transpiler import PassManager, CouplingMap, Layout
 from qiskit.visualization import plot_circuit_layout
@@ -5,9 +6,9 @@ from qiskit.circuit.equivalence_library import SessionEquivalenceLibrary
 from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZGate
 from qiskit import QuantumCircuit, QuantumRegister
 if __package__:
-    from .idle_noise import get_circuit_time
+    from . import idle_noise
 else:
-    from idle_noise import get_circuit_time
+    import idle_noise
 import warnings
 
 #%% Device transpiling properties
@@ -26,7 +27,8 @@ WACQT_device_properties_old = {
     "basis_gates": basis_gates, "coupling_map": coupling_map}
 
 # WACQT 7 qb UPDATED BASIS
-basis_gates = ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy', 'iswap', 'cz']
+basis_gates = ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy', 'iswap', 'cz',
+    'save_expval', 'save_density_matrix']
 WACQT_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map}
 
@@ -67,7 +69,7 @@ def depth_cost_func(circ, t_single=15, t_multi=300):
 
 def shortest_transpile_from_distribution(circuit,
                                          repeats=40,
-                                         cost_func=lambda circ: get_circuit_time(circ)['end'],
+                                         cost_func=lambda circ: idle_noise.get_circuit_time(circ)['end'],
                                          print_cost=True,
                                          routing_method='sabre',
                                          initial_layout=None,
@@ -75,16 +77,22 @@ def shortest_transpile_from_distribution(circuit,
                                          layout_method='sabre',
                                          optimization_level=1,
                                          **kwargs):
+    
+    # Here we modify the kwargs dict so we can pass it to transpile() with our default values
+
+    # Populate gate times not specified with default values
     for key in WACQT_device_properties:
         if key not in kwargs:
             kwargs[key] = WACQT_device_properties[key]
 
+    # Add remaining settings to kwargs, so it can be passed to transpile in one dict
     kwargs['routing_method'] = routing_method
     kwargs['initial_layout'] = initial_layout
     kwargs['translation_method'] = translation_method
     kwargs['layout_method'] = layout_method
     kwargs['optimization_level'] = optimization_level
 
+    # Here we chose the transpiling with the lower cost out of 'repeats' attempts
     cost = 1000000
     for _ in range(repeats):
         with warnings.catch_warnings():  # sabre causes deprecation warning, this will ignore them
@@ -99,7 +107,8 @@ def shortest_transpile_from_distribution(circuit,
     return transpiled_circuit
 
 def _add_custom_device_equivalences():
-    """ Ads custom gate equivalences to the SessionEquivalenceLibrary for transpilation
+    """ Adds custom gate equivalences to the SessionEquivalenceLibrary for transpilation. 
+    Is run automatically on running file.
     NOTE: One needs to be run once!
     """
     print('Adding custom device equivalences')

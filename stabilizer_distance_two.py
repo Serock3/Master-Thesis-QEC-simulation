@@ -10,14 +10,13 @@ from qiskit import (QuantumCircuit,
                     execute,
                     Aer
                     )
-from qiskit.providers.aer.extensions.snapshot_statevector import *
-from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 from simulator_program.custom_transpiler import *
 from typing import List
 from qiskit.quantum_info import Statevector, state_fidelity
-from simulator_program.custom_noise_models import *
+from simulator_program import custom_noise_models
 from simulator_program.idle_noise import *
-from simulator_program.post_select import get_trivial_post_select_counts, get_trivial_post_select_den_mat
+from simulator_program.post_select import get_trivial_post_select_counts, get_trivial_post_select_den_mat, get_trivial_exp_value
+from simulator_program.stabilizers import add_snapshot_to_circuit
 from matplotlib import pyplot as plt
 from qiskit.quantum_info.operators.symplectic.pauli import Pauli
 # %% Logical states (for initialization)
@@ -67,8 +66,9 @@ def pipelined_delft(n_cycles=1, reset=True, **kwargs):
 
     circ = QuantumCircuit(qbReg, anReg, *clRegs)
     circ.set_density_matrix(logical_states('back')[0])
-    circ.save_density_matrix(label='post_encoding')
-    # circ.snapshot(label='post_encoding')
+    add_snapshot_to_circuit(circ, ['exp', 'dm'], 0, conditional=[
+                            True, False], qubits=qbReg, pauliop='ZZII')
+
     for cycle in range(n_cycles):
         # Blue half, (XXXX) on the D register
         # TODO: add 'parking'?
@@ -104,18 +104,23 @@ def pipelined_delft(n_cycles=1, reset=True, **kwargs):
             circ.reset(anReg[0])
             circ.reset(anReg[2])
         circ.barrier()
-        circ.save_density_matrix(qubits=list(
-            qbReg), label='stabilizer_' + str(cycle), conditional=True)
-        circ.save_expectation_value(Pauli('ZZII'), qbReg, label='exp_value_'+str(cycle), conditional=True)
+        add_snapshot_to_circuit(circ, ['exp', 'dm'], cycle+1, conditional=[
+                            True, False], qubits=qbReg, pauliop='ZZII')
+        # circ.save_density_matrix(qubits=list(
+        #     qbReg), label='stabilizer_' + str(cycle), conditional=True)
+        # circ.save_expectation_value(
+        #     Pauli('ZZII'), qbReg, label='exp_value_'+str(cycle), conditional=True)
     return circ
 # %% Custom noise models
 
 # Info of T1/T2 and gate times is the Mendeley paper
-
+WACQT_gate_times = custom_noise_models.GateTimes(
+    single_qubit_default=20, two_qubit_default=200,
+    custom_gate_times={'u1': 0, 'z': 0, 'measure': 500})
 
 # %% Demo
 if __name__ == '__main__':
-    n_cycles = 5
+    n_cycles = 10
     circ = pipelined_delft(n_cycles)
     # display(circ.draw(output='mpl'))
 
@@ -125,38 +130,40 @@ if __name__ == '__main__':
     # circ = transpile(circ, simulator)
 
     # Run and get saved data
-    results = simulator.run(add_idle_noise_to_circuit(circ, {'ry': 200}),
+    results = simulator.run(add_idle_noise_to_circuit(circ),
                             shots=n_shots,
                             noise_model=thermal_relaxation_model_V2()).result()
-    
-    trivial_key = '101' # A trivial syndrome is given by 101 and not 000 here
+
+    trivial_key = '101'  # A trivial syndrome is given by 101 and not 000 here
     correct_state = logical_states(None)[0]
     fidelities_select = [state_fidelity(post_selected_state, correct_state) for post_selected_state
                          in get_trivial_post_select_den_mat(results, n_cycles, trivial_key)]
     select_counts = get_trivial_post_select_counts(
         results.get_counts(), n_cycles, trivial_key)
 
-    trivial_key_list = [hex(int(trivial_key*(current_cycle+1),2)) for current_cycle in range(n_cycles)]
-    exp_values = [results.data()['exp_value_'+str(cycle)][trivial_key_list[cycle]] for cycle in range(n_cycles)]
+    trivial_key_list = [hex(int(trivial_key*(current_cycle+1), 2))
+                        for current_cycle in range(n_cycles)]
+    exp_values = get_trivial_exp_value(results, n_cycles, trivial_key)
+    
     fig, axs = plt.subplots(2, figsize=(14, 10))
     ax1 = axs[0]
     ax2 = axs[1]
 
     # ax1.plot(range(n_cycles), fidelities_normal, 'o-', label='No processing')
-    ax1.plot(range(n_cycles), fidelities_select, 'o-', label='Post select')
-    ax1.plot(range(n_cycles), exp_values, 'o-', label='Post select exp')
+    ax1.plot(range(n_cycles+1), fidelities_select, 'o-', label='Post select')
+    ax1.plot(range(n_cycles+1), exp_values, 'o-', label='Post select exp')
     # ax1.plot(range(n_cycles), fidelities_post_process, 'o-', label='Post process')
     ax1.set_xlabel(r'Error detection cycle $n$')
     ax1.set_ylabel('Post selected count')
-    ax1.set_ylim(0,1)
+    ax1.set_ylim(0, 1)
     ax1.legend()
     ax1.grid(linewidth=1)
 
-
-    ax2.plot(range(n_cycles), select_counts, 'o-', label='No transpilation')
+    ax2.plot(range(n_cycles+1), select_counts, 'o-', label='No transpilation')
     ax2.set_xlabel(r'Error detection cycle $n$')
     ax2.set_ylabel(r'Post select fraction')
     ax2.legend()
     ax2.grid(linewidth=1)
+    ax2.set_yscale('log')
 
 # %%

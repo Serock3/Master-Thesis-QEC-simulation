@@ -5,21 +5,19 @@
 from qiskit import QuantumCircuit
 from qiskit.providers.aer.noise import thermal_relaxation_error
 from qiskit.converters import circuit_to_dag
-from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 import numpy as np
+import warnings
 
 if __package__:
-    from .custom_noise_models import thermal_relaxation_model
     from .stabilizers import (encode_input_v2,
                                             get_empty_stabilizer_circuit)
-    from .custom_transpiler import *
+    from . import custom_transpiler
     from .custom_noise_models import WACQT_gate_times, GateTimes
 else:
-    from custom_noise_models import thermal_relaxation_model
     from stabilizers import (encode_input_v2,
                                             get_empty_stabilizer_circuit)
-    from custom_transpiler import *
-    from custom_noise_models import WACQT_gate_times, GateTimes   
+    import custom_transpiler
+    from custom_noise_models import WACQT_gate_times, GateTimes    
 # %%
 
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
@@ -99,8 +97,8 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         for gate_arg in gate_args:
             time_passed[gate_arg] = latest_time + gate_time
 
-        if node.name == 'snapshot':
-            time_at_snapshots_and_end[node.op.label] = max(
+        if node.name == 'snapshot' or node.name.split('_')[0] == 'save':
+            time_at_snapshots_and_end[node.op._label] = max(
                 time_passed.values())
 
         # Add the gate
@@ -150,18 +148,17 @@ def get_circuit_time(circ, gate_times={}):
     for node in dag.op_nodes():
         # Set cargs to entire classical conditional register if it exists, otherwise to the cargs
         cargs = node.condition[0] if node.condition else node.cargs
-
         gate_args = []
         for arg in node.qargs+list(cargs):
             gate_args.append(arg)
 
-        latest_time = max(time_passed.values())
-
+        latest_time = max([time_passed[gate_arg] for gate_arg in gate_args])
+        
         for gate_arg in gate_args:
             time_passed[gate_arg] = latest_time + full_gate_times[node.name]
 
-        if node.name == 'snapshot':
-            time_at_snapshots_and_end[node.op.label] = max(
+        if node.name == 'snapshot' or node.name.split('_')[0] == 'save':
+            time_at_snapshots_and_end[node.op._label] = max(
                 time_passed.values())
 
     time_at_snapshots_and_end['end'] = max(time_passed.values())
@@ -200,10 +197,10 @@ def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
         time_passed = snapshot_times[key]
 
     if transpile:
-        return shortest_transpile_from_distribution(circ, print_cost=False,
+        return custom_transpiler.shortest_transpile_from_distribution(circ, print_cost=False,
             repeats=10, routing_method='sabre', initial_layout=None,
             translation_method=None, layout_method='sabre',
-            optimization_level=1, **WACQT_device_properties)
+            optimization_level=1)
     return circ
 
 # This one should work with transpilation when encode_logical=True
@@ -279,12 +276,13 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
     # Encode the logical qubit
     new_circ += rebuild_circuit_up_to_encoding(circ)
     time_passed = get_circuit_time(new_circ, gate_times=gate_times)['end']
+    new_circ = add_idle_noise_to_circuit(new_circ, gate_times)
 
     # Create a list of all snapshots
     dag = circuit_to_dag(circ)
     snapshots = []    
     for node in dag.op_nodes():
-        if node.name == 'snapshot':
+        if node.name == 'snapshot' or node.name.split('_')[0] == 'save':
             snapshots.append(node)
 
     # Add all snapshots from previous circuit, excluding post_encoding.
@@ -292,7 +290,11 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
     for key in snapshot_times:
         if key == 'end':
             break
-        elif key == 'post_encoding':
+        # TODO: Add functionality to include post_encoding by updating the time
+        # after rebuild_up_to_encdoding(). Note that an iswap is moved past the
+        # snapshot which messes up the permutation. Maybe some nice solution can
+        # fix this?
+        elif key == 'post_encoding' or key.split('_')[-1] == '0':
             index +=1
             continue # Skip the post_encoding snapshot due to changes in encode
         time_diff = snapshot_times[key]-time_passed
@@ -301,6 +303,8 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
                     T1, T2, time_diff).to_instruction()
             for qubit in new_circ.qubits:
                 new_circ.append(thrm_relax, [qubit])
+        elif time_diff < 0:
+            print('Time difference less than zero, something might be wrong...')
         new_circ.append(snapshots[index].op, snapshots[index].qargs, snapshots[index].cargs)
         time_passed = snapshot_times[key]
         index += 1
@@ -383,10 +387,10 @@ def rebuild_circuit_up_to_encoding(circ):
 
 # %% Internal testing with a standard stabilizer circuit
 if __name__ == '__main__':
-    from qiskit import execute
-    from simulator_program.stabilizers import *
-    from simulator_program.custom_transpiler import *
-    from simulator_program.custom_noise_models import *
+    from qiskit import execute, QuantumRegister, AncillaRegister, ClassicalRegister, Aer
+    from stabilizers import *
+    from custom_transpiler import *
+    from custom_noise_models import *
 
     qb = QuantumRegister(3, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
@@ -420,7 +424,7 @@ if __name__ == '__main__':
     # # circ_t = transpile(circ, routing_method='sabre', initial_layout=None,
     # #                    translation_method=None, layout_method='sabre',
     # #                    optimization_level=1, **WAQCT_device_properties)
-    # circ_t = shortest_transpile_from_distribution(circ, print_cost=False,
+    # circ_t = custom_transpiler.shortest_transpile_from_distribution(circ, print_cost=False,
     #                                               repeats=1, routing_method='sabre', initial_layout=None,
     #                                               translation_method=None, layout_method='sabre',
     #                                               optimization_level=1, **WAQCT_device_properties)
@@ -460,7 +464,7 @@ if __name__ == '__main__':
     #                                     )
 
     # # Transpile
-    # circ_t = shortest_transpile_from_distribution(circ, print_cost=False,
+    # circ_t = custom_transpiler.shortest_transpile_from_distribution(circ, print_cost=False,
     #                                               repeats=10, routing_method='sabre', initial_layout=None,
     #                                               translation_method=None, layout_method='sabre',
     #                                               optimization_level=1, **WAQCT_device_properties)
@@ -469,5 +473,6 @@ if __name__ == '__main__':
     # print(new_circ)
     # print(times)
     # display(new_circ.draw(output='mpl'))
+
 
 # %%

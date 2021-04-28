@@ -24,6 +24,7 @@ from qiskit import (QuantumCircuit,
 from qiskit.providers.aer.extensions.snapshot_statevector import *
 from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 from typing import List
+import warnings
 # %% General functions
 
 
@@ -42,7 +43,9 @@ class StabilizerRegisters:
 
 
 def get_full_stabilizer_circuit(registers, n_cycles=1,
-                                reset=True, recovery=False, flag=True, **kwargs):
+                                reset=True, recovery=False, flag=False,
+                                snapshot_type='density_matrix',
+                                include_barriers=True, conditional=True, **kwargs):
     """Returns the circuit for a full repeating stabilizer circuit, including encoding,
     n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
     """
@@ -51,33 +54,35 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
     # qbReg, anReg, clReg, readout = registers
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
-    clReg = registers.SyndromeRegister
     readout = registers.ReadoutRegister
     if not anReg.size == 2 and not anReg.size == 5:
         raise Exception('Ancilla register must be of size 2 or 5')
 
     # Define the circuit
-    # circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit(registers)
 
     # Encode the state
-    circ = encode_input_v2(registers)
-    circ.snapshot('post_encoding', 'statevector')
+    circ.compose(encode_input_v2(registers), inplace=True)
+    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qbReg,
+                            conditional=conditional, include_barriers=include_barriers)
 
     # Stabilizer
-    circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-                                       reset=reset, recovery=recovery, flag=flag, **kwargs)
+    circ.compose(get_repeated_stabilization(registers, n_cycles=n_cycles,
+                                            reset=reset, recovery=recovery, flag=flag,
+                                            snapshot_type=snapshot_type,
+                                            conditional=conditional,
+                                            include_barriers=include_barriers,
+                                            **kwargs), inplace=True)
 
     # Final readout
     circ.measure(qbReg, readout)
-    circ.snapshot_statevector('post_measure')
-
     return circ
 
 
 def get_repeated_stabilization(registers, n_cycles=1,
-                               reset=True, recovery=False, 
-                               flag=False, snapshot_type='density_matrix', 
-                               include_barriers = True, **kwargs):
+                               reset=True, recovery=False,
+                               flag=False, snapshot_type='density_matrix',
+                               include_barriers=True, conditional=True, **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -97,25 +102,50 @@ def get_repeated_stabilization(registers, n_cycles=1,
 
     for current_cycle in range(n_cycles):
         if flag is True:
-            circ += flagged_stabilizer_cycle(registers,
-                                             reset=reset,
-                                             recovery=recovery,
-                                             current_cycle=current_cycle,
-                                             )
+            circ.compose(flagged_stabilizer_cycle(registers,
+                                                  reset=reset,
+                                                  recovery=recovery,
+                                                  current_cycle=current_cycle,
+                                                  ), inplace=True)
         else:
-            circ += unflagged_stabilizer_cycle(registers,
-                                               reset=reset,
-                                               recovery=recovery,
-                                               current_cycle=current_cycle,
-                                               include_barriers=include_barriers,
-                                               **kwargs
-                                               )
+            circ.compose(unflagged_stabilizer_cycle(registers,
+                                            reset=reset,
+                                            recovery=recovery,
+                                            current_cycle=current_cycle,
+                                            include_barriers=include_barriers,
+                                            **kwargs
+                                            ), inplace=True)
 
-        if snapshot_type:# TODO: Maybe a nice looking solution?
-            if snapshot_type == 'density_matrix':
+        add_snapshot_to_circuit(circ, snapshot_type, current_cycle+1, 
+                                registers.QubitRegister,conditional=conditional)
+
+    return circ
+
+
+def add_snapshot_to_circuit(circ, snapshot_type, current_cycle,
+                            qubits=None, conditional=False,
+                            pauliop='ZZZZZ', include_barriers=True):
+    """Appends a snapshot to circuit."""
+
+    if not isinstance(snapshot_type, list):
+        snapshot_type = [snapshot_type]
+    if not isinstance(conditional, list):
+        conditional = [conditional]
+
+    # Append snapshots
+    if snapshot_type:
+        for snap in snapshot_type:
+            for con in conditional:
+                snap_label = get_snapshot_label(snap, con,
+                                                current_cycle)
                 if include_barriers:
                     circ.barrier()
-                circ.append(Snapshot('stabilizer_' + str(current_cycle), snapshot_type, num_qubits=5), registers.QubitRegister)
+                if snap == 'dm' or snap == 'density_matrix':
+                    circ.save_density_matrix(
+                        qubits, label=snap_label, conditional=con)
+                elif snap == 'exp' or snap == 'expectation_value':
+                    circ.save_expectation_value(Pauli(pauliop), qubits,
+                                                label=snap_label, conditional=con)
                 if include_barriers:
                     circ.barrier()
             elif snapshot_type == 'expectation_value':
@@ -162,9 +192,22 @@ def add_snapshot_to_circuit(circ, snapshot_label=None, qubits=None, pauliop='ZZZ
             circ.save_expectation_value(Pauli(pauliop), qubits, 
                 label=snap, conditional=conditional)
 
-    return
-            
+def get_snapshot_label(snapshot_type, conditional, current_cycle):
+    """Generate a label for snapshots, given its instructions"""
 
+    # Define snapshot type
+    if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
+        snap_label = 'dm_'
+    elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
+        snap_label = 'exp_'
+
+    # Add conditional
+    if conditional:
+        snap_label += 'con_'
+
+    # Add the current cycle
+    snap_label += str(current_cycle)
+    return snap_label
 
 
 def get_empty_stabilizer_circuit(registers):
@@ -196,6 +239,7 @@ def encode_input(registers):
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>
     """
 
+    warnings.warn("Use V2, it's smaller", DeprecationWarning)
     # Unpack registers
     qbReg = registers.QubitRegister
     circ = get_empty_stabilizer_circuit(registers)
@@ -223,7 +267,7 @@ def encode_input(registers):
     return circ
 
 
-def encode_input_v2(registers, include_barriers = True):
+def encode_input_v2(registers, include_barriers=True):
     """Encode the input into logical 0 and 1 for the [[5,1,3]] code. This
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>.
 
@@ -588,7 +632,7 @@ def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
 
 # %% All unflagged stabilizers
 def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
-                               current_cycle=0, current_step=0, num_ancillas=None, 
+                               current_cycle=0, current_step=0, num_ancillas=None,
                                include_barriers=True, pipeline=False):
     """Run all four stabilizers without flags, as well as an optional
     recovery. The input current_step is only relevant for flagged cycles, and
@@ -633,8 +677,8 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     # Create circuit and run stabilizers
     circ = get_empty_stabilizer_circuit(registers)
     for i in range(4):
-        circ += stabilizer_list[i](registers, anQb=anQb_list[i],
-                                   syn_bit=syn_bit_list[i], reset=reset)
+        circ.compose(stabilizer_list[i](registers, anQb=anQb_list[i],
+                     syn_bit=syn_bit_list[i], reset=reset), inplace=True)
         if include_barriers:
             circ.barrier()
     # Add an extra measurement to the next syndrome register
@@ -649,8 +693,8 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     # Recovery
     if recovery is True:
         circ.barrier()
-        circ += unflagged_recovery(registers, reset, current_cycle)
-        #if include_barriers:
+        circ.compose(unflagged_recovery(registers, reset, current_cycle), inplace=True)
+        # if include_barriers:
         circ.barrier()
     return circ
 
@@ -845,6 +889,8 @@ def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
 # %% Pipelined stabilizers. To call these, use unflagged_stabilizer_cycle with
 # pipeline=True, DO NOT use num_ancillas=2. This is due to the transpiler not
 # handling it correctly, thus forcing this 'fix'.
+
+
 def _pipeline_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular XZZXI stabilizer in a pipelined
     scheme. Note that this assumes ancilla reset, as there currently is no
@@ -898,6 +944,7 @@ def _pipeline_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
     circ.reset(anReg[0])
     return circ
 
+
 def _pipeline_stabilizer_IXZZX(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular IXZZX stabilizer in a pipelined
     scheme. Note that this assumes ancilla reset, as there currently is no
@@ -939,6 +986,7 @@ def _pipeline_stabilizer_IXZZX(registers, anQb=None, syn_bit=None, reset=True):
     circ.reset(anReg[0])
     return circ
 
+
 def _pipeline_stabilizer_XIXZZ(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular XIXZZ stabilizer in a pipelined
     scheme. Note that this assumes ancilla reset, as there currently is no
@@ -979,6 +1027,7 @@ def _pipeline_stabilizer_XIXZZ(registers, anQb=None, syn_bit=None, reset=True):
     circ.measure(anReg[0], syn_bit)
     circ.reset(anReg[0])
     return circ
+
 
 def _pipeline_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular ZXIXZ stabilizer in a pipelined
@@ -1024,6 +1073,8 @@ def _pipeline_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
     return circ
 
 # %% All recoveries
+
+
 def unflagged_recovery(registers, reset=True, current_cycle=0, current_step=0):
     """Lookup table for recovery from a
     single qubit error on code qubits"""
@@ -1369,4 +1420,3 @@ if __name__ == "__main__":
     # Plot results
     counts = results.get_counts()
     plot_histogram(counts)
-

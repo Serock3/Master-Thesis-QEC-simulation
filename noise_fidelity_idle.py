@@ -1,3 +1,6 @@
+# MOST OF THIS FILE IS DEPRECATED, DUE TO THE NEW RELEASE OF QISKIT, RENDERING
+# FUNCTIONS OBSOLETE. FOR NEWER VERSION, REFER TO plotting_expval.py
+#
 # The main purpose of this script is to run a range of different simulations
 # on the [[5,1,3]] code. Possible options include whether to add idle noise, if
 # and how to process the data (error correction, post-selection etc), and more.
