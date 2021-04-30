@@ -25,10 +25,15 @@ from simulator_program.post_process import *
 from simulator_program.idle_noise import *
 
 #%% Useful functions
-def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=True,
-        data_process_type='recovery', idle_noise=True, transpile=True, 
-        snapshot_type='dm', device_properties=WACQT_device_properties, **kwargs):
-    """Get the fidelity of a certain setup/configuration from only its
+
+def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
+        reset=True, data_process_type='recovery', idle_noise=True, transpile=True, 
+        snapshot_type='dm', device=None, device_properties=WACQT_device_properties,
+        encoding=True, theta=0, phi=0, pauliop='ZZZZZ', **kwargs):
+
+    """TODO: Update this description
+    
+    Get the fidelity of a certain setup/configuration from only its
     parameters.
     
     Args:
@@ -90,6 +95,9 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
         recovery = False
         conditional = False
 
+    # Noise model
+    noise_model = thermal_relaxation_model_V2(T1=T1, T2=T2, gate_times=full_gate_times)
+
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
@@ -101,21 +109,25 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
     circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
                                        recovery=recovery, flag=False,
                                        snapshot_type=snapshot_type,
-                                       conditional=conditional, **kwargs)
+                                       conditional=conditional,
+                                       encoding=encoding, theta=theta, phi=phi,
+                                       pauliop=pauliop, device=device,
+                                       **kwargs)
 
     if transpile:
         circ = shortest_transpile_from_distribution(circ, print_cost=False,
             **device_properties)
 
     # Get the correct (no errors) state
-    trivial = logical_states(include_ancillas=None)[0]
+    trivial = logical_states(include_ancillas=None)[1]
 
     # Create empty encoded circuit
     if data_process_type == 'empty_circuit':
 
         # Prepare the circuit
         time = get_circuit_time(circ, full_gate_times)
-        circ = get_empty_noisy_circuit_v3(circ, time, full_gate_times)
+        circ = get_empty_noisy_circuit_v3(circ, time, full_gate_times,
+                                          T1=T1, T2=T2)
         results = execute(circ, Aer.get_backend('qasm_simulator'),
             noise_model=noise_model, shots=n_shots).result()
 
@@ -133,12 +145,12 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
 
     # Add idle noise (empty_circuit does this automatically)
     if idle_noise:
-        circ = add_idle_noise_to_circuit(circ, gate_times=full_gate_times)
+        circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
+                                         T1=T1, T2=T2, return_time=True)
 
     # Run the circuit
     results = execute(circ, Aer.get_backend('qasm_simulator'),
         noise_model=noise_model, shots=n_shots).result()
-
 
     if data_process_type == 'recovery' or data_process_type =='none':
         fidelities = []
@@ -150,7 +162,7 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
             for current_cycle in range(n_cycles+1):
                 fidelities.append(results.data()['exp_' + str(current_cycle)])
 
-        return fidelities
+        return fidelities, time
 
     elif data_process_type == 'post_select':
         # Get the fidelity for each cycle
@@ -159,7 +171,7 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
                 post_selected_state in get_trivial_post_select_den_mat(
                 results, n_cycles)]
         elif snapshot_type=='exp' or snapshot_type=='expectation_value':
-            fidelities = [state_fidelity(post_selected_state, trivial) for 
+            fidelities = [post_selected_state for 
                 post_selected_state in get_trivial_exp_value(
                 results, n_cycles)]
         
@@ -177,7 +189,8 @@ def fidelity_from_scratch(n_cycles, noise_model, n_shots, gate_times={}, reset=T
 
     return []
 
-def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3):
+def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3,
+        theta=0, phi=0, pauliop='Z'):
     """Generates a single qubit-circuit initialized in the |1> state with
     snapshots at given times
 
@@ -192,11 +205,13 @@ def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3):
     """
     qb = QuantumRegister(1,'qubit')
     circ = QuantumCircuit(qb)
-    circ.x(qb[0]) # Initialize in |1>
+    circ.rx(theta, qb)
+    circ.rz(phi, qb)
     circ.save_density_matrix(qb, label='start')
     time_passed = 0
     index = 0
     for key in snapshot_times:
+
         time_diff = snapshot_times[key]-time_passed
         if time_diff > 0:
             thrm_relax = thermal_relaxation_error(
@@ -205,13 +220,13 @@ def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3):
         if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
             circ.save_density_matrix(qb, label='snap_'+str(index))
         elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
-            circ.save_expectation_value(Pauli('Z'), qb,label='snap_'+str(index))
+            circ.save_expectation_value(Pauli(pauliop), qb,label='snap_'+str(index))
         time_passed = snapshot_times[key]
         index += 1
     return circ
 
 def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
-                     T1=40e3, T2=60e3, **kwargs):
+                     T1=40e3, T2=60e3, theta=0, phi=0, pauliop='Z', **kwargs):
     """Calculate the fidelity of a single qubit decay at certain times in a
     circuit corresponding to the [[5,1,3]] code.
     
@@ -254,10 +269,11 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
     circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
                                            return_time=True)
 
-    circ_single = get_idle_single_qubit(time, snapshot_type, T1, T2)
+    circ_single = get_idle_single_qubit(time, snapshot_type, T1, T2, 
+                                        theta=theta, phi=phi, pauliop=pauliop)
     results = execute(circ_single, Aer.get_backend('qasm_simulator'),
         noise_model=None, shots=n_shots).result()
-    fidelities = []
+    fidelities = [1.0] # The initial state
     
     if snapshot_type == 'dm' or snapshot_type =='density_matrix':
         trivial = results.data()['start']
@@ -269,98 +285,660 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
             fidelities.append(results.data()['snap_'+str(i+1)])
     return fidelities
 
+def temp_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
+        recovery=False):
+    """Gives the circuit for a full unflagged stabilizer cycle pre-transpiled
+    onto a square grid. This function acts as a bandaid solution to perfectly
+    encoding these circuits, due to errors in saving density matrix or
+    expectation values after transpiling set_density_matrix.
 
+    Args:
+        registers (StabilizerRegister): Register object
+        anQb (AncillaQubit, optional): Specifies the ancilla to use for the measurement. Defaults to None.
+        reset (bool, optional): Whether to reset ancillas between measurements. Defaults to True.
+        current_cycle (int, optional): [description]. Defaults to 0.
+        current_step (int, optional): [description]. Defaults to 0.
+
+    Returns:
+        [type]: [description]
+    """
+    # Create list of syndrome bits
+    if isinstance(registers.SyndromeRegister, list):
+        syn_reg = registers.SyndromeRegister[0][current_cycle][current_step]
+        syn_bit_list = [syn_reg[n] for n in range(4)]
+    else:
+        syn_bit_list = [registers.SyndromeRegister[n] for n in range(4)]
+
+    # Create a circuit
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    circ = get_empty_stabilizer_circuit(registers)
+
+    # XZZXI
+    circ.h(qbReg[0])
+    circ.h(qbReg[3])
+    circ.h(anReg[1])
+
+    circ.cz(anReg[1], qbReg[0])
+    circ.cz(anReg[1], qbReg[1])
+    circ.cz(anReg[1], qbReg[2])
+    circ.cz(anReg[1], qbReg[3])
+
+    circ.h(qbReg[0])
+    circ.h(qbReg[3])
+    circ.h(anReg[1])
+
+    circ.measure(anReg[1], syn_bit_list[0])
+    if reset:
+        circ.reset(anReg[1])
+    circ.barrier()
+
+    # IXZZX
+
+    circ.h(anReg[1])
+    circ.h(qbReg[1])
+    circ.h(qbReg[4])
+
+    circ.cz(anReg[1], qbReg[1])
+
+    circ.iswap(qbReg[1], qbReg[4])
+    circ.cz(qbReg[1], qbReg[4])
+    circ.u1(-np.pi/2, qbReg[1])
+    circ.u1(-np.pi/2, qbReg[4])
+
+    circ.cz(anReg[1], qbReg[2])
+    circ.cz(anReg[1], qbReg[3])
+    circ.cz(anReg[1], qbReg[1]) #4-1
+    
+    circ.h(anReg[1])
+    circ.h(qbReg[1])
+    circ.h(qbReg[4])
+
+    circ.measure(anReg[1], syn_bit_list[1])
+    if reset:
+        circ.reset(anReg[1])
+    circ.barrier()
+    # XIXZZ
+
+    circ.h(anReg[1])
+    circ.h(qbReg[0])
+    circ.h(qbReg[2])
+
+    circ.cz(anReg[1], qbReg[0])
+    circ.cz(anReg[1], qbReg[2])
+    circ.cz(anReg[1], qbReg[3])
+    circ.cz(anReg[1], qbReg[1]) #4-1
+
+    circ.h(anReg[1])
+    circ.h(qbReg[0])
+    circ.h(qbReg[2])
+
+    circ.measure(anReg[1], syn_bit_list[2])
+    if reset:
+        circ.reset(anReg[1])
+    circ.barrier()
+    # ZXIXZ
+    
+
+    circ.iswap(qbReg[1], qbReg[4])
+    circ.cz(qbReg[1], qbReg[4])
+    circ.u1(-np.pi/2, qbReg[1])
+    circ.u1(-np.pi/2, qbReg[4])
+
+    circ.h(anReg[1])
+    circ.h(qbReg[1])
+    circ.h(qbReg[3])
+
+    circ.cz(anReg[1], qbReg[0])
+    circ.cz(anReg[1], qbReg[1])
+    circ.cz(anReg[1], qbReg[3])
+
+    circ.h(qbReg[1])
+
+    circ.iswap(qbReg[1], qbReg[4])
+    circ.cz(qbReg[1], qbReg[4])
+    circ.u1(-np.pi/2, qbReg[1])
+    circ.u1(-np.pi/2, qbReg[4])
+
+    circ.cz(anReg[1], qbReg[1])#4-1
+    
+    circ.h(anReg[1])
+    circ.h(qbReg[3])
+    
+    circ.iswap(qbReg[1], qbReg[4])
+    circ.cz(qbReg[1], qbReg[4])
+    circ.u1(-np.pi/2, qbReg[1])
+    circ.u1(-np.pi/2, qbReg[4])
+    circ.measure(anReg[1], syn_bit_list[3])
+    if reset:
+        circ.reset(anReg[1])
+
+    # Recovery
+    if recovery is True:
+        circ.barrier()
+        circ.compose(unflagged_recovery(registers, reset, current_cycle), inplace=True)
+        circ.barrier()
+    return circ
+
+
+def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
+        reset=True, idle_noise=True, initial_state=0,
+        snapshot_type='dm', device=None, pauliop='ZZZZZ'):
+
+    # Get gate times missing from input
+    if isinstance(gate_times, dict):
+        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+        full_gate_times = WACQT_gate_times
+
+    # Registers
+    qb = QuantumRegister(5, 'code_qubit')
+    an = AncillaRegister(2, 'ancilla_qubit')
+    cr = get_classical_register(n_cycles, reset=reset, recovery=True, flag=False)
+    readout = ClassicalRegister(5, 'readout')
+    registers = StabilizerRegisters(qb, an, cr, readout)
+
+    # Circuits
+    circ = get_empty_stabilizer_circuit(registers)
+    if initial_state == 1:
+        circ.x(qb[0])
+    if device == 'WACQT':
+        circ.compose(transpiled_encoding_WACQT(registers), inplace=True)
+    elif device == 'DD':
+        circ.compose(transpiled_encoding_DD(registers), inplace=True)
+    else:
+        circ.compose(encode_input_v2(registers), inplace=True)
+    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qb,
+                            pauliop=pauliop, include_barriers=True)
+
+    # Trivial state
+    if snapshot_type=='dm' or snapshot_type=='density_matrix':
+        trivial_res = execute(circ, Aer.get_backend('qasm_simulator'), shots=1).result()
+        trivial = trivial_res.data()['dm_0']
+
+    if idle_noise:
+        circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
+                                         T1=T1, T2=T2, return_time=True)
+
+    # Run the circuit
+    noise_model = thermal_relaxation_model_V2(T1=T1, T2=T2, gate_times=full_gate_times)
+    results = execute(circ, Aer.get_backend('qasm_simulator'),
+        noise_model=noise_model, shots=n_shots).result()
+    if snapshot_type=='dm' or snapshot_type=='density_matrix':
+        state = results.data()['dm_0']
+        fidelities = state_fidelity(state, trivial)
+    elif snapshot_type=='exp' or snapshot_type=='expectation_value':
+        fidelities = results.data()['exp_0']
+    return fidelities, circ
+#%% TEST encoding fidelities
+fid, circ = encoding_fidelity(2048, gate_times=WACQT_target_times, T1=40e3, T2=60e3,
+        reset=True, idle_noise=True, initial_state=0,
+        snapshot_type='dm', device='WACQT', pauliop='ZZZZZ')
+print(fid)
 # %%
 # Settings used across all configurations
-n_cycles = 14
-n_shots = 1024*8
+n_cycles = 15
+n_shots = 128
 
-# Noise models
-target_noise = thermal_relaxation_model_V2(gate_times=WACQT_target_times)
-current_noise = thermal_relaxation_model_V2(gate_times=WACQT_demonstrated_times)
+#%% Test run
 
+fid, time = fidelity_from_scratch(3, 2048, gate_times=WACQT_target_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='dm', encoding=True, theta=0, phi=0,
+    transpile=False, pauliop='ZZZZZ', device_properties=WACQT_device_properties, device='double_diamond')
 
-# Quantum error correction for both noise models
-fid_target_WACQT = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
-    gate_times=WACQT_target_times, reset=True, data_process_type='recovery',
-    idle_noise=True, snapshot_type='exp')
-fid_demonstrated_WACQT = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
-    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='recovery',
-    idle_noise=True, snapshot_type='exp')
-
-# Double diamond QEC
-fid_target_DD = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
-    gate_times=WACQT_target_times, reset=True, data_process_type='recovery',
-    idle_noise=True, snapshot_type='exp', device_properties=diamond_device_properties)
-fid_demonstrated_DD = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
-    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='recovery',
-    idle_noise=True, snapshot_type='exp', device_properties=diamond_device_properties)
+#%% ========== CONFIGURATIONS FOR RUNS ==========
+# EXPECTATION VALUES OF |+> AND |->
+exp_target_WACQT_p, time_target_WACQT_p = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=np.pi/2,
+    transpile=True, pauliop='XXXXX')
+#exp_target_FC_p, time_target_FC_p = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+#    reset=True, data_process_type='recovery',
+#    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=np.pi/2,
+#    transpile=False, pauliop='XXXXX')
+exp_target_DD_p, time_target_DD_p = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=np.pi/2,
+    transpile=False, pauliop='XXXXX', device='double_diamond')
+print('Check!')
+exp_dem_WACQT_p, time_dem_WACQT_p = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=np.pi/2,
+    transpile=True, pauliop='XXXXX')
+#exp_dem_FC_p, time_dem_FC_p = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+#    reset=True, data_process_type='recovery',
+#    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=np.pi/2,
+#    transpile=False, pauliop='XXXXX')
+exp_dem_DD_p, time_dem_DD_p = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=np.pi/2,
+    transpile=False, pauliop='XXXXX', device='double_diamond')
 print('Check!')
 
+# |->
+exp_target_WACQT_m, time_target_WACQT_m = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=-np.pi/2,
+    transpile=True, pauliop='XXXXX')
+#exp_target_FC_m, time_target_FC_m = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+#    reset=True, data_process_type='recovery',
+#    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=-np.pi/2,
+#    transpile=False, pauliop='XXXXX')
+exp_target_DD_m, time_target_DD_m = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=-np.pi/2,
+    transpile=False, pauliop='XXXXX', device='double_diamond')
+print('Check!')
+exp_dem_WACQT_m, time_dem_WACQT_m = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=-np.pi/2,
+    transpile=True, pauliop='XXXXX')
+#exp_dem_FC_m, time_dem_FC_m = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+#    reset=True, data_process_type='recovery',
+#    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=-np.pi/2,
+#    transpile=False, pauliop='XXXXX')
+exp_dem_DD_m, time_dem_DD_m = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=-np.pi/2,
+    transpile=False, pauliop='XXXXX', device='double_diamond')
+print('Check!')
+
+#%% EXPECTATION VALUES OF |0> AND |1>
+# |0>
+exp_target_WACQT_0, time_target_WACQT_0 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=True, pauliop='ZZZZZ')
+#exp_target_FC_0, time_target_FC_0 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+#    reset=True, data_process_type='recovery',
+#    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+#    transpile=False, pauliop='ZZZZZ')
+exp_target_DD_0, time_target_DD_0 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=False, pauliop='ZZZZZ', device='double_diamond')
+print('Check!')
+exp_dem_WACQT_0, time_dem_WACQT_0 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=True, pauliop='ZZZZZ')
+#exp_dem_FC_0, time_dem_FC_0 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+#    reset=True, data_process_type='recovery',
+#    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+#    transpile=False, pauliop='ZZZZZ')
+exp_dem_DD_0, time_dem_DD_0 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=False, pauliop='ZZZZZ', device='double_diamond')
+print('Check!')
 #%%
-# No transpilation QEC
-fid_target_noT = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
-    gate_times=WACQT_target_times, reset=True, data_process_type='recovery',
-    idle_noise=True, transpile=False, snapshot_type='exp')
-fid_demonstrated_noT = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
-    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='recovery',
-    idle_noise=True, transpile=False, snapshot_type='exp')
-#%% PS
-fid_target_PS, count_target = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
-    gate_times=WACQT_target_times, reset=True, data_process_type='post_select',
-    idle_noise=True, snapshot_type='exp')
-
-fid_demonstrated_PS, count_demonstrated = fidelity_from_scratch(9, current_noise, 16000, 
-    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='post_select',
-    idle_noise=True, snapshot_type='exp')
+# |1>
+exp_target_WACQT_1, time_target_WACQT_1 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=0,
+    transpile=True, pauliop='ZZZZZ')
+#exp_target_FC_1, time_target_FC_1 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+#    reset=True, data_process_type='recovery',
+#    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=0,
+#    transpile=False, pauliop='ZZZZZ')
+exp_target_DD_1, time_target_DD_1 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=0,
+    transpile=False, pauliop='ZZZZZ', device='double_diamond')
+#%%
 print('Check!')
-#%% Empty circuit
-fid_target_empty = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
-    gate_times=WACQT_target_times, reset=True, data_process_type='empty_circuit',
-    idle_noise=True, snapshot_type='exp')
-fid_demonstrated_empty = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
-    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='empty_circuit',
-    idle_noise=True, snapshot_type='exp')
+exp_dem_WACQT_1, time_dem_WACQT_1 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=0,
+    transpile=True, pauliop='ZZZZZ')
+#exp_dem_FC_1, time_dem_FC_1 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+#    reset=True, data_process_type='recovery',
+#    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=0,
+#    transpile=False, pauliop='ZZZZZ')
+exp_dem_DD_1, time_dem_DD_1 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=0,
+    transpile=False, pauliop='ZZZZZ', device='double_diamond')
+print('Check!')
 
-#%% Only measurements
-fid_target_stab = fidelity_from_scratch(n_cycles, target_noise, n_shots, 
-    gate_times=WACQT_target_times, reset=True, data_process_type='none',
-    idle_noise=True, snapshot_type='exp')
-fid_demonstrated_stab = fidelity_from_scratch(n_cycles, current_noise, n_shots, 
-    gate_times=WACQT_demonstrated_times, reset=True, data_process_type='none',
-    idle_noise=True, snapshot_type='exp')
+#%% FIDELITIES (Not in use)
+# Fidelities of |1>
+fid_target_WACQT, time_target_WACQT = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='dm', encoding=False, theta=np.pi, phi=0,
+    transpile=True, pauliop='XXXXX')
+#fid_target_FC, time_target_FC = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+#    reset=True, data_process_type='recovery',
+#    idle_noise=True, snapshot_type='dm', encoding=False, theta=np.pi, phi=0,
+#    transpile=False, pauliop='XXXXX')
+fid_target_DD, time_target_DD = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='dm', encoding=False, theta=np.pi, phi=0,
+    transpile=False, pauliop='XXXXX', device='double_diamond')
+print('Check!')
+fid_dem_WACQT, time_dem_WACQT = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='dm', encoding=False, theta=np.pi, phi=0,
+    transpile=True, pauliop='XXXXX')
+#fid_dem_FC, time_dem_FC = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+#    reset=True, data_process_type='recovery',
+#    idle_noise=True, snapshot_type='dm', encoding=False, theta=np.pi, phi=0,
+#    transpile=False, pauliop='XXXXX')
+fid_dem_DD, time_dem_DD = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='dm', encoding=False, theta=np.pi, phi=0,
+    transpile=False, pauliop='XXXXX', device='double_diamond')
+print('Check!')
+
+
+#%% Post selection
+n_shots=1024*16
+#%% + and - (Target times)
+exp_target_WACQT_p_PS, count_target_WACQT_p = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=np.pi/2,
+    transpile=True, pauliop='XXXXX')
+print('Check!')
+exp_target_WACQT_m_PS, count_target_WACQT_m = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=-np.pi/2,
+    transpile=True, pauliop='XXXXX')
+print('Check!')
+exp_target_DD_p_PS, count_target_DD_p = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=np.pi/2,
+    transpile=False, pauliop='XXXXX', device='double_diamond')
+print('Check!')
+exp_target_DD_m_PS, count_target_DD_m = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=-np.pi/2,
+    transpile=False, pauliop='XXXXX', device='double_diamond')
+#%% + and - (Demonstrated times)
+exp_dem_WACQT_p_PS, count_dem_WACQT_p = fidelity_from_scratch(7, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=np.pi/2,
+    transpile=True, pauliop='XXXXX')
+exp_dem_WACQT_m_PS, count_dem_WACQT_m = fidelity_from_scratch(7, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=-np.pi/2,
+    transpile=True, pauliop='XXXXX')
+exp_dem_DD_p_PS, count_dem_DD_p = fidelity_from_scratch(7, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=np.pi/2,
+    transpile=False, pauliop='XXXXX', device='double_diamond')
+exp_dem_DD_m_PS, count_dem_DD_m = fidelity_from_scratch(7, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi/2, phi=-np.pi/2,
+    transpile=False, pauliop='XXXXX', device='double_diamond')
+
+#%% 0 and 1 PS
+n_shots=1024*16
+
+exp_target_WACQT_0_PS, count_target_WACQT_0 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=True, pauliop='ZZZZZ')
+print('Check!')
+exp_target_WACQT_1_PS, count_target_WACQT_1 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=-0,
+    transpile=True, pauliop='ZZZZZ')
+print('Check!')
+exp_target_DD_0_PS, count_target_DD_0 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=False, pauliop='ZZZZZ', device='double_diamond')
+print('Check!')
+exp_target_DD_1_PS, count_target_DD_1 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=-0,
+    transpile=False, pauliop='ZZZZZ', device='double_diamond')
+print('Check!')
+#%% 0 and 1 (Demonstrated times)
+exp_dem_WACQT_0_PS, count_dem_WACQT_0 = fidelity_from_scratch(7, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=True, pauliop='ZZZZZ')
+print('Check!')
+exp_dem_WACQT_1_PS, count_dem_WACQT_1 = fidelity_from_scratch(7, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=-0,
+    transpile=True, pauliop='ZZZZZ')
+print('Check!')
+exp_dem_DD_0_PS, count_dem_DD_0 = fidelity_from_scratch(7, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=False, pauliop='ZZZZZ', device='double_diamond')
+print('Check!')
+exp_dem_DD_1_PS, count_dem_DD_1 = fidelity_from_scratch(7, n_shots, gate_times=WACQT_demonstrated_times,
+    reset=True, data_process_type='post_select',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=-0,
+    transpile=False, pauliop='ZZZZZ', device='double_diamond')
+
+#%% EXPECTATION VALUES OF |0> AND |1>, NO QEC
+n_shots = 1024*4
+n_cycles = 15
+# |0>
+exp_target_WACQT_0_decay = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='empty_circuit',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=True, pauliop='ZZZZZ')
+
+exp_target_DD_0_decay = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='empty_circuit',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=False, pauliop='ZZZZZ', device='double_diamond')
+print('Check!')
+
+# |1>
+exp_target_WACQT_1_decay = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='empty_circuit',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=0,
+    transpile=True, pauliop='ZZZZZ')
+exp_target_DD_1_decay = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    reset=True, data_process_type='empty_circuit',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=np.pi, phi=0,
+    transpile=False, pauliop='ZZZZZ', device='double_diamond')
+print('Check!')
+
 #%% Testing single qubit
-n_cycles = 14
-n_shots = 1024*8
+n_cycles = 15
+n_shots = 1024*4
+#%%
 fid_target_single = fid_single_qubit(n_cycles, n_shots,
                                      gate_times=WACQT_target_times,
-                                     snapshot_type='exp')
-fid_demonstrated_single = fid_single_qubit(n_cycles, n_shots, 
-                                           gate_times=WACQT_demonstrated_times,
-                                           snapshot_type='exp')
+                                     snapshot_type='exp', T1=40e3, T2=10e3,
+                                     theta=np.pi/2, phi=np.pi/2, pauliop='X')
+#%%
+exp_target_single_p = fid_single_qubit(n_cycles, n_shots,
+                                     gate_times=WACQT_target_times,
+                                     snapshot_type='exp', T1=40e3, T2=60e3,
+                                     theta=np.pi/2, phi=np.pi/2, pauliop='X')
 
+exp_dem_single_p = fid_single_qubit(n_cycles, n_shots,
+                                     gate_times=WACQT_demonstrated_times,
+                                     snapshot_type='exp', T1=40e3, T2=60e3,
+                                     theta=np.pi/2, phi=np.pi/2, pauliop='X')
+
+exp_target_single_m = fid_single_qubit(n_cycles, n_shots,
+                                     gate_times=WACQT_target_times,
+                                     snapshot_type='exp', T1=40e3, T2=60e3,
+                                     theta=np.pi/2, phi=-np.pi/2, pauliop='X')
+
+exp_dem_single_m = fid_single_qubit(n_cycles, n_shots,
+                                     gate_times=WACQT_demonstrated_times,
+                                     snapshot_type='exp', T1=40e3, T2=60e3,
+                                     theta=np.pi/2, phi=-np.pi/2, pauliop='X')
+#%%
+fid_target_single_1 = fid_single_qubit(n_cycles, n_shots,
+                                     gate_times=WACQT_target_times,
+                                     snapshot_type='dm', T1=40e3, T2=60e3,
+                                     theta=np.pi, phi=0, pauliop='Z')
+
+fid_dem_single_1 = fid_single_qubit(n_cycles, n_shots,
+                                     gate_times=WACQT_demonstrated_times,
+                                     snapshot_type='dm', T1=40e3, T2=60e3,
+                                     theta=np.pi, phi=0, pauliop='Z')
+#%%
+fid_target_single_p = fid_single_qubit(n_cycles, n_shots,
+                                     gate_times=WACQT_target_times,
+                                     snapshot_type='dm', T1=40e3, T2=60e3,
+                                     theta=np.pi, phi=np.pi/2, pauliop='Z')
+fid_dem_single_p = fid_single_qubit(n_cycles, n_shots,
+                                     gate_times=WACQT_demonstrated_times,
+                                     snapshot_type='dm', T1=40e3, T2=60e3,
+                                     theta=np.pi, phi=np.pi/2, pauliop='Z')
 
 #%% Plotting
-fig, ax1 = plt.subplots(1, figsize=(10, 6))
+fig, ax = plt.subplots(2,1, figsize=(10, 16))
 x_dis = np.arange(0,n_cycles+1)
+# Generate x-values
+x_target_WACQT = []
+x_target_DD = []
 
+x_dem_WACQT = []
+x_dem_DD = []
+
+for i in range(len(time_target_WACQT_1)-1):
+    x_target_WACQT.append(time_target_WACQT_1['exp_'+str(i)])
+    x_target_DD.append(time_target_DD_1['exp_'+str(i)])
+    #x_dem_WACQT.append(time_dem_WACQT_1['exp_'+str(i)])
+    #x_dem_DD.append(time_dem_DD_1['exp_'+str(i)])
 
 # Subplot 1: Target gate times
-ax1.plot(x_dis, fid_target_WACQT, '-o', label='WACQT, target times')
-ax1.plot(x_dis, fid_target_DD, '-o', label='Double diamond, target times')
-ax1.plot(x_dis, fid_target_noT, '-o', label='No transpilation, target times')
-ax1.plot(x_dis[1:15], fid_target_single, '-o', label='Single qubit decay')
-#ax1.plot(x_dis, fid_demonstrated_WACQT, '-o', label='WACQT, dem. times')
-#ax1.plot(x_dis, fid_demonstrated_DD, '-o', label='Double diamond, dem. times')
-#ax1.plot(x_dis, fid_demonstrated_noT, '-o', label='No transpilation, dem. times')
+ax[0].plot(x_target_WACQT, exp_target_WACQT_0, '-o', color='C0', label='Hexagonal layout')
+ax[0].plot(x_target_DD, exp_target_DD_0, '-o', color='C1', label='Double diamond layout')
+#ax[0].plot(x_target_WACQT, exp_target_FC_0, '-o', color='C2', label='Full connectivity')
+ax[0].plot(x_target_WACQT, exp_target_WACQT_0_PS, '-o', color='C2', label='Hexagonal, PS')
+ax[0].plot(x_target_DD, exp_target_DD_0_PS, '-o', color='C3', label='Double diamond, PS')
+ax[0].plot(x_target_WACQT, exp_target_WACQT_1, '-o', color='C0')
+ax[0].plot(x_target_DD, exp_target_DD_1, '-o', color='C1')
+#ax[0].plot(x_target_WACQT, exp_target_FC_1, '-o', color='C2')
+ax[0].plot(x_target_WACQT, exp_target_WACQT_1_PS, '-o', color='C2')
+ax[0].plot(x_target_DD, exp_target_DD_1_PS, '-o', color='C3')
 
-#ax1.plot(x_dis, fid_target_stab, '-o', label='Decay of logical state, target times')
-#ax1.plot(x_dis, fid_demonstrated_stab, '-o', label='Decay of logical state, dem. times')
+ax[0].plot(x_target_WACQT[0:16], exp_target_WACQT_0_decay, '-o', color='C4', label='Decay of logical state (Hexagonal)')
+ax[0].plot(x_target_WACQT[0:16], exp_target_WACQT_1_decay, '-o', color='C4')
+ax[0].plot(x_target_WACQT[0:16], exp_target_DD_0_decay, '-o', color='C5', label='Decay of logical state (DD)')
+ax[0].plot(x_target_WACQT[0:16], exp_target_DD_1_decay, '-o', color='C5')
+
+ax[0].set(ylim=(-1.0, 1.0))
+ax[0].plot(x_target_WACQT, fid_target_single_1, '--k', label='Single qubit')
+ax[0].ticklabel_format(style='sci',scilimits=(0,0),useMathText=True)
+ax[0].set_title(r'Expectation value of $|0\rangle$ and $|1\rangle$ using target gate times')
+ax[0].set_xlabel('Time [ns]')
+ax[0].set_ylabel(r'Expectation value of $Z_L$')
+ax[0].legend()
+
+ax0 = ax[0].twinx()
+ax0.plot(x_target_WACQT, -1*np.array(fid_target_single_1), '--k')
+ax0.set(ylim=(-1.0,1.0))
+ax0.set_yticklabels(["1.0","0.75","0.5","0.25","0.0","0.25","0.5","0.75","1.0"]) 
+ax0.set_ylabel(r'Physical $|1\rangle$ probability')
+#%%
+
+ax[1].plot(x_dem_WACQT, exp_dem_WACQT_0, '-o', color='C0', label='Hexagonal layout')
+ax[1].plot(x_dem_DD, exp_dem_DD_0, '-o', color='C1', label='Double diamond layout')
+#ax[1].plot(x_dem_WACQT, exp_dem_FC_0, '-o', color='C2', label='Full connectivity')
+#ax[1].plot(x_dem_WACQT[0:8], exp_dem_WACQT_0_PS, '-o', color='C2', label='Hexagonal, PS')
+#ax[1].plot(x_dem_DD[0:8], exp_dem_DD_0_PS, '-o', color='C2', label='Double diamond, PS')
+
+ax[1].plot(x_dem_WACQT, exp_dem_WACQT_1, '-o', color='C0')
+ax[1].plot(x_dem_DD, exp_dem_DD_1, '-o', color='C1')
+#ax[1].plot(x_dem_WACQT, exp_dem_FC_1, '-o', color='C2', label='Full connectivity')
+#ax[1].plot(x_dem_WACQT[0:8], exp_dem_WACQT_1_PS, '-o', color='C2', label='Hexagonal, PS')
+#ax[1].plot(x_dem_DD[0:8], exp_dem_DD_1_PS, '-o', color='C2', label='Double diamond, PS')
+#ax[1].plot(x_dem_WACQT, exp_dem_single_1, '--k', label='Single qubit')
+ax[1].set_title(r'Expectation value of $|0\rangle$ and $|1\rangle$ using demonstrated gate times')
+ax[1].set(ylim=(-1.0, 1.0))
+ax[1].ticklabel_format(style='sci',scilimits=(0,0),useMathText=True)
+ax[1].set_xlabel('Time [ns]')
+ax[1].set_ylabel(r'Expectation value of $Z_L$')
+ax[1].legend()
+
+ax1 = ax[1].twinx()
+ax[1].plot(x_dem_WACQT, fid_dem_single_1, '--k', label='Single qubit')
+ax1.plot(x_dem_WACQT, -1*np.array(fid_dem_single_1), '--k')
+ax1.set(ylim=(-1.0,1.0))
+ax1.set_yticklabels(["1.0","0.75","0.5","0.25","0.0","0.25","0.5","0.75","1.0"]) 
+ax1.set_ylabel(r'Physical $|1\rangle$ probability')
 
 
-ax1.set(ylim=(-1.0, 1.0))
 
-ax1.set_xlabel('Number of stabilizer cycles')
-ax1.set_ylabel('Expectation value of ZZZZZ')
-ax1.set_title('Expectation value of simulated [[5,1,3]] QEC code')
-ax1.legend()
+
+#%% Curve fitting with OLS (Not in use)
+fid_list = [exp_target_WACQT_0]
+theta_list = []
+for fidelity in fid_list:
+    x_D = np.ones((n_cycles+1,2))
+    for i in range(n_cycles+1):
+        x_D[i][1] += i-1
+    y = np.log( np.reshape(np.asarray(fidelity), (n_cycles+1,1)) )
+    theta = np.dot(np.dot(np.linalg.inv(np.dot(x_D.T, x_D)), x_D.T), y)
+    theta_list.append(theta)
+
+x = np.linspace(0,n_cycles+1,100)
+y_pred_list = []
+for theta in theta_list:
+    y_pred = np.exp(theta[0]) * np.exp(x*theta[1])
+    y_pred_list.append(y_pred)
+
+# Calculate MSE
+MSE = []
+for i in range(len(fid_list)):
+    err = 0.
+    for cycle in range(n_cycles+1):
+        y_pred = np.exp(theta_list[i][0]) * np.exp((cycle+1)*theta_list[i][1])
+        err += (y_pred-fid_list[i][cycle])**2
+    MSE.append(err/(n_cycles+1))
+print('MSE: ')
+for i in MSE:
+    print(i)
+# %% Testing different transpilations (Not used in other parts of the script)
+reset = True
+recovery = False
+n_cycles = 2
+snapshot_type = 'dm'
+
+# Registers
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(2, 'ancilla_qubit')
+cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=False)
+readout = ClassicalRegister(5, 'readout')
+registers = StabilizerRegisters(qb, an, cr, readout)
+
+circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
+                                   recovery=recovery, flag=False,
+                                   snapshot_type=snapshot_type,
+                                   initial_state=0, 
+                                   encoding=True)
+
+
+# WACQT 7 qb UPDATED BASIS
+basis_gates = ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy', 'cz','h',
+    'save_expval', 'save_density_matrix']
+
+#couplinglist = [[0, 2], [0, 3], [1, 3], [1, 4], [2, 5], [3, 5], [3, 6], [4, 6]]
+couplinglist = [[0, 1], [0, 6], [1, 6], [2, 3],
+                [2, 6], [3, 6], [4, 5], [4, 6], [5, 6]]
+
+reverse_couplinglist = [[y, x] for [x, y] in couplinglist]
+
+coupling_map = CouplingMap(
+    couplinglist=couplinglist+reverse_couplinglist,
+    description='A hexagonal 7qb code with two ancillas')
+device_properties = {
+    "basis_gates": basis_gates, "coupling_map": coupling_map}
+
+
+circ = shortest_transpile_from_distribution(circ, print_cost=False,
+    **device_properties)
+
+#time = get_circuit_time(circ, gate_times=WACQT_target_times)
+#print(time)
+#circ, times = add_idle_noise_to_circuit(circ, WACQT_target_times, return_time=True, rename=True)
+#circ.draw(output='mpl')
