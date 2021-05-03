@@ -77,6 +77,9 @@ def shortest_transpile_from_distribution(circuit,
                                          layout_method='sabre',
                                          optimization_level=1,
                                          **kwargs):
+    """Transpile 'repeats' number of times, and chose the best one according to the cost function
+    (defaults to circuit time).
+    """
     
     # Here we modify the kwargs dict so we can pass it to transpile() with our default values
 
