@@ -12,8 +12,10 @@ from qiskit.providers.aer.noise import NoiseModel, QuantumError, ReadoutError
 from qiskit.providers.aer import noise
 import numpy as np
 import warnings
+import itertools
 
 # %%
+
 
 class GateTimes:
     """Class to contain gate times.
@@ -60,7 +62,7 @@ class GateTimes:
             custom_gate_times (dict, optional): Overwrite any preset gate times with these. Defaults to {}.
 
         Returns:
-            dict: gate times in ns for the name str of each gate and op.
+            dict[str,int]: gate times in ns for the name str of each gate and op.
         """
 
         gate_times_tmp = self.gate_times.copy()
@@ -68,9 +70,21 @@ class GateTimes:
         return gate_times_tmp
 
     def get_single_qubit_times(self):
+        """Return a dictionary of single qubit gate times where the key is the gate name 'str',
+        and the value is the time in ns.
+
+        Returns:
+            dict[str,int]: Gate times (ns).
+        """
         return {name: self.gate_times[name] for name in GateTimes.single_qubit_gates}
 
     def get_two_qubit_times(self):
+        """Return a dictionary of two qubit gate times where the key is the gate name 'str',
+        and the value is the time in ns.
+
+        Returns:
+            dict[str,int]: Gate times (ns).
+        """
         return {name: self.gate_times[name] for name in GateTimes.two_qubit_gates}
 
     def __repr__(self):
@@ -125,13 +139,12 @@ def thermal_relaxation_model_V2(T1=40e3, T2=60e3, gate_times=WACQT_gate_times):
     # for single_qubit_gate in GateTimes.single_qubit_gates:
     #     time_group[gate_times[single_qubit_gate]].append(single_qubit_gate)
 
-    # Add single qubit error in groups of same duration
-    # Add errors to noise model
-
+    # Group single qubit gates into groups with the same duration
     time_group = {}
     for k, v in gate_times.get_single_qubit_times().items():
         time_group[v] = time_group.get(v, []) + [k]
 
+    # Add the error groups to the noise model as one
     for t_single in time_group:
         error_single = thermal_relaxation_error(T1, T2, t_single)
         noise_damping.add_all_qubit_quantum_error(error_single,
@@ -153,6 +166,66 @@ def thermal_relaxation_model_V2(T1=40e3, T2=60e3, gate_times=WACQT_gate_times):
     noise_damping.add_all_qubit_quantum_error(error_reset, "reset")
     error_measure = thermal_relaxation_error(T1, T2, gate_times['measure'])
     noise_damping.add_all_qubit_quantum_error(error_measure, "measure")
+
+    return noise_damping
+
+
+def thermal_relaxation_model_per_qb(T1, T2, gate_times=WACQT_gate_times):
+    """Noise model for thermal relaxation. All times are given
+    in nanoseconds (ns).
+
+    Args:
+        T1 (list[int], optional): List of relaxation time (ns) for each qubit in order.
+        T2 (list[int], optional): List of echo dephasing time (ns) for each qubit in order.
+        gate_times (dict/GateTimes object, optional): Gate times, defaults to standard WACQT_gate_times.
+
+    Returns:
+        Noise model: thermal relaxation noise model
+    """
+
+    if len(T1) != len(T2):
+        raise ValueError("T1 and T2 lists are not of the same length")
+
+    # Convert from dict object to GateTimes object
+    if isinstance(gate_times, dict):
+        gate_times = GateTimes(
+            0, 0, WACQT_gate_times.get_gate_times(gate_times))
+
+    noise_damping = NoiseModel()
+
+    # Group single qubit gates into groups with the same duration
+    time_group = {}
+    for k, v in gate_times.get_single_qubit_times().items():
+        time_group[v] = time_group.get(v, []) + [k]
+
+    # Add the groups to the model as one
+    for i, (T1_tmp, T2_tmp) in enumerate(zip(T1, T2)):
+        for t_single in time_group:
+            error_single = thermal_relaxation_error(T1_tmp, T2_tmp, t_single)
+            noise_damping.add_quantum_error(error_single,
+                                            time_group[t_single],
+                                            [i])
+
+    # Do the same for two qubit gates
+    time_group = {}
+    for k, v in gate_times.get_two_qubit_times().items():
+        time_group[v] = time_group.get(v, []) + [k]
+
+    for i, (T1_first_qubit, T2_first_qubit) in enumerate(zip(T1, T2)):
+        for j, (T1_second_qubit, T2_second_qubit) in enumerate(zip(T1, T2)):
+            for t_double in time_group:
+                error_double = thermal_relaxation_error(T1_first_qubit, T2_first_qubit, t_double).expand(
+                    thermal_relaxation_error(T1_second_qubit, T2_second_qubit, t_double))
+                noise_damping.add_quantum_error(error_double,
+                                                time_group[t_double],
+                                                [i, j])
+
+    # NOTE: More consistent to loop over special_ops?
+    for i, (T1_tmp, T2_tmp) in enumerate(zip(T1, T2)):
+        error_reset = thermal_relaxation_error(T1_tmp, T2_tmp, gate_times['reset'])
+        noise_damping.add_quantum_error(error_reset, "reset", [i])
+        error_measure = thermal_relaxation_error(T1_tmp, T2_tmp, gate_times['measure'])
+        noise_damping.add_quantum_error(error_measure, "measure", [i])
 
     return noise_damping
 
