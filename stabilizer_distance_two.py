@@ -168,7 +168,7 @@ if __name__ == '__main__':
     ax1.set_ylim(0, 1)
     ax1.legend()
     ax1.grid(linewidth=1)
-    ax1.set_yscale('log')
+    # ax1.set_yscale('log')
 
     ax2.plot(range(n_cycles+1), np.array(select_counts) /
              n_shots, 'o-', label='Model 1')
@@ -176,6 +176,6 @@ if __name__ == '__main__':
     ax2.set_ylabel(r'Post select fraction')
     ax2.legend()
     ax2.grid(linewidth=1)
-    ax2.set_yscale('log')
+    # ax2.set_yscale('log')
 
 # %%

@@ -140,13 +140,13 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         # Calculate fidelity at each snapshot
         fidelities = []
         if snapshot_type=='dm' or snapshot_type=='density_matrix':
-            for current_cycle in range(n_cycles):
-                state = results.data()['dm_' + str(current_cycle+1)]
+            for current_cycle in range(n_cycles+1):
+                state = results.data()['dm_' + str(current_cycle)]
                 fidelities.append(state_fidelity(state, trivial))
         elif snapshot_type=='exp' or snapshot_type=='expectation_value':
-            for current_cycle in range(n_cycles):
-                fidelities.append(results.data()['exp_' + str(current_cycle+1)])
-        return fidelities
+            for current_cycle in range(n_cycles+1):
+                fidelities.append(results.data()['exp_' + str(current_cycle)])
+        return fidelities, time
         
 
     # Add idle noise (empty_circuit does this automatically)
