@@ -146,7 +146,7 @@ T1 = 40e3
 T2 = 60e3
 n_datapoints = 100
 times = np.linspace(0, 100e3, n_datapoints)
-#%%
+#%% Run single qubit
 res_0 = get_idle_single_qubit(times, snapshot_type=['exp', 'dm'], T1=T1, T2=T2)
 exp_0 = [res_0.data()['exp_'+str(index)]for index in range(n_datapoints)]
 fid_0 = [state_fidelity([1, 0], res_0.data()['dm_'+str(index)])
@@ -179,10 +179,6 @@ ax.legend()
 ax.set_xlabel('Time [ns]')
 ax.set_ylabel('Probability of initial value')
 # %% Expectation values and fid encoded qubit
-T1 = 40e3
-T2 = 60e3
-n_datapoints = 100
-times = np.linspace(0, 100e3, n_datapoints)
 res_0 = get_idle_encoded_513(times, snapshot_type=['exp', 'dm'], T1=T1, T2=T2)
 exp_0 = [res_0.data()['exp_'+str(index)]for index in range(n_datapoints)]
 fid_0 = [state_fidelity(logical_states(include_ancillas=None)[0], res_0.data()['dm_'+str(index)])
@@ -241,7 +237,8 @@ ax.set_xlabel('Time [ns]')
 ax.set_ylabel(r'Fidelity to initial state')
 ax.legend()
 
-# %%
+# %% Test hypothesis of P_L * F_L = F_phys
+res_0 = get_idle_encoded_513(times, snapshot_type=['dm'], T1=T1, T2=T2)
 rho = res_0.data()['dm_'+str(20)]
 logical = logical_states(include_ancillas=None)
 I_L = np.outer(logical[0], logical[0])+np.outer(logical[1], logical[1])
