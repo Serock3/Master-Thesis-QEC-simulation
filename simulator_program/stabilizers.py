@@ -914,10 +914,6 @@ def _unflagged_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
-<<<<<<< HEAD
-
-=======
->>>>>>> ce6686cb363df21d6df6a1cceb5e464b8ed636e6
     circ = get_empty_stabilizer_circuit(registers)
     # NOTE: Use the empty circuit below instead? It doesn't add the readout register
     # circ = QuantumCircuit(qbReg,anReg,clReg)
@@ -963,10 +959,6 @@ def _unflagged_stabilizer_IXZZX(registers, anQb=None, syn_bit=None, reset=True):
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
-<<<<<<< HEAD
-
-=======
->>>>>>> ce6686cb363df21d6df6a1cceb5e464b8ed636e6
     circ = get_empty_stabilizer_circuit(registers)
     if not anQb:
         if anReg.size == 2:
@@ -1009,10 +1001,6 @@ def _unflagged_stabilizer_XIXZZ(registers, anQb=None, syn_bit=None, reset=True):
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
-<<<<<<< HEAD
-
-=======
->>>>>>> ce6686cb363df21d6df6a1cceb5e464b8ed636e6
     circ = get_empty_stabilizer_circuit(registers)
 
     if not anQb:
@@ -1056,10 +1044,6 @@ def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
-<<<<<<< HEAD
-
-=======
->>>>>>> ce6686cb363df21d6df6a1cceb5e464b8ed636e6
     circ = get_empty_stabilizer_circuit(registers)
 
     if not anQb:
