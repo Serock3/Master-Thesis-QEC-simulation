@@ -830,7 +830,7 @@ def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
 # %% All unflagged stabilizers
 def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
                                current_cycle=0, current_step=0, num_ancillas=None,
-                               include_barriers=True, pipeline=False):
+                               include_barriers=True, pipeline=False, **kwargs):
     """Run all four stabilizers without flags, as well as an optional
     recovery. The input current_step is only relevant for flagged cycles, and
     should be set to 0 otherwise.
@@ -1108,10 +1108,18 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     circ.sx(anReg[1])
     circ.u1(np.pi/2, anReg[1])
 
+    #circ.h(qbReg[0])
+    #circ.h(qbReg[3])
+    #circ.h(anReg[1])
+
     circ.cz(anReg[1], qbReg[0])
     circ.cz(anReg[1], qbReg[1])
     circ.cz(anReg[1], qbReg[2])
     circ.cz(anReg[1], qbReg[3])
+
+    #circ.h(qbReg[0])
+    #circ.h(qbReg[3])
+    #circ.h(anReg[1])
 
     circ.u1(np.pi/2, qbReg[0])
     circ.sx(qbReg[0])
@@ -1207,8 +1215,6 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
         circ.reset(anReg[1])
 
     # ZXIXZ
-    
-
     circ.iswap(qbReg[1], qbReg[4])
     circ.cz(qbReg[1], qbReg[4])
     circ.u1(-np.pi/2, qbReg[1])
@@ -1217,9 +1223,9 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     circ.u1(np.pi/2, qbReg[3])
     circ.sx(qbReg[3])
     circ.u1(np.pi/2, qbReg[3])
-    circ.u1(np.pi/2, qbReg[1])#1-4
-    circ.sx(qbReg[1])#1-4
-    circ.u1(np.pi/2, qbReg[1])#-14
+    circ.u1(np.pi/2, qbReg[1])
+    circ.sx(qbReg[1])
+    circ.u1(np.pi/2, qbReg[1])
     circ.u1(np.pi/2, anReg[1])
     circ.sx(anReg[1])
     circ.u1(np.pi/2, anReg[1])
@@ -1235,6 +1241,7 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     circ.u1(np.pi/2, qbReg[1])
     circ.sx(qbReg[1])
     circ.u1(np.pi/2, qbReg[1])
+    #circ.h(qbReg[1])
 
     circ.iswap(qbReg[1], qbReg[4])
     circ.cz(qbReg[1], qbReg[4])
@@ -1244,7 +1251,6 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     circ.cz(anReg[1], qbReg[1])#4-1
     
     #circ.h(anReg[1])
-    #circ.h(qbReg[1])
     #circ.h(qbReg[3])
     
     circ.u1(np.pi/2, qbReg[3])
