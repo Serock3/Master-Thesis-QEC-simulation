@@ -141,12 +141,13 @@ def project_dm_to_logical_subspace_V3(rho):
             np.trace(rho@logical_pauli_matrices[i])/(2*P_L)
     return rho_L
 
-def monoExp(t, A, T, c):
-    return A * np.exp(-t/T) + c
+def monoExp(t, T, c):
+    return (1-c) * np.exp(-t/T) + c
 
 def exp_projected(rho, pauliop = 'Z'):
     rho_L = project_dm_to_logical_subspace_V1(rho)
     return np.trace(Pauli(pauliop).to_matrix() @ rho_L)
+
 # %% Expectation values and fid single qubit
 T1 = 40e3
 T2 = 60e3
@@ -210,73 +211,80 @@ fid_plus_L = [state_fidelity([1/np.sqrt(2), 1/np.sqrt(2)], project_dm_to_logical
            for index in range(n_datapoints)]
 exp_plus_L = [exp_projected(res_plus.data()['dm_'+str(index)]) for index in range(n_datapoints)]
 
-p0 = (1, T1, 0) # start with values near those we expect
+p0 = (T1, 0) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[:20], exp_0[:20], p0)
-A, T, c = pars
+T, c = pars
 # %% plot <Z>
-fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-ax.plot(times, exp_0, label=r'$\langle 0_L|Z_L|0_L\rangle$')
-ax.plot(times, monoExp(times,*pars), '--',label=r'$e^{-t/T}$,'+f' T={T:.0f} ns')
-ax.plot(times, exp_1, label=r'$\langle 1_L|Z_L|1_L\rangle$')
-ax.plot(times, exp_plus, label=r'$\langle +_L|Z_L|+_L\rangle$')
-ax.set_xlabel('Time [ns]')
-ax.set_ylabel(r'Expectation value of $Z_L$')
-ax.legend()
-# %% plot <Z_L>
-fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-ax.plot(times, exp_0_L, label=r'$\langle 0_L|Z_L|0_L\rangle$')
-# ax.plot(times, monoExp(times,*pars), '--',label=r'$e^{-t/T}$,'+f' T={T:.0f} ns')
-ax.plot(times, exp_1_L, label=r'$\langle 1_L|Z_L|1_L\rangle$')
-ax.plot(times, exp_plus_L, label=r'$\langle +_L|Z_L|+_L\rangle$')
-ax.set_xlabel('Time [ns]')
-ax.set_ylabel(r'Projected $\langle Z_L\rangle$')
-ax.legend()
+fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+ax[0].plot(times, exp_0, label=r'$|0_L\rangle$')
+ax[0].plot(times, monoExp(times,*pars), '--',label=r'$e^{-t/T}$,'+f' T={T:.0f} ns')
+ax[0].plot(times, exp_1, label=r'$|1_L\rangle$')
+ax[0].plot(times, exp_plus, label=r'$|+_L\rangle$')
+ax[0].set_xlabel('Time [ns]')
+ax[0].set_ylabel(r'$\langle Z_L\rangle$')
+ax[0].legend()
+#  plot <Z_L>
+# fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+ax[1].plot(times, exp_0_L, label=r'$|0_L\rangle$')
+ax[1].plot(times, exp_1_L, label=r'$|1_L\rangle$')
+ax[1].plot(times, exp_plus_L, label=r'$|+_L\rangle$')
+ax[1].set_xlabel('Time [ns]')
+ax[1].set_ylabel(r'Projected $\langle Z_L\rangle$')
+ax[1].legend()
 # %% plot <X>
-res_0 = get_idle_encoded_513(times, snapshot_type=['exp'],pauliop='XXXXX', T1=T1, T2=T2)
+res_0 = get_idle_encoded_513(times, snapshot_type=['exp', 'dm'],pauliop='XXXXX', T1=T1, T2=T2)
 exp_0 = [res_0.data()['exp_'+str(index)]for index in range(n_datapoints)]
+exp_0_L = [exp_projected(res_0.data()['dm_'+str(index)],pauliop='X') for index in range(n_datapoints)]
 
-res_1 = get_idle_encoded_513(times, snapshot_type=['exp'],pauliop='XXXXX', T1=T1, T2=T2,theta=np.pi)
+res_1 = get_idle_encoded_513(times, snapshot_type=['exp', 'dm'],pauliop='XXXXX', T1=T1, T2=T2,theta=np.pi)
 exp_1 = [res_1.data()['exp_'+str(index)]for index in range(n_datapoints)]
+exp_1_L = [exp_projected(res_1.data()['dm_'+str(index)],pauliop='X') for index in range(n_datapoints)]
 
-res_plus = get_idle_encoded_513(times, snapshot_type=['exp'],pauliop='XXXXX', T1=T1, T2=T2, theta=np.pi/2)
+res_plus = get_idle_encoded_513(times, snapshot_type=['exp', 'dm'],pauliop='XXXXX', T1=T1, T2=T2, theta=np.pi/2)
 exp_plus = [res_plus.data()['exp_'+str(index)]for index in range(n_datapoints)]
-plus_L = (logical_states(include_ancillas=None)[0]+logical_states(include_ancillas=None)[1])/np.sqrt(2)
+exp_plus_L = [exp_projected(res_plus.data()['dm_'+str(index)],pauliop='X') for index in range(n_datapoints)]
 
-p0 = (1, T1, 0) # start with values near those we expect
+p0 = (T1, 0) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[:60], exp_plus[:60], p0)
-A, T, c = pars
+T, c = pars
 
-fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-ax.plot(times, exp_0, label=r'$\langle 0_L|X_L|0_L\rangle$')
-ax.plot(times, exp_1, label=r'$\langle 1_L|X_L|1_L\rangle$')
-ax.plot(times, exp_plus, label=r'$\langle +_L|X_L|+_L\rangle$')
-ax.plot(times, monoExp(times,*pars), '--',label=r'$e^{-t/T}$,'+f' T={T:.0f} ns')
+fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+ax[0].plot(times, exp_0, label=r'$|0_L\rangle$')
+ax[0].plot(times, exp_1, label=r'$|1_L\rangle$')
+ax[0].plot(times, exp_plus, label=r'$|+_L\rangle$')
+ax[0].plot(times, monoExp(times,*pars), '--',label=r'$e^{-t/T}$,'+f' T={T:.0f} ns')
 
-ax.set_xlabel('Time [ns]')
-ax.set_ylabel(r'Expectation value of $X_L$')
-ax.legend()
+ax[0].set_xlabel('Time [ns]')
+ax[0].set_ylabel(r'$\langle X_L\rangle$')
+ax[0].legend()
+ax[1].plot(times, exp_0_L, label=r'$|0_L\rangle$')
+ax[1].plot(times, exp_1_L, label=r'$|1_L\rangle$')
+ax[1].plot(times, exp_plus_L, label=r'$|+_L\rangle$')
+ax[1].set_xlabel('Time [ns]')
+ax[1].set_ylabel(r'Projected $\langle X_L\rangle$')
+ax[1].legend()
 # %% plot fid values
-p0 = (1, T1, 0) # start with values near those we expect
+p0 = (T1, 0) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[:60], fid_1[:60], p0)
-A, T, c = pars
-fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-ax.plot(times, fid_0, label=r'$|0_L\rangle$')
-ax.plot(times, fid_1, label=r'$|1_L\rangle$')
-ax.plot(times, fid_plus, label=r'$|+_L\rangle$')
-ax.plot(times, monoExp(times,*pars), '--',label=r'$e^{-t/T}$,'+f' T={T:.0f} ns')
-ax.plot(times, times*0+1/16, label=r'$1/16$')
-ax.set_xlabel('Time [ns]')
-ax.set_ylabel(r'Fidelity to initial state')
-ax.legend()
+T, c = pars
+fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+ax[0].plot(times, fid_0, label=r'$|0_L\rangle$')
+ax[0].plot(times, fid_1, label=r'$|1_L\rangle$')
+ax[0].plot(times, fid_plus, label=r'$|+_L\rangle$')
+ax[0].plot(times, monoExp(times,*pars), '--',label=r'$e^{-t/T}$,'+f' T={T:.0f} ns')
+ax[0].plot(times, times*0+1/16, label=r'$1/16$')
+ax[0].set_xlabel('Time [ns]')
+ax[0].set_ylabel(r'Prob initial state')
+ax[0].legend()
 
-#%% Projected fid
-fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-ax.plot(times, fid_0_L, label=r'$|0_L\rangle$')
-ax.plot(times, fid_1_L, label=r'$|1_L\rangle$')
-ax.plot(times, fid_plus_L, label=r'$|+_L\rangle$')
-ax.set_xlabel('Time [ns]')
-ax.set_ylabel(r'PROJECTED Fidelity to initial state')
-ax.legend()
+# Projected fid
+# fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+ax[1].plot(times, fid_0_L, label=r'$|0_L\rangle$')
+ax[1].plot(times, fid_1_L, label=r'$|1_L\rangle$')
+ax[1].plot(times, fid_plus_L, label=r'$|+_L\rangle$')
+ax[1].set_xlabel('Time [ns]')
+ax[1].set_ylabel(r'Prob of initial state after projection')
+ax[1].legend()
 # %% Test hypothesis of P_L * F_L = F_phys
 res_0 = get_idle_encoded_513(times, snapshot_type=['dm'], T1=T1, T2=T2)
 rho = res_0.data()['dm_'+str(20)]
