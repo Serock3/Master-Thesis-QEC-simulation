@@ -84,10 +84,31 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
                     thrm_relax.name = f'Idle {time_diff}ns'
                 new_circ.append(thrm_relax, [qarg])
 
-        # Assume instant if classical condition exists TODO: Better solution?
-
         try:
-            gate_time = full_gate_times[node.name] if not node.condition else 0
+            # Old method (Assume instant classical feedback)
+            #gate_time = full_gate_times[node.name] if not node.condition else 0
+            
+            # Add idle time before any correction gates. This assumes that only
+            # the correction step has condition and that all correction gates
+            # in a cycle are in one "block" of nodes.
+            if not node.condition:
+                gate_time = full_gate_times[node.name]
+                correction_step = False
+            # First conditional gate in correction step
+            elif node.condition and not correction_step:
+                gate_time = 0
+                correction_step = True
+
+                # Add feedback time to all bits and qubits
+                # TODO: Only add the time on bits? Should not change anything,
+                # but might be more correct in what the circuit waits for.
+                for key in time_passed.keys():
+                    time_passed[key] += full_gate_times['feedback']
+            else: 
+                gate_time = 0
+                
+
+
         except KeyError as op:
             print(
                 f'WARNING! No operation duration specified for {op.args}, assuming instant.')
