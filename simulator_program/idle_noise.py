@@ -64,6 +64,7 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
     for reg in circ.qubits + circ.clbits:
         time_passed[reg] = 0
 
+    correction_step=False
     for node in dag.op_nodes():
         # Set cargs to entire classical conditional register if it exists, otherwise to the cargs
         cargs = node.condition[0] if node.condition else node.cargs
@@ -72,17 +73,6 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         gate_args = []
         for arg in node.qargs+list(cargs):
             gate_args.append(arg)
-
-        latest_time = max([time_passed[gate_arg] for gate_arg in gate_args])
-        # Apply idle noise to qargs
-        for qarg in node.qargs:
-            time_diff = latest_time - time_passed[qarg]
-            if time_diff:
-                thrm_relax = thermal_relaxation_error(
-                    T1, T2, time_diff).to_instruction()
-                if rename:
-                    thrm_relax.name = f'Idle {time_diff}ns'
-                new_circ.append(thrm_relax, [qarg])
 
         try:
             # Old method (Assume instant classical feedback)
@@ -99,20 +89,29 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
                 gate_time = 0
                 correction_step = True
 
-                # Add feedback time to all bits and qubits
-                # TODO: Only add the time on bits? Should not change anything,
-                # but might be more correct in what the circuit waits for.
-                for key in time_passed.keys():
-                    time_passed[key] += full_gate_times['feedback']
+                # Add feedback time to all bits (Only to be applied once per cycle)
+                for reg in circ.clbits:
+                    time_passed[reg] += full_gate_times['feedback']
             else: 
                 gate_time = 0
-                
-
-
+            
         except KeyError as op:
             print(
                 f'WARNING! No operation duration specified for {op.args}, assuming instant.')
             gate_time = 0
+
+        latest_time = max([time_passed[gate_arg] for gate_arg in gate_args])
+        # Apply idle noise to qargs
+        for qarg in node.qargs:
+            time_diff = latest_time - time_passed[qarg]
+            if time_diff:
+                thrm_relax = thermal_relaxation_error(
+                    T1, T2, time_diff).to_instruction()
+                if rename:
+                    thrm_relax.name = f'Idle {time_diff}ns'
+                new_circ.append(thrm_relax, [qarg])
+
+        
 
         # Advance the time for the qubits included in the gate
         for gate_arg in gate_args:
