@@ -517,12 +517,13 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
     return circ
 
 
-def get_encoded_state(theta, phi):
+def get_encoded_state(theta, phi, include_ancillas='front'):
     """Create the correct 7qb density matrix for an arbitary logical 5qb state.
+    Angles are defined as on Bloch sphere.
     
     Args:
-        theta (float): Angle of rotation around x-axis.
-        phi (float): Angle of rotation around z-axis.
+        theta (float): Zenith angle.
+        phi (float): Azimuthal angle.
         
     Returns:
         The encoded state plus two ancilla in 0 state, as a 128x128 numpy array.
@@ -531,25 +532,10 @@ def get_encoded_state(theta, phi):
              get_encoded_state(np.pi/2, np.pi/2) gives the |+> state.
              get_encoded_state(np.pi/2, -np.pi/2) gives the |-> state.
     """
-    # TODO: Make it possible to return the state without ancillas maybe?
+    logical_0, logical_1 = logical_states(include_ancillas)
 
-    # Registers
-    qb = QuantumRegister(5, 'code_qubit')
-    registers = StabilizerRegisters(qb)
-
-    # Define the circuit
-    circ = get_empty_stabilizer_circuit(registers)
-
-    # Create the desired state
-    circ.rx(theta, qb[0])
-    circ.rz(phi, qb[0])
-    
-    # Encode into 5 qubits
-    circ.compose(encode_input_v2(registers), inplace=True)
-    circ.save_density_matrix(label='den_mat')
-    res = execute(circ, Aer.get_backend('qasm_simulator'), shots=1).result()
-
-    return res.data()['den_mat']
+    return np.cos(theta/2)*logical_0 + \
+        np.exp(1j*phi)*np.sin(theta/2)*logical_1
 
 
 
@@ -1468,7 +1454,7 @@ def _pipeline_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
 def unflagged_recovery(registers, reset=True, current_cycle=0, current_step=0):
     """Lookup table for recovery from a
     single qubit error on code qubits"""
-
+    # TODO: Add delay
     # Create a circuit
     qbReg = registers.QubitRegister
     clReg = registers.SyndromeRegister
