@@ -12,7 +12,7 @@ from IPython.display import display
 from matplotlib import pyplot as plt
 from qiskit import QuantumCircuit, QuantumRegister, AncillaRegister, ClassicalRegister, Aer, execute
 from custom_transpiler import *
-from custom_transpiler import WACQT_device_properties
+from custom_transpiler import WACQT_device_properties, diamond_device_properties
 from qiskit.quantum_info.states.densitymatrix import DensityMatrix
 from qiskit.quantum_info.states.statevector import Statevector
 from idle_noise import get_circuit_time
@@ -86,26 +86,30 @@ def verify_transpilation(circ, transpiled_circuit, n_cycles):
 
 # display(WACQT_device_properties['coupling_map'].draw())
 # %% Transpile the (v2) encoding circuit for [[5,1,3]]
-n_cycles = 1
+n_cycles = 3
 reset = True
 flag = False
-recovery = False
+recovery = True
 
-registers = StabilizerRegisters()
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(2, 'ancilla_qubit')
+cr = get_classical_register(n_cycles, flag=flag) # Advanced list of registers
+registers = StabilizerRegisters(qb, an, cr)
 # circ = QuantumCircuit()
 # circ += encode_input_v2(registers)
 # circ.snapshot('post_encoding', 'density_matrix')
 
-# circ += get_repeated_stabilization(registers,
-#                                    n_cycles=n_cycles,
-#                                    reset=reset,
-#                                    recovery=recovery,
-#                                    num_ancillas=1)
-circ = get_full_stabilizer_circuit(registers, n_cycles, reset=reset,
+circ = get_repeated_stabilization(registers,
+                                   n_cycles=n_cycles,
+                                   reset=reset,
                                    recovery=recovery,
                                    num_ancillas=1,
-                                   snapshot_type=['exp','dm'],
-                                   conditional=False)
+                                   snapshot_type=['exp','dm'])
+# circ = get_full_stabilizer_circuit(registers, n_cycles, reset=reset,
+#                                    recovery=recovery,
+#                                    num_ancillas=1,
+#                                    snapshot_type=['exp','dm'],
+#                                    conditional=False)
 
 routing_method = 'sabre'  # basic lookahead stochastic sabre
 # initial_layout = {qb[0]: 0,
@@ -130,21 +134,38 @@ optimization_level = 1
 circ_t = shortest_transpile_from_distribution(circ,
                                               #   cost_func=depth_cost_func,
                                               repeats=repeats,
+                                              print_cost=True,
                                               routing_method=routing_method,
                                               initial_layout=initial_layout,
                                               layout_method=layout_method,
                                               translation_method=translation_method,
                                               optimization_level=optimization_level,
-                                              coupling_map=WACQT_device_properties['coupling_map'], **{'basis_gates': ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy', 'iswap', 'cz', 'barrier', 'set_density_matrix',
-                                                                                                                       'save_density_matrix', 'save_expval', 'snapshot']})
+                                              coupling_map=diamond_device_properties['coupling_map'], 
+                                              **{'basis_gates': ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy', 'iswap', 'cz', 'barrier', 'set_density_matrix',
+                                                                                                                       'save_density_matrix', 'save_expval']})
 #   **WACQT_device_properties)
 
 print(f'Final circuit time = {get_circuit_time(circ_t)["end"]} ns')
 print('Final depth = ', circ_t.depth())
 print('Final #2qb gates = ', circ_t.num_nonlocal_gates())
 print('Final gates = ', circ_t.count_ops())
-verify_transpilation(circ, circ_t,n_cycles)
+# verify_transpilation(circ, circ_t,n_cycles)
 # %% print to qasm to make circuit exportable to IBM quantum experience
 display(circ_t.draw(output='mpl'))  # output='mpl'
 # print(circ_t)
-# print(circ_t.qasm())
+
+# %%
+def print_qasm(circ):
+    print(circ_t.qasm())
+
+def save_circ(circ, name):
+    import pickle
+    with open(name, 'wb') as transpiled_circuit_file:
+        pickle.dump(circ, transpiled_circuit_file)
+
+def load_circ(name):
+    import pickle
+    if name not in locals():
+        with open(name, 'rb') as transpiled_circuit_file:
+            circ = pickle.load(transpiled_circuit_file)
+    return circ
