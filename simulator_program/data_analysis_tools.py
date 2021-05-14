@@ -514,6 +514,8 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
 
     fidelities = []
     if snapshot_type=='dm' or snapshot_type=='density_matrix':
+        # TODO: Better solution to trivial?
+        trivial = results.data()['dm_0'] # Assume perfect encoding
         for current_cycle in range(n_cycles+1):
             state = results.data()['dm_' + str(current_cycle)]
             fidelities.append(state_fidelity(state, trivial))
