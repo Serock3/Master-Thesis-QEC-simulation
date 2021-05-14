@@ -125,6 +125,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
             **device_properties)
 
     # Get the correct (no errors) state
+    # TODO: Dear god this must be fixed
     trivial = logical_states(include_ancillas=None)[1]
 
     # Create empty encoded circuit
@@ -382,8 +383,8 @@ def get_error_rate(fidelity, time=None):
     return theta, MSE
 
 def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time, 
-        measure_time, n_cycles=8, n_shots=2048, single_qubit=False, save=None,
-        time_axis=False, **kwargs):
+        measure_time, feedback_time, n_cycles=8, n_shots=2048, single_qubit=False, save=None,
+        time_axis=False, perfect_stab=False, **kwargs):
     """Calculate the logical error rate across a variety of parameters
     TODO: Add default values for n_cycles and n_shots that are reasonable
     """
@@ -398,7 +399,7 @@ def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time,
 
     # Make every noise parameter into list (if not already)
     noise_parameters = [T1, T2, single_qubit_gate_time, two_qubit_gate_time,
-                        measure_time]
+                        measure_time, feedback_time]
     noise_parameters = [[param] if not isinstance(param, list) else param for param in noise_parameters]
     
     # Generate an array to store the data in
@@ -411,7 +412,7 @@ def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time,
     for params in itertools.product(*noise_parameters):
         
         gate_times = GateTimes(params[2], params[3],
-                               {'u1': 0, 'z': 0, 'measure': params[4]})
+                               {'u1': 0, 'z': 0, 'measure': params[4], 'feedback': params[5]})
         
         # Skip cases where T2 > 2*T1
         if params[1] > 2*params[0]:
@@ -427,6 +428,9 @@ def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time,
             if theta==np.pi/2 and phi==np.pi/2: 
                 for i in range(len(fid)):
                     fid[i] = 2.*fid[i] - 1.
+        elif perfect_stab:
+            fid, time = perfect_stab_circuit(n_cycles, n_shots, gate_times=gate_times, 
+                T1=params[0], T2=params[1], reset=True, snapshot_type='exp')
         else:
             fid, time = fidelity_from_scratch(n_cycles, n_shots, T1=params[0], 
                                 T2=params[1], gate_times=gate_times, **kwargs)
@@ -449,3 +453,71 @@ def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time,
         np.save(save+'_MSE', MSE_array)
     
     return error_array, MSE_array
+
+def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
+        reset=True, recovery=True, conditional=False, snapshot_type='dm',
+        theta=0, phi=0, pauliop='ZZZZZ', include_barriers=True):
+
+    if isinstance(gate_times, dict):
+        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+        full_gate_times = WACQT_gate_times
+
+    # Extract the gate times from class
+    extracted_gate_times = full_gate_times.get_gate_times()
+    two_qubit_gate_time = extracted_gate_times['cz']
+    single_qubit_gate_time = extracted_gate_times['x']
+    measure_time = extracted_gate_times['measure']
+    feedback_time = extracted_gate_times['feedback']
+
+    cycle_time = 8*single_qubit_gate_time + 16*two_qubit_gate_time + 4*measure_time + feedback_time
+    time = {}
+    for i in range(n_cycles+1):
+        key = snapshot_type + '_' + str(i)
+        time[key] = i*cycle_time
+
+    # Registers
+    qb = QuantumRegister(5, 'code_qubit')
+    an = AncillaRegister(2, 'ancilla_qubit')
+    cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=False)
+    readout = ClassicalRegister(5, 'readout')
+    registers = StabilizerRegisters(qb, an, cr, readout)
+
+    # Build a custom circuit with idle noise before each cycle
+    circ = get_empty_stabilizer_circuit(registers)
+    circ.set_density_matrix(get_encoded_state(theta=theta, phi=phi))
+    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qb,
+                                conditional=conditional, pauliop=pauliop,
+                                include_barriers=include_barriers)
+    thrm_relax = thermal_relaxation_error(T1, T2, cycle_time).to_instruction()
+    for reg in circ.qubits:
+        circ.append(thrm_relax, [reg])
+
+    for current_cycle in range(n_cycles):
+        circ.compose(unflagged_stabilizer_cycle(registers, reset=reset, recovery=recovery,
+                                                current_cycle=current_cycle, current_step=0,
+                                                include_barriers=include_barriers), inplace=True)
+        add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=current_cycle+1,
+                                qubits=qb, conditional=conditional, pauliop=pauliop,
+                                include_barriers=include_barriers)
+        for reg in circ.qubits:
+            circ.append(thrm_relax, [reg])
+    circ.measure(qb,readout)
+
+
+    # Run the circuit
+    results = execute(circ, Aer.get_backend('qasm_simulator'),
+        noise_model=None, shots=n_shots).result()
+
+    fidelities = []
+    if snapshot_type=='dm' or snapshot_type=='density_matrix':
+        for current_cycle in range(n_cycles+1):
+            state = results.data()['dm_' + str(current_cycle)]
+            fidelities.append(state_fidelity(state, trivial))
+    elif snapshot_type=='exp' or snapshot_type=='expectation_value':
+        for current_cycle in range(n_cycles+1):
+            fidelities.append(results.data()['exp_' + str(current_cycle)])
+    return fidelities, time
