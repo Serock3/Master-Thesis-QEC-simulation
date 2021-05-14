@@ -107,6 +107,9 @@ WACQT_demonstrated_times = GateTimes(
     single_qubit_default=20, two_qubit_default=300,
     custom_gate_times={'u1': 0, 'z': 0, 'measure': 2300})
 
+standard_times = GateTimes(
+    single_qubit_default=20, two_qubit_default=100,
+    custom_gate_times={'u1': 0, 'z': 0, 'measure': 300, 'feedback': 350})
 
 # Define noise models
 
