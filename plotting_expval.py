@@ -25,7 +25,8 @@ from simulator_program.data_analysis_tools import *
 from simulator_program.custom_noise_models import (thermal_relaxation_model,
     thermal_relaxation_model_V2,
     WACQT_target_times,
-    WACQT_demonstrated_times)
+    WACQT_demonstrated_times,
+    standard_times)
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 from simulator_program.post_select import *
@@ -487,35 +488,62 @@ fid, circ = encoding_fidelity(1024, gate_times=WACQT_target_times, T1=40e3, T2=6
 print(fid)
 # %%
 # Settings used across all configurations
-n_cycles = 3
-n_shots = 128
+n_cycles = 15
+n_shots = 1024
 
 #%% Test run
-n_cycles=14
-n_shots=2048*2
-gate_times = GateTimes(20, 60, {'u1': 0, 'z': 0, 'measure': 100})
-for i in range(5):
-    fid, time = fidelity_from_scratch(n_cycles, n_shots, gate_times=gate_times,
-        reset=True, data_process_type='recovery',
-        idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
-        transpile=False, pauliop='ZZZZZ', device_properties=WACQT_device_properties, device=None)
+n_cycles=15
+n_shots=1024
 
-    rate, MSE = get_error_rate(fid, time)
-    print(rate[1])
-fig, ax = plt.subplots(1,1, figsize=(6, 4))
+test_times = GateTimes(
+    single_qubit_default=0, two_qubit_default=0,
+    custom_gate_times={'u1': 0, 'z': 0, 'measure': 0, 'feedback': 2960})
+
+fid2, time = fidelity_from_scratch(n_cycles, n_shots, gate_times=standard_times,
+    T1=80e3, T2=80e3, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=True, pauliop='ZZZZZ', device_properties=WACQT_device_properties, device=None)
+#%%
+fid2, time2 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    T1=80e3, T2=80e3, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=False, pauliop='ZZZZZ', device_properties=WACQT_device_properties, device=None)
+#%%
+#print(fid)
+fig, ax = plt.subplots(1,1, figsize=(8, 6))
+x_dis = np.arange(-1,n_cycles+2)
+x = np.linspace(0,15,100)
+y = np.exp(theta[0]) * np.exp(theta[1]*x)
+ax.plot(x_dis[1:17], fid, '-o', color='C0', label='Idle time + instant stabilizers')
+ax.plot(x_dis[1:17], fid2, '-o', color='C1', label='Normal QEC')
+ax.plot(x, y, color='C2')
+#ax.errorbar(x_dis[1:17], fidelities, yerr=errors, color='C1', label='Normal QEC')
+ax.set_title(r'QEC of $|0_L\rangle$')
+ax.set_xlabel('Number of cycles')
+ax.set_ylabel(r'Expectation value of $Z_L$')
+ax.legend()
+#%%
+fig, ax = plt.subplots(1,1, figsize=(8, 6))
 
 # Generate x-values
 x_target_WACQT = []
+x_fast = []
 for i in range(len(time)-1):
     x_target_WACQT.append(time['exp_'+str(i)])
+    x_fast.append(time_fast['exp_'+str(i)])
 
-x_pred = np.linspace(0, 25,100)
-for cycle in range(n_cycles):
-    y_pred = np.exp(rate[0]) * np.exp(x_pred*rate[1])
+ax.plot(x_target_WACQT, fid, '-o', label='Target times')
+ax.plot(x_target_WACQT, fid_target_single_1[0], '-k', label='Single times')
+ax.plot(x_fast, exp_fast, '-', label='Speedy times')
+
+
+#x_pred = np.linspace(0, 25,100)
+#for cycle in range(n_cycles):
+#    y_pred = np.exp(rate[0]) * np.exp(x_pred*rate[1])
 
 # Subplot 1: Target gate times
-ax.plot(x_target_WACQT, fid, 'o', color='C0', label='Hexagonal layout')
-ax.plot(x_pred*1e3, y_pred, '-', color='C0', label='Hexagonal layout')
+#ax.plot(x_target_WACQT, fid, 'o', color='C0', label='Hexagonal layout')
+#ax.plot(x_pred*1e3, y_pred, '-', color='C0', label='Hexagonal layout')
 
 #%% ========== CONFIGURATIONS FOR RUNS ==========
 # EXPECTATION VALUES OF |+> AND |->
@@ -776,7 +804,7 @@ print('Check!')
 n_cycles = 15
 n_shots = 1024*4
 #%%
-fid_target_single = fid_single_qubit(n_cycles, n_shots,
+fid_target_single, time_single = fid_single_qubit(n_cycles, n_shots,
                                      gate_times=WACQT_target_times,
                                      snapshot_type='exp', T1=40e3, T2=10e3,
                                      theta=np.pi/2, phi=np.pi/2, pauliop='X')
@@ -819,10 +847,19 @@ fid_dem_single_p = fid_single_qubit(n_cycles, n_shots,
                                      gate_times=WACQT_demonstrated_times,
                                      snapshot_type='dm', T1=40e3, T2=60e3,
                                      theta=np.pi, phi=np.pi/2, pauliop='Z')
+#%% Fast test runs
+gate_times = GateTimes(10, 50, {'u1': 0, 'z': 0, 'measure': 100})
+exp_fast, time_fast = fidelity_from_scratch(n_cycles, n_shots, gate_times=gate_times,
+    T1=80e3, T2=80e3, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=False, pauliop='ZZZZZ')
 
+
+#%% Test plotting
 #%% Plotting
 fig, ax = plt.subplots(2,1, figsize=(10, 16))
 x_dis = np.arange(0,n_cycles+1)
+
 # Generate x-values
 x_target_WACQT = []
 x_target_DD = []
@@ -939,5 +976,160 @@ circ = shortest_transpile_from_distribution(circ, print_cost=False,
 #circ, times = add_idle_noise_to_circuit(circ, WACQT_target_times, return_time=True, rename=True)
 #circ.draw(output='mpl')
 #%%
-from qiskit.providers.aer import QasmSimulator
-backend = QasmSimulator(method='density_matrix_gpu')
+n_cycles=1
+n_shots=1024*8
+
+fid3, time3, circ3, res3 = fidelity_from_scratch(n_cycles, n_shots, gate_times=WACQT_target_times,
+    T1=80e3, T2=80e3, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='exp', encoding=False, theta=0, phi=0,
+    transpile=False, pauliop='ZZZZZ', device_properties=WACQT_device_properties, device=None)
+
+#%% Check the counts of 0 and 1 in each syndrome bit
+counts = results.get_counts()
+print(len(counts))
+
+red_counts = {'0000': 0, '0001': 0, '0010': 0, '0011': 0, '0100': 0, '0101': 0, '0110': 0, 
+    '0111': 0, '1000': 0, '1001': 0, '1010': 0, '1011': 0, '1100': 0, '1101': 0, 
+    '1110': 0, '1111': 0}
+for key in counts:
+    red_counts[key[6:10]] += counts[key]
+print(red_counts)
+
+syn0 = [0, 0, 0, 0] # Number of 0s in each bit
+syn1 = [0, 0, 0, 0] # Number of 1s in each bit
+for key in red_counts:
+    for i in range(len(syn0)):
+        if key[i] == '0':
+            syn0[i] += red_counts[key]
+        elif key[i] == '1':
+            syn1[i] += red_counts[key]
+
+#%% Running one cycle of idle noise followed by perfect stabilizers
+
+T1=80e3
+T2=80e3
+reset=True
+recovery=True
+conditional=False
+snapshot_type='exp'
+encoding=False
+theta=0
+phi=0
+pauliop='ZZZZZ'
+device=None
+gate_times = test_times
+n_cycles=1
+n_shots=8192
+if isinstance(gate_times, dict):
+    full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+elif isinstance(gate_times, GateTimes):
+    full_gate_times = gate_times
+else:
+    warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+    full_gate_times = WACQT_gate_times
+
+# Noise model
+noise_model = thermal_relaxation_model_V2(T1=T1, T2=T2, gate_times=full_gate_times)
+
+# Registers
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(2, 'ancilla_qubit')
+cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=False)
+readout = ClassicalRegister(5, 'readout')
+registers = StabilizerRegisters(qb, an, cr, readout)
+
+# Circuits
+#circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
+#                                   recovery=recovery, flag=False,
+#                                   snapshot_type=snapshot_type,
+#                                   conditional=conditional,
+#                                   encoding=encoding, theta=theta, phi=phi,
+#                                   pauliop=pauliop, device=device)
+
+
+
+circ = get_empty_stabilizer_circuit(registers)
+circ.set_density_matrix(get_encoded_state(theta=theta, phi=phi))
+thrm_relax = thermal_relaxation_error(T1, T2, full_gate_times['feedback']).to_instruction()
+for reg in circ.qubits:
+    circ.append(thrm_relax, [reg])
+circ.compose(get_repeated_stabilization(registers, n_cycles=n_cycles,
+                                            reset=reset, recovery=recovery, flag=False,
+                                            snapshot_type=snapshot_type,
+                                            conditional=conditional,
+                                            include_barriers=True,
+                                            pauliop=pauliop, device=device,
+                                        ), inplace=True)
+circ.measure(qb,readout)
+
+# Run the circuit
+results = execute(circ, Aer.get_backend('qasm_simulator'),
+    noise_model=noise_model, shots=n_shots).result()
+
+
+#%% Alternate version with idle noise after the snapshot of each cycle
+test_times = GateTimes(
+    single_qubit_default=0, two_qubit_default=0,
+    custom_gate_times={'u1': 0, 'z': 0, 'measure': 0, 'feedback': 2960})
+T1=80e3
+T2=80e3
+reset=True
+recovery=True
+conditional=False
+snapshot_type='exp'
+encoding=False
+theta=0
+phi=0
+pauliop='ZZZZZ'
+device=None
+include_barriers=True
+gate_times = test_times
+n_cycles=15
+n_shots=1024
+if isinstance(gate_times, dict):
+    full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+elif isinstance(gate_times, GateTimes):
+    full_gate_times = gate_times
+else:
+    warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+    full_gate_times = WACQT_gate_times
+
+# Noise model
+noise_model = thermal_relaxation_model_V2(T1=T1, T2=T2, gate_times=full_gate_times)
+
+# Registers
+qb = QuantumRegister(5, 'code_qubit')
+an = AncillaRegister(2, 'ancilla_qubit')
+cr = get_classical_register(n_cycles, reset=reset, recovery=recovery, flag=False)
+readout = ClassicalRegister(5, 'readout')
+registers = StabilizerRegisters(qb, an, cr, readout)
+
+circ = get_empty_stabilizer_circuit(registers)
+circ.set_density_matrix(get_encoded_state(theta=theta, phi=phi))
+add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qb,
+                            conditional=conditional, pauliop=pauliop,
+                            include_barriers=include_barriers)
+thrm_relax = thermal_relaxation_error(T1, T2, full_gate_times['feedback']).to_instruction()
+for reg in circ.qubits:
+    circ.append(thrm_relax, [reg])
+
+for current_cycle in range(n_cycles):
+    circ.compose(unflagged_stabilizer_cycle(registers, reset=reset, recovery=recovery,
+                                            current_cycle=current_cycle, current_step=0,
+                                            include_barriers=include_barriers), inplace=True)
+    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=current_cycle+1,
+                            qubits=qb, conditional=conditional, pauliop=pauliop,
+                            include_barriers=include_barriers)
+    for reg in circ.qubits:
+        circ.append(thrm_relax, [reg])
+circ.measure(qb,readout)
+
+
+# Run the circuit
+results = execute(circ, Aer.get_backend('qasm_simulator'),
+    noise_model=noise_model, shots=n_shots).result()
+
+fidelities = []
+
+for current_cycle in range(n_cycles+1):
+    fidelities.append(results.data()['exp_' + str(current_cycle)])
