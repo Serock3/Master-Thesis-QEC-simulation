@@ -517,7 +517,7 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
     return circ
 
 
-def get_encoded_state(theta, phi, include_ancillas='front'):
+def get_encoded_state(theta, phi, include_ancillas='back'):
     """Create the correct 7qb density matrix for an arbitary logical 5qb state.
     Angles are defined as on Bloch sphere.
     
