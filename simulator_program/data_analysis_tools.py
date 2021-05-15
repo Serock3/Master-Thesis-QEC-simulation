@@ -293,7 +293,7 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
     return fidelities, time
 
 def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
-        reset=True, idle_noise=True, theta=0., phi=0.,
+        idle_noise=True, theta=0., phi=0., iswap=True,
         snapshot_type='dm', device=None, pauliop='ZZZZZ'):
 
     # Get gate times missing from input
@@ -308,7 +308,7 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
-    cr = get_classical_register(n_cycles=0, reset=reset, recovery=True, flag=False)
+    cr = get_classical_register(n_cycles=0, flag=False)
     readout = ClassicalRegister(5, 'readout')
     registers = StabilizerRegisters(qb, an, cr, readout)
 
@@ -326,10 +326,10 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
 
     # Encoding
     if device == 'WACQT':
-        circ.compose(transpiled_encoding_WACQT(registers), inplace=True)
+        circ.compose(transpiled_encoding_WACQT(registers, iswap=iswap), inplace=True)
         qubits = [qb[3], qb[1], qb[2], an[1], qb[4]] # Qubit permutation
     elif device == 'DD':
-        circ.compose(transpiled_encoding_DD(registers), inplace=True)
+        circ.compose(transpiled_encoding_DD(registers, iswap=iswap), inplace=True)
         qubits = [qb[2], an[1], qb[1], qb[3], qb[4]] # Qubit permutation
     else:
         circ.compose(encode_input_v2(registers), inplace=True)
