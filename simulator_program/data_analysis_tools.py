@@ -476,12 +476,10 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         warnings.warn('Invalid gate times, assuming WACQT_gate_times')
         full_gate_times = WACQT_gate_times
 
-    # Extract the gate times from class
-    extracted_gate_times = full_gate_times.get_gate_times()
-    two_qubit_gate_time = extracted_gate_times['cz']
-    single_qubit_gate_time = extracted_gate_times['x']
-    measure_time = extracted_gate_times['measure']
-    feedback_time = extracted_gate_times['feedback']
+    two_qubit_gate_time = full_gate_times['cz']
+    single_qubit_gate_time = full_gate_times['x']
+    measure_time = full_gate_times['measure']
+    feedback_time = full_gate_times['feedback']
 
     cycle_time = 8*single_qubit_gate_time + 16*two_qubit_gate_time + 4*measure_time + feedback_time
     time = {}
