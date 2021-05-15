@@ -6,6 +6,7 @@
 #import seaborn as sns
 #import matplotlib.pyplot as plt
 import numpy as np
+import scipy
 import itertools
 from qiskit import *
 #from qiskit.visualization import plot_histogram
@@ -125,8 +126,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
             **device_properties)
 
     # Get the correct (no errors) state
-    # TODO: Dear god this must be fixed
-    trivial = logical_states(include_ancillas=None)[1]
+    trivial = get_encoded_state(theta, phi, include_ancillas=None)
 
     # Create empty encoded circuit
     if data_process_type == 'empty_circuit':
@@ -347,6 +347,9 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
 
 #%%
 
+def monoExp(t, T, c, A):
+    return (A-c)* np.exp(-t/T) + c
+
 def _get_array_indexes(index, sweep_lengths):
     """Returns a tuple of indexes for the error_array in sweep_parameter_space,
     given a single index"""
@@ -435,24 +438,31 @@ def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time,
             fid, time = fidelity_from_scratch(n_cycles, n_shots, T1=params[0], 
                                 T2=params[1], gate_times=gate_times, **kwargs)
             
-        # From fidelities, do OLS
-        if time_axis:
-            error_rate, MSE = get_error_rate(fid, time)
-        else:
-            error_rate, MSE = get_error_rate(fid)
+        # From fidelities, estimate lifetime
+        # Old version
+        #if time_axis:
+        #    error_rate, MSE = get_error_rate(fid, time)
+        #else:
+        #    error_rate, MSE = get_error_rate(fid)
+        time_list = list(time.values())[1:-1]
+
+        p0 = (params[0], 0, 0.9) # start with values near those we expect
+        pars, cov = scipy.optimize.curve_fit(monoExp, time_list, fid[1:], p0)
+        T, c, A = pars
 
         array_indexes = _get_array_indexes(index, sweep_lengths)
-        error_array[array_indexes] = error_rate[1]
-        MSE_array[array_indexes] = MSE
+        error_array[array_indexes] = T
+        #error_array[array_indexes] = error_rate[1]
+        #MSE_array[array_indexes] = MSE
         index += 1
  
     # Save results to file
     # TODO: Save as txt instead? Make it both readable and have the parameters used
     if save is not None:
         np.save(save, error_array)
-        np.save(save+'_MSE', MSE_array)
+        #np.save(save+'_MSE', MSE_array)
     
-    return error_array, MSE_array
+    return error_array#, MSE_array
 
 def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         reset=True, recovery=True, conditional=False, snapshot_type='dm',
@@ -523,3 +533,48 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         for current_cycle in range(n_cycles+1):
             fidelities.append(results.data()['exp_' + str(current_cycle)])
     return fidelities, time
+
+
+def scale_gate_times(gate_times={}, scalings=[], return_class=False):
+    """Scale up the gate times proportionally to their fraction of time in a
+    full stabilizer cycle
+    
+    Args:
+        gate_times - Dict or GateTimes class
+        scalings [list] - The scaling factors to apply to cycle times
+        return_class [bool] - Whether or not to return the scaled times as a
+                              dict (False) or list of GateTimes classes
+        
+    Returns:
+        scaled_times - List of GateTimes classes matching the scalings
+        and gate_times input, or a dict with lists of all gate times, depending
+        on the return_class input."""
+
+    if isinstance(gate_times, dict):
+        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
+        full_gate_times = WACQT_gate_times
+
+    # Extract the gate times from class
+    # TODO: Fancier solution?
+    extracted_gate_times = full_gate_times.get_gate_times()
+    gate_times = {'single_qubit_gate': extracted_gate_times['x'], 
+                  'two_qubit_gate': extracted_gate_times['cz'], 
+                  'measure': extracted_gate_times['measure'],
+                  'feedback': extracted_gate_times['feedback']}
+
+    if return_class:
+        scaled_times = [GateTimes(single_qubit_default=gate_times['single_qubit_gate']*scale,
+                                  two_qubit_default=gate_times['two_qubit_gate']*scale,
+                                  custom_gate_times={'u1': 0, 'z': 0, 
+                                                     'measure': gate_times['measure']*scale,
+                                                     'feedback': gate_times['feedback']*scale})
+                        for scale in scalings]
+    else:
+        scaled_times = {}
+        for key in gate_times:
+            scaled_times[key] = [gate_times[key]*scale for scale in scalings]
+    return scaled_times
