@@ -1,4 +1,4 @@
-# This file compares the lifetime of the logical state when using fidelity vs <Z>
+# This file compares the lifetime of the logical state when using fidelity vs <Z> during active QEC
 # %%
 from matplotlib import pyplot as plt
 import numpy as np
