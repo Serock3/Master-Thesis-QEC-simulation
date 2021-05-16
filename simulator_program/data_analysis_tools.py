@@ -293,7 +293,7 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
     return fidelities, time
 
 def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
-        reset=True, idle_noise=True, initial_state=0,
+        idle_noise=True, theta=0., phi=0., iswap=True,
         snapshot_type='dm', device=None, pauliop='ZZZZZ'):
 
     # Get gate times missing from input
@@ -308,21 +308,33 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
-    cr = get_classical_register(n_cycles, reset=reset, recovery=True, flag=False)
+    cr = get_classical_register(n_cycles=0, flag=False)
     readout = ClassicalRegister(5, 'readout')
     registers = StabilizerRegisters(qb, an, cr, readout)
 
     # Circuits
     circ = get_empty_stabilizer_circuit(registers)
-    if initial_state == 1:
-        circ.x(qb[0])
+
+    # Initial state
+    # TODO: Better looking solution
+    extra_qubits = np.zeros(2**6)
+    extra_qubits[0] = 1.0
+    zero_state = np.kron(np.array([1, 0]), extra_qubits)
+    one_state = np.kron(np.array([0, 1]), extra_qubits)
+    psi = np.cos(theta/2)*zero_state + np.exp(1j*phi)*np.sin(theta/2)*one_state
+    circ.set_density_matrix(psi)
+
+    # Encoding
     if device == 'WACQT':
-        circ.compose(transpiled_encoding_WACQT(registers), inplace=True)
+        circ.compose(transpiled_encoding_WACQT(registers, iswap=iswap), inplace=True)
+        qubits = [qb[3], qb[1], qb[2], an[1], qb[4]] # Qubit permutation
     elif device == 'DD':
-        circ.compose(transpiled_encoding_DD(registers), inplace=True)
+        circ.compose(transpiled_encoding_DD(registers, iswap=iswap), inplace=True)
+        qubits = [qb[2], an[1], qb[1], qb[3], qb[4]] # Qubit permutation
     else:
         circ.compose(encode_input_v2(registers), inplace=True)
-    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qb,
+        qubits = qb # Qubit permutation
+    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qubits,
                             pauliop=pauliop, include_barriers=True)
 
     # Trivial state
