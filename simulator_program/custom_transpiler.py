@@ -28,7 +28,7 @@ WACQT_device_properties_old = {
 
 # WACQT 7 qb UPDATED BASIS
 basis_gates = ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy', 'iswap', 'cz',
-    'save_expval', 'save_density_matrix', 'set_density_matrix']
+    'save_expval', 'save_density_matrix', 'set_density_matrix', 'save_expval_var']
 WACQT_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map}
 

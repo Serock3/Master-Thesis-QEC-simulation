@@ -338,12 +338,13 @@ print('P_L','*','F_L','=','F_phys','?')
 print(P_L,'*',F_L,'=',F_phys)
 print(np.abs(P_L*F_L-F_phys)<0.01)
 # %%
-
+maximally_mixed_logical_state = (np.outer(logical[0], logical[0])+np.outer(logical[1], logical[1]))/2
 maximally_mixed_state = np.eye(2**5)/2**5
 ket0 = [0]*2**5
 ket0[0] = 1
 
 print(state_fidelity(logical_states(include_ancillas=None)[0],maximally_mixed_state))
+print(state_fidelity(logical_states(include_ancillas=None)[0],maximally_mixed_logical_state))
 print(state_fidelity(logical_states(include_ancillas=None)[0],ket0))
 
 # %%

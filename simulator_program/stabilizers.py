@@ -172,6 +172,9 @@ def add_snapshot_to_circuit(circ, snapshot_type, current_cycle,
                 elif snap == 'exp' or snap == 'expectation_value':
                     circ.save_expectation_value(Pauli(pauliop), qubits,
                                                 label=snap_label, conditional=con)
+                elif snap == 'expvar' or snap == 'expectation_value_variance':
+                    circ.save_expectation_value_variance(Pauli(pauliop), qubits,
+                            label=snap_label, conditional=con)
                 if include_barriers:
                     circ.barrier()
     return circ
@@ -185,6 +188,8 @@ def get_snapshot_label(snapshot_type, conditional, current_cycle):
         snap_label = 'dm_'
     elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
         snap_label = 'exp_'
+    elif snapshot_type == 'expvar' or snapshot_type == 'expectation_value_variance':
+        snap_label = 'expvar_'
 
     # Add conditional
     if conditional:

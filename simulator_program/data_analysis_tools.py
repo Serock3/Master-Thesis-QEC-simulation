@@ -20,16 +20,28 @@ from qiskit.quantum_info import DensityMatrix
 from qiskit.quantum_info import state_fidelity
 
 # Our own files
-from .custom_noise_models import (thermal_relaxation_model,
-    thermal_relaxation_model_V2,
-    WACQT_target_times,
-    WACQT_demonstrated_times)
-from .custom_transpiler import *
-from .stabilizers import *
-from .post_select import *
-from .post_process import *
-from .idle_noise import *
-
+if __package__:
+    from .custom_noise_models import (thermal_relaxation_model,
+        thermal_relaxation_model_V2,
+        WACQT_target_times,
+        WACQT_demonstrated_times,
+        standard_times)
+    from .custom_transpiler import *
+    from .stabilizers import *
+    from .post_select import *
+    from .post_process import *
+    from .idle_noise import *
+else:
+    from custom_noise_models import (thermal_relaxation_model,
+        thermal_relaxation_model_V2,
+        WACQT_target_times,
+        WACQT_demonstrated_times,
+        standard_times)
+    from custom_transpiler import *
+    from stabilizers import *
+    from post_select import *
+    from post_process import *
+    from idle_noise import *
 #%%
 
 
@@ -82,12 +94,12 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times=gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     # Check the data processing method for settings
     if data_process_type == 'recovery':
@@ -194,7 +206,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         # Get the number of remaining shot at each cycle
         select_counts = get_trivial_post_select_counts(
             results.get_counts(), n_cycles)
-        return fidelities, select_counts
+        return fidelities, select_counts, time
 
     elif data_process_type == 'post_process':
         print('Warning: Post-process not implemented, exiting...')
@@ -262,12 +274,12 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times=gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
@@ -307,12 +319,12 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times=gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
@@ -364,7 +376,7 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
         fidelities = state_fidelity(state, trivial)
     elif snapshot_type=='exp' or snapshot_type=='expectation_value':
         fidelities = results.data()['exp_0']
-    return fidelities, circ
+    return fidelities, circ, time['end']
 
 #%%
 
@@ -486,27 +498,39 @@ def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time,
     return error_array, var_array
 
 def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
-        reset=True, recovery=True, conditional=False, snapshot_type='dm',
+        reset=True, data_process_type = 'recovery', snapshot_type='dm',
         theta=0, phi=0, pauliop='ZZZZZ', include_barriers=True):
 
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times=gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     two_qubit_gate_time = full_gate_times['cz']
     single_qubit_gate_time = full_gate_times['x']
     measure_time = full_gate_times['measure']
     feedback_time = full_gate_times['feedback']
+    if data_process_type == 'post_select':
+        feedback_time = 0
 
     cycle_time = 8*single_qubit_gate_time + 16*two_qubit_gate_time + 4*measure_time + feedback_time
     time = {}
     for i in range(n_cycles+1):
-        key = snapshot_type + '_' + str(i)
+        if data_process_type == 'recovery':
+            key = snapshot_type + '_' + str(i)
+        elif data_process_type == 'post_select':
+            key = snapshot_type + '_con_' + str(i)
         time[key] = i*cycle_time
+
+    if data_process_type == 'recovery':
+        recovery = True
+        conditional = False
+    elif data_process_type == 'post_select':
+        recovery = False
+        conditional = True
 
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
@@ -541,18 +565,35 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     results = execute(circ, Aer.get_backend('qasm_simulator'),
         noise_model=None, shots=n_shots).result()
 
+    trivial = get_encoded_state(theta, phi, include_ancillas=None)
     fidelities = []
-    if snapshot_type=='dm' or snapshot_type=='density_matrix':
-        # TODO: Better solution to trivial?
-        trivial = results.data()['dm_0'] # Assume perfect encoding
-        for current_cycle in range(n_cycles+1):
-            state = results.data()['dm_' + str(current_cycle)]
-            fidelities.append(state_fidelity(state, trivial))
-    elif snapshot_type=='exp' or snapshot_type=='expectation_value':
-        for current_cycle in range(n_cycles+1):
-            fidelities.append(results.data()['exp_' + str(current_cycle)])
-    return fidelities, time
+    if data_process_type == 'recovery':
+        if snapshot_type=='dm' or snapshot_type=='density_matrix':
+            # TODO: Better solution to trivial?
+            for current_cycle in range(n_cycles+1):
+                state = results.data()['dm_' + str(current_cycle)]
+                fidelities.append(state_fidelity(state, trivial))
+        elif snapshot_type=='exp' or snapshot_type=='expectation_value':
+            for current_cycle in range(n_cycles+1):
+                fidelities.append(results.data()['exp_' + str(current_cycle)])
+        return fidelities, time
 
+    elif data_process_type == 'post_select':
+        # Get the fidelity for each cycle
+        if snapshot_type=='dm' or snapshot_type=='density_matrix':
+            fidelities = [state_fidelity(post_selected_state, trivial) for 
+                post_selected_state in get_trivial_post_select_den_mat(
+                results, n_cycles)]
+        elif snapshot_type=='exp' or snapshot_type=='expectation_value':
+            fidelities = [post_selected_state for 
+                post_selected_state in get_trivial_exp_value(
+                results, n_cycles)]
+        
+        # Get the number of remaining shot at each cycle
+        select_counts = get_trivial_post_select_counts(
+            results.get_counts(), n_cycles)
+        return fidelities, select_counts, time
+    return -1
 
 def scale_gate_times(gate_times={}, scalings=[], return_class=False):
     """Scale up the gate times proportionally to their fraction of time in a
@@ -570,12 +611,12 @@ def scale_gate_times(gate_times={}, scalings=[], return_class=False):
         on the return_class input."""
 
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times=gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times=gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     # Extract the gate times from class
     # TODO: Fancier solution?
