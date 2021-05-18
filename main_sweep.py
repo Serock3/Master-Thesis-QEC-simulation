@@ -19,7 +19,8 @@ from qiskit.quantum_info import state_fidelity
 from simulator_program.custom_noise_models import (thermal_relaxation_model,
     thermal_relaxation_model_V2,
     WACQT_target_times,
-    WACQT_demonstrated_times)
+    WACQT_demonstrated_times,
+    standard_times)
 from simulator_program.data_analysis_tools import *
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
@@ -65,8 +66,12 @@ T2_space = [40e3, 50e3, 60e3, 70e3, 80e3, 90e3, 100e3]
 single_qubit_gate_time_space = [20]
 two_qubit_gate_time_space = [100]
 measure_time_space = [300]
+feedback_time_space = [350]
 n_cycles = 14
 n_shots = 2048*4
+kwargs = {'reset': True, 'data_process_type': 'recovery', 'idle_noise': True, 
+          'snapshot_type': 'exp', 'encoding': False, 'theta': 0, 'phi': 0,
+          'transpile': False}
 #%%
 #error_rates_T1T2, MSE_T1T2 = sweep_parameter_space(T1_space, T2_space, 
 #                                         single_qubit_gate_time_space,
@@ -201,52 +206,66 @@ error_rates_single, MSE_single = sweep_parameter_space(T1_space, T2_space,
                                          n_cycles, n_shots, 
                                          single_qubit=True,
                                          time_axis=True, **kwargs)    
-#%% Load in data from comparing T1 T2s
+#%% 2012-05-14 perfect stab runs
+rates_T1T2_feedback, MSE_T1T2_feedback = sweep_parameter_space(T1_space, T2_space, 
+                                         single_qubit_gate_time_space,
+                                         two_qubit_gate_time_space,
+                                         measure_time_space, feedback_time_space,
+                                         n_cycles, n_shots,
+                                         save='T1T2_perfect_feedback',
+                                         time_axis=True, perfect_stab=True,
+                                         **kwargs)
+rates_T1T2, MSE_T1T2 = sweep_parameter_space(T1_space, T2_space, 
+                                         single_qubit_gate_time_space,
+                                         two_qubit_gate_time_space,
+                                         measure_time_space, feedback_time_space,
+                                         n_cycles, n_shots,
+                                         save='T1T2_with_feedback',
+                                         time_axis=True, **kwargs)
+#%% Compare T1 and T2
 X_mesh, Y_mesh = np.meshgrid(T1_space, T2_space)
-E_mesh = -1*np.reshape(error_rate_T1T2t, (7,7)).T
-E_mesh_single = -1*np.reshape(error_rates_single, (7,7)).T
-E_mesh_single2 = -1*np.reshape(error_rates_single2, (7,7)).T
+E_mesh1 = -1*np.reshape(rates_T1T2, (7,7)).T
+E_mesh2 = -1*np.reshape(rates_T1T2_feedback, (7,7)).T
 
-# Convert to lifetime
-for i in range(len(E_mesh)):
-    for j in range(len(E_mesh)):
-        if E_mesh[i,j] != 0.:
-            E_mesh[i,j] = E_mesh[i,j]**-1
-        if E_mesh_single[i,j] != 0.:
-            E_mesh_single[i,j] = E_mesh_single[i,j]**-1
-        if E_mesh_single2[i,j] != 0.:
-            E_mesh_single2[i,j] = E_mesh_single2[i,j]**-1
+# Convert to lifetime (Outdated since new sweeps does this automatically)
+for i in range(len(E_mesh1)):
+    for j in range(len(E_mesh1)):
+        if E_mesh1[i,j] != 0.:
+            E_mesh1[i,j] = E_mesh1[i,j]**-1
+        if E_mesh2[i,j] != 0.:
+            E_mesh2[i,j] = E_mesh2[i,j]**-1
 
-E_list = [E_mesh, E_mesh_single, E_mesh_single2]
+E_list = [E_mesh1, E_mesh2]
 
 Nr = 1
-Nc = 3
+Nc = 2
 fig, ax = plt.subplots(Nr,Nc, figsize=(10,4))
 maps = []
 for i in range(Nc):
-    HM = ax[i].imshow(E_list[i], extent=[35,105,105,35])
-    #HM = ax[i].contourf(X_mesh*1e-3, Y_mesh*1e-3, E_list[i])
+    HM = ax[i].imshow(E_list[i], extent=[35,105,35,105], cmap='magma',origin='lower')
     maps.append(HM)
     ax[i].set_xticks([40, 50, 60, 70, 80, 90, 100])
-    ax[i].set_yticks([40, 50, 60, 70, 80, 90, 100])
-ax[2].set_xlabel(r'$T_1$ [$\mu s$]')
+    ax[i].set_yticks([100, 90, 80, 70, 60, 50, 40])
 ax[1].set_xlabel(r'$T_1$ [$\mu s$]')
 ax[0].set_xlabel(r'$T_1$ [$\mu s$]')
-#ax[1].set_ylabel(r'$T_2$ [$\mu s$]')
+ax[1].set_ylabel(r'$T_2$ [$\mu s$]')
 ax[0].set_ylabel(r'$T_2$ [$\mu s$]')
-ax[0].set_title(r'Logical qubit $|0_L\rangle$')
-ax[1].set_title(r'Single qubit $|1\rangle$ ($T_1$ limited)')
-ax[2].set_title(r'Single qubit $|+\rangle$ ($T_2$ limited)')
-E_min = np.min(np.array([np.min(E_mesh), np.min(E_mesh_single), np.min(E_mesh_single2)]))
-E_max = np.max(np.array([np.max(E_mesh), np.max(E_mesh_single), np.max(E_mesh_single2)]))
 
-norm = colors.Normalize(vmin=E_min, vmax=E_max)
-for hm in maps:
-    hm.set_norm(norm)
-cbar = fig.colorbar(maps[0], ax=ax, orientation='horizontal', fraction=.1, pad=0.17)
-cbar.set_label(r'Qubit lifetime $[\mu s]$', labelpad=0, y=1.20, rotation=0)
+ax[0].set_title(r'Standard QEC')
+ax[1].set_title(r'Perfect syndrome extraction')
 
-#ax[0].set(ylim=(140,340))
+# Normalize color scale not to include the zeros at T2 > 2T1
+for i in range(Nc):
+    E_min = np.min(np.array([np.min(E_list[i][E_list[i]!=0])]))
+    E_max = np.max(np.array([np.max(E_list[i][E_list[i]!=0])]))
+    norm = colors.Normalize(vmin=E_min, vmax=E_max)
+    maps[i].set_norm(norm)
+
+cbar0 = fig.colorbar(maps[0], ax=ax[0], orientation='horizontal', fraction=.1, pad=0.17)
+cbar0.set_label(r'Qubit lifetime $[\mu s]$', labelpad=0, y=1.20, rotation=0)
+
+cbar1 = fig.colorbar(maps[1], ax=ax[1], orientation='horizontal', fraction=.1, pad=0.17)
+cbar1.set_label(r'Qubit lifetime $[\mu s]$', labelpad=0, y=1.20, rotation=0)
 
 
 #%% Plotting gate times
@@ -303,8 +322,110 @@ cbar.set_label(r'Error rate per cycle', labelpad=-0, y=1.05, rotation=0)
 ax[0].set(ylim=(100,700))
 ax[1].set(ylim=(100,700))
 
+#%% Sweeping gate times
 
+# The scaling of gate times investigated
+scalings = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
+gate_times = scale_gate_times(gate_times=standard_times, scalings=scalings)
 
+T1_space = [40e3]
+T2_space = [60e3]
+single_qubit_gate_time_space = [20]
+two_qubit_gate_time_space = [100]
+measure_time_space = [300]
+feedback_time_space = [350]
+n_cycles = 15
+n_shots = 1024*8*6*22
+kwargs = {'reset': True, 'data_process_type': 'recovery', 'idle_noise': True, 
+          'snapshot_type': 'dm', 'encoding': False, 'theta': 0, 'phi': 0,
+          'transpile': False, 'simulator_type': 'statevector'}
+#%%
+# Scale all gates simultaneously
+lifetime_scale_all_gates = np.zeros(len(scalings))
+var_scale_measure = np.zeros(len(scalings))
+for i in range(len(scalings)):
+    lifetime, var = sweep_parameter_space(T1_space, T2_space, 
+                                     gate_times['single_qubit_gate'][i],
+                                     gate_times['two_qubit_gate'][i],
+                                     gate_times['measure'][i], 
+                                     gate_times['feedback'][i],
+                                     n_cycles, n_shots,
+                                     time_axis=True, **kwargs)
+    lifetime_scale_all_gates[i] = lifetime
+    var_scale_all_gates[i] = var
+    print(datetime.datetime.now().time())
+np.save('lifetime_scale_all_gates', lifetime_scale_all_gates)
+np.save('var_scale_all_gates', var_scale_all_gates)
+#%%
+# Scale single-qubit gates, keeping others constant
+scalings = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
+gate_times = scale_gate_times(gate_times=standard_times, scalings=scalings)
+lifetime_scale_single_qubit_gates = np.zeros(len(scalings))
+var_scale_single_qubit_gates = np.zeros(len(scalings))
+for i in range(len(scalings)):
+    lifetime, var = sweep_parameter_space(T1_space, T2_space, 
+                                     gate_times['single_qubit_gate'][i],
+                                     two_qubit_gate_time_space,
+                                     measure_time_space, 
+                                     feedback_time_space,
+                                     n_cycles, n_shots,
+                                     time_axis=True, **kwargs)
+    lifetime_scale_single_qubit_gates[i] = lifetime
+    var_scale_single_qubit_gates[i] = var
+    print(datetime.datetime.now().time())
+np.save('lifetime_scale_single_qubit_gates', lifetime_scale_single_qubit_gates)
+np.save('var_scale_single_qubit_gates', var_scale_single_qubit_gates)
+#%%
+# Scale two-qubit gates, keeping others constant
+lifetime_scale_two_qubit_gates = np.zeros(len(scalings))
+var_scale_two_qubit_gates = np.zeros(len(scalings))
+for i in range(len(scalings)):
+    lifetime, var = sweep_parameter_space(T1_space, T2_space, 
+                                     single_qubit_gate_time_space,
+                                     gate_times['two_qubit_gate'][i],
+                                     measure_time_space, 
+                                     feedback_time_space,
+                                     n_cycles, n_shots,
+                                     time_axis=True, **kwargs)
+    lifetime_scale_two_qubit_gates[i] = lifetime
+    var_scale_two_qubit_gates[i] = var
+    print(datetime.datetime.now().time())
+np.save('lifetime_scale_two_qubit_gates', lifetime_scale_two_qubit_gates)
+np.save('var_scale_two_qubit_gates', var_scale_two_qubit_gates)
+#%%
+# Scale measure time, keeping others constant
+lifetime_scale_measure = np.zeros(len(scalings))
+var_scale_all_gates = np.zeros(len(scalings))
+for i in range(len(scalings)):
+    lifetime, var = sweep_parameter_space(T1_space, T2_space, 
+                                     single_qubit_gate_time_space,
+                                     two_qubit_gate_time_space,
+                                     gate_times['measure'][i], 
+                                     feedback_time_space,
+                                     n_cycles, n_shots,
+                                     time_axis=True, **kwargs)
+    lifetime_scale_measure[i] = lifetime
+    var_scale_measure[i] = var
+    print(datetime.datetime.now().time())
+np.save('lifetime_scale_measure', lifetime_scale_measure)
+np.save('var_scale_measure', var_scale_measure)
+#%%
+# Scale feedback, keeping others constant
+lifetime_scale_feedback = np.zeros(len(scalings))
+var_scale_feedback = np.zeros(len(scalings))
+for i in range(len(scalings)):
+    lifetime, var = sweep_parameter_space(T1_space, T2_space, 
+                                     single_qubit_gate_time_space,
+                                     two_qubit_gate_time_space,
+                                     measure_time_space, 
+                                     gate_times['feedback'][i],
+                                     n_cycles, n_shots,
+                                     time_axis=True, **kwargs)
+    lifetime_scale_feedback[i] = lifetime
+    var_scale_feedback[i] = var
+    print(datetime.datetime.now().time())
+np.save('lifetime_scale_feedback', lifetime_scale_feedback)
+np.save('var_scale_feedback', var_scale_feedback) 
 #%% TEsting
 #test_rates = np.load('T1T2_time.npy')
 test_rates = error_rates_tgate4040
@@ -315,3 +436,64 @@ print(np.reciprocal(E_mesh_test))
 #%% Printing the time (for finishing simulations)
 import datetime
 print(datetime.datetime.now().time())
+
+
+#%%
+# Scale all gates simultaneously
+lifetime_scale_all_gates = np.load('lifetime_scale_all_gates.npy')
+#lifetime_scale_single_qubit_gates = np.load('scale_single_qubit_gate.npy')
+lifetime_scale_two_qubit_gates = np.load('scale_two_qubit_gate.npy')
+lifetime_scale_measure = np.load('scale_measure.npy')
+lifetime_scale_feedback = np.load('scale_feedback.npy')
+#%% Plot gate stuff
+fig, ax = plt.subplots(1,1, figsize=(7, 5))
+
+
+# Subplot 1: Target gate times
+ax.plot(scalings[2:], lifetime_scale_all_gates*1e-3, '-o', label='All gates')
+#ax.plot(scalings, lifetime_scale_single_qubit_gates*1e-3, '-s', label='Single-qubit gates')
+ax.plot(scalings[2:], lifetime_scale_two_qubit_gates*1e-3, '-D', label='Two-qubit gates', zorder=5)
+ax.plot(scalings[2:], lifetime_scale_measure*1e-3, '-^', label='Measurements')
+ax.plot(scalings[2:], lifetime_scale_feedback*1e-3, '-v', label='Feedback')
+
+yerr=np.sqrt(var_scale_single_qubit_gates)
+ax.errorbar(scalings, lifetime_scale_single_qubit_gates*1e-3, yerr*1e-3, linestyle='-',marker='s', label='Single-qubit gates')
+
+
+ax.set_title(r'Logical Lifetime over scaling gate times')
+ax.set_xlabel('Scale factor of gate times')
+ax.set_ylabel(r'Logical lifetime $[\mu s]$')
+ax.legend()
+#%%
+ax.plot(scalings, (lifetime_scale_all_gates/lifetime_scale_all_gates)**-1, '-k')
+ax.plot(scalings, (lifetime_scale_single_qubit_gates/lifetime_scale_all_gates)**-1, 's', color='C0', label='Single-qubit gates')
+ax.plot(scalings, (lifetime_scale_two_qubit_gates/lifetime_scale_all_gates)**-1, 'D', color='C1', label='Two-qubit gates', zorder=5)
+ax.plot(scalings, (lifetime_scale_measure/lifetime_scale_all_gates)**-1, '^', color='C2', label='Measurements')
+ax.plot(scalings, (lifetime_scale_feedback/lifetime_scale_all_gates)**-1, 'v', color='C3', label='Feedback')
+
+#ax[1].set_title(r'R')
+ax.set_xlabel('Scale factor of gate times')
+ax.set_ylabel(r'Relative contribution to errors ')
+ax.legend()
+
+# Polyfits
+gate_scalings = [lifetime_scale_single_qubit_gates, lifetime_scale_two_qubit_gates,
+                 lifetime_scale_measure, lifetime_scale_feedback]
+shape_list = ['o', 'D', '^', 'v']
+for i in range(len(gate_scalings)):
+    y0 = gate_scalings[i]*1e-3
+    y1 = (gate_scalings[i]/lifetime_scale_all_gates)**-1
+    x = np.array(scalings)
+    #a = np.polyfit(x, y, 2) #m = slope, b = intercept.
+    m, b = np.polyfit(x,y0,1)
+    #ax[0].plot(x, m*x + b, ':', color='C'+str(i))
+    m, b = np.polyfit(x,y1,1)
+    #ax.plot(x, y1, shape_list[i], color='C'+str(i))
+    ax.plot(x, m*x + b, ':', color='C'+str(i))
+    #ax[1].plot(x, a[0]*x**2 + a[1]*x + a[2], color='C'+str(i+1)) #add line of best fit.
+#%%
+x = np.array([1, 3, 5, 7])
+y = np.array([ 6, 3, 9, 5 ])
+m, b = np.polyfit(x, y, 1) #m = slope, b = intercept.
+plt.plot(x, y, 'o') #create scatter plot.
+plt.plot(x, m*x + b) #add line of best fit.
