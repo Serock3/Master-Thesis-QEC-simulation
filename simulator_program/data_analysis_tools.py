@@ -36,7 +36,8 @@ from .idle_noise import *
 def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         reset=True, data_process_type='recovery', idle_noise=True, transpile=True, 
         snapshot_type='dm', device=None, device_properties=WACQT_device_properties,
-        encoding=True, theta=0, phi=0, pauliop='ZZZZZ', **kwargs):
+        encoding=True, theta=0, phi=0, pauliop='ZZZZZ', simulator_type='density_matrix',
+        **kwargs):
 
     """TODO: Update this description
     
@@ -119,7 +120,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                                        conditional=conditional,
                                        encoding=encoding, theta=theta, phi=phi,
                                        pauliop=pauliop, device=device,
-                                       **kwargs)
+                                       simulator_type=simulator_type, **kwargs)
 
     if transpile:
         circ = shortest_transpile_from_distribution(circ, print_cost=False,
@@ -156,6 +157,14 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                                          T1=T1, T2=T2, return_time=True)
 
     # Run the circuit
+    #results = execute(circ, Aer.get_backend('qasm_simulator'),
+    #    noise_model=noise_model, shots=n_shots).result()
+    simulator = Aer.get_backend('qasm_simulator')
+    try:
+        simulator.set_option('method', simulator_type)
+    except:
+        print('Invalid simulator type, defaulting to density_matrix')
+        simulator.set_option('method', 'density_matrix')
     results = execute(circ, Aer.get_backend('qasm_simulator'),
         noise_model=noise_model, shots=n_shots).result()
 
@@ -420,7 +429,7 @@ def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time,
     # Generate an array to store the data in
     sweep_lengths = [len(param) for param in noise_parameters]
     error_array = np.zeros(sweep_lengths)
-    MSE_array = np.zeros(sweep_lengths)
+    var_array = np.zeros(sweep_lengths)
 
     # Get all combinations of parameters
     index = 0
@@ -465,16 +474,16 @@ def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time,
         array_indexes = _get_array_indexes(index, sweep_lengths)
         error_array[array_indexes] = T
         #error_array[array_indexes] = error_rate[1]
-        #MSE_array[array_indexes] = MSE
+        var_array[array_indexes] = cov[0][0]
         index += 1
  
     # Save results to file
     # TODO: Save as txt instead? Make it both readable and have the parameters used
     if save is not None:
         np.save(save, error_array)
-        #np.save(save+'_MSE', MSE_array)
+        np.save(save+'_var', var_array)
     
-    return error_array#, MSE_array
+    return error_array, var_array
 
 def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         reset=True, recovery=True, conditional=False, snapshot_type='dm',

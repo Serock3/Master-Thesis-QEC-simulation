@@ -21,7 +21,7 @@ from qiskit import (QuantumCircuit,
                     execute,
                     Aer
                     )
-from qiskit.providers.aer.library import set_density_matrix
+from qiskit.providers.aer.library import set_density_matrix, set_statevector
 from qiskit.circuit import measure, reset
 from qiskit.providers.aer.library import save_density_matrix, save_expectation_value
 from typing import List
@@ -48,7 +48,8 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
                                 snapshot_type='density_matrix',
                                 include_barriers=True, conditional=True,
                                 initial_state=0, encoding=True, theta=0, phi=0,
-                                pauliop='ZZZZZ', device=None, **kwargs):
+                                pauliop='ZZZZZ', device=None, 
+                                simulator_type='density_matrix', **kwargs):
     """Returns the circuit for a full repeating stabilizer circuit, including encoding,
     n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
     """
@@ -71,7 +72,11 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
             circ.rz(phi, qbReg[0])
         circ.compose(encode_input_v2(registers), inplace=True)
     else:
-        circ.set_density_matrix(get_encoded_state(theta=theta, phi=phi))
+        if simulator_type == 'statevector':
+            circ.set_statevector(get_encoded_state(theta=theta, phi=phi))
+        else:
+            circ.set_density_matrix(get_encoded_state(theta=theta, phi=phi))
+        
 
             
     add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qbReg,
