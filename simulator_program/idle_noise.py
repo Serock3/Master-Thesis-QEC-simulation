@@ -12,12 +12,12 @@ if __package__:
     from .stabilizers import (encode_input_v2,
                                             get_empty_stabilizer_circuit)
     from . import custom_transpiler
-    from .custom_noise_models import WACQT_gate_times, GateTimes
+    from .custom_noise_models import WACQT_gate_times, GateTimes, standard_times
 else:
     from stabilizers import (encode_input_v2,
                                             get_empty_stabilizer_circuit)
     import custom_transpiler
-    from custom_noise_models import WACQT_gate_times, GateTimes    
+    from custom_noise_models import WACQT_gate_times, GateTimes, standard_times
 # %%
 
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
@@ -42,12 +42,12 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
     """
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times = gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times = gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     # Convert circuit to DAG
     dag = circuit_to_dag(circ)
@@ -146,12 +146,12 @@ def get_circuit_time(circ, gate_times={}):
     """
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times = gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times = gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     # Covert circuit to DAG
     dag = circuit_to_dag(circ)
@@ -335,12 +335,12 @@ def rebuild_circuit_up_to_barrier(circ, gate_times={}):
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times = gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times = gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     # Convert circuit to DAG
     dag = circuit_to_dag(circ)
@@ -448,7 +448,7 @@ if __name__ == '__main__':
     #                                               repeats=1, routing_method='sabre', initial_layout=None,
     #                                               translation_method=None, layout_method='sabre',
     #                                               optimization_level=1, **WAQCT_device_properties)
-    new_circ, times = add_idle_noise_to_circuit(circ, gate_times=WACQT_gate_times ,return_time=True, rename=False)
+    new_circ, times = add_idle_noise_to_circuit(circ, gate_times=standard_times ,return_time=True, rename=False)
     print(new_circ)
 
     results = execute(
