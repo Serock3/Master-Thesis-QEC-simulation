@@ -180,6 +180,7 @@ def add_snapshot_to_circuit(circ, snapshot_type, current_cycle,
     return circ
 
 
+
 def get_snapshot_label(snapshot_type, conditional, current_cycle):
     """Generate a label for snapshots, given its instructions"""
 
