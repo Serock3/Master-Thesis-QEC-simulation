@@ -13,6 +13,7 @@ from qiskit import Aer, QuantumRegister, AncillaRegister, ClassicalRegister
 
 
 # %%
+n_shots = 1024*1
 n_cycles = 10
 reset = True
 recovery = True
@@ -39,7 +40,7 @@ registers = StabilizerRegisters(qb, an, cr, readout)
 # Circuits
 circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
                                    recovery=recovery, flag=False,
-                                   snapshot_type=['dm', 'exp'],
+                                   snapshot_type=['dm','exp'],
                                    conditional=conditional,
                                    encoding=encoding, theta=theta, phi=phi,
                                    pauliop=pauliop)
@@ -50,7 +51,6 @@ circ = shortest_transpile_from_distribution(circ, print_cost=False,
 circ, time = add_idle_noise_to_circuit(circ, gate_times=gate_times,
                                          T1=T1, T2=T2, return_time=True)
 # %% Run
-n_shots = 1024*8
 results = execute(circ, Aer.get_backend('aer_simulator'),
                   noise_model=noise_model, shots=n_shots).result()
 
@@ -70,24 +70,55 @@ exp = []
 for current_cycle in range(n_cycles+1):
     exp.append(results.data()['exp_' + str(current_cycle)])
 
-times = np.array([time['dm_'+ str(n)] for n in range(n_cycles)]+[time['end']])
-fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-ax.plot(times, fidelities, '^',color = colors(0),label='FID')
+#%%
+theta = np.pi
+circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
+                                   recovery=recovery, flag=False,
+                                   snapshot_type=['dm','exp'],
+                                   conditional=conditional,
+                                   encoding=encoding, theta=theta, phi=phi,
+                                   pauliop=pauliop)
+
+
+circ = shortest_transpile_from_distribution(circ, print_cost=False,
+                                            **WACQT_device_properties)
+circ, time = add_idle_noise_to_circuit(circ, gate_times=gate_times,
+                                         T1=T1, T2=T2, return_time=True)
+results = execute(circ, Aer.get_backend('aer_simulator'),
+                  noise_model=noise_model, shots=n_shots).result()
+exp_1 = []
+for current_cycle in range(n_cycles+1):
+    exp_1.append(results.data()['exp_' + str(current_cycle)])
+#%%
+times = np.array([time['exp_'+ str(n)] for n in range(n_cycles)]+[time['end']])
+fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+ax.plot(times/1000, fidelities, '^',color = colors(0),label=r'$|0_L\rangle$')
 
 p0 = (T1, 0, 0.9) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[1:], fidelities[1:], p0)
 T, c, A = pars
 
-ax.plot(times, monoExp(times,*pars), '--',color = colors(0),label=r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} ns, A={A:.2f}, c={c:.3f}')
+ax.plot(times/1000, monoExp(times,*pars), '--',color = colors(0),label=r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.0f} μs, A={A:.2f}, c={c:.3f}')
 
 
-ax.plot(times, exp, 'o',color = colors(1) ,label='<0|Z|0>')
+ax.plot(times/1000, exp, 'o',color = colors(1) ,label=r'$|0_L\rangle$')
 
 p0 = (T1, 0, 0.9) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[1:], exp[1:], p0)
 T, c, A= pars
 
-ax.plot(times, monoExp(times,*pars), '--',color = colors(1),label=r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} ns, A={A:.2f}, c={c:.3f}')
+ax.plot(times/1000, monoExp(times,*pars), '--',color = colors(1),label=r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.0f} μs, A={A:.2f}, c={c:.3f}')
+
+ax.plot(times/1000, exp_1, 'o',color = colors(2) ,label=r'$|1_L\rangle$')
+
+p0 = (T1, 0, 0.9) # start with values near those we expect*
+pars, cov = scipy.optimize.curve_fit(monoExp, times[1:], exp_1[1:], p0)
+T, c, A= pars
+
+ax.plot(times/1000, monoExp(times,*pars), '--',color = colors(2),label=r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.0f} μs, A={A:.2f}, c={c:.3f}')
 
 ax.legend()
+ax.set_xlabel(r'Time $[\mu s]$')
+ax.set_ylabel(r'Prob. of initial state after projection')
+plt.savefig('fidvsexp.pdf')
 # %%
