@@ -28,7 +28,7 @@ WACQT_device_properties_old = {
 
 # WACQT 7 qb UPDATED BASIS
 basis_gates = ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy', 'iswap', 'cz',
-    'save_expval', 'save_density_matrix']
+    'save_expval', 'save_density_matrix', 'set_density_matrix', 'save_expval_var']
 WACQT_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map}
 
@@ -77,6 +77,9 @@ def shortest_transpile_from_distribution(circuit,
                                          layout_method='sabre',
                                          optimization_level=1,
                                          **kwargs):
+    """Transpile 'repeats' number of times, and chose the best one according to the cost function
+    (defaults to circuit time).
+    """
     
     # Here we modify the kwargs dict so we can pass it to transpile() with our default values
 

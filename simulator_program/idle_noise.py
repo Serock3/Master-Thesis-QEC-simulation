@@ -12,12 +12,12 @@ if __package__:
     from .stabilizers import (encode_input_v2,
                                             get_empty_stabilizer_circuit)
     from . import custom_transpiler
-    from .custom_noise_models import WACQT_gate_times, GateTimes
+    from .custom_noise_models import WACQT_gate_times, GateTimes, standard_times
 else:
     from stabilizers import (encode_input_v2,
                                             get_empty_stabilizer_circuit)
     import custom_transpiler
-    from custom_noise_models import WACQT_gate_times, GateTimes    
+    from custom_noise_models import WACQT_gate_times, GateTimes, standard_times
 # %%
 
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
@@ -42,12 +42,12 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
     """
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times = gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times = gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     # Convert circuit to DAG
     dag = circuit_to_dag(circ)
@@ -64,6 +64,7 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
     for reg in circ.qubits + circ.clbits:
         time_passed[reg] = 0
 
+    correction_step=False
     for node in dag.op_nodes():
         # Set cargs to entire classical conditional register if it exists, otherwise to the cargs
         cargs = node.condition[0] if node.condition else node.cargs
@@ -72,6 +73,32 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         gate_args = []
         for arg in node.qargs+list(cargs):
             gate_args.append(arg)
+
+        try:
+            # Old method (Assume instant classical feedback)
+            #gate_time = full_gate_times[node.name] if not node.condition else 0
+            
+            # Add idle time before any correction gates. This assumes that only
+            # the correction step has condition and that all correction gates
+            # in a cycle are in one "block" of nodes.
+            if not node.condition:
+                gate_time = full_gate_times[node.name]
+                correction_step = False
+            # First conditional gate in correction step
+            elif node.condition and not correction_step:
+                gate_time = 0
+                correction_step = True
+
+                # Add feedback time to all bits (Only to be applied once per cycle)
+                for reg in circ.clbits:
+                    time_passed[reg] += full_gate_times['feedback']
+            else: 
+                gate_time = 0
+            
+        except KeyError as op:
+            print(
+                f'WARNING! No operation duration specified for {op.args}, assuming instant.')
+            gate_time = 0
 
         latest_time = max([time_passed[gate_arg] for gate_arg in gate_args])
         # Apply idle noise to qargs
@@ -84,14 +111,7 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
                     thrm_relax.name = f'Idle {time_diff}ns'
                 new_circ.append(thrm_relax, [qarg])
 
-        # Assume instant if classical condition exists TODO: Better solution?
-
-        try:
-            gate_time = full_gate_times[node.name] if not node.condition else 0
-        except KeyError as op:
-            print(
-                f'WARNING! No operation duration specified for {op.args}, assuming instant.')
-            gate_time = 0
+        
 
         # Advance the time for the qubits included in the gate
         for gate_arg in gate_args:
@@ -126,12 +146,12 @@ def get_circuit_time(circ, gate_times={}):
     """
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times = gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times = gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     # Covert circuit to DAG
     dag = circuit_to_dag(circ)
@@ -315,12 +335,12 @@ def rebuild_circuit_up_to_barrier(circ, gate_times={}):
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = WACQT_gate_times.get_gate_times(custom_gate_times = gate_times)
+        full_gate_times = standard_times.get_gate_times(custom_gate_times = gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
-        warnings.warn('Invalid gate times, assuming WACQT_gate_times')
-        full_gate_times = WACQT_gate_times
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
 
     # Convert circuit to DAG
     dag = circuit_to_dag(circ)
@@ -428,7 +448,7 @@ if __name__ == '__main__':
     #                                               repeats=1, routing_method='sabre', initial_layout=None,
     #                                               translation_method=None, layout_method='sabre',
     #                                               optimization_level=1, **WAQCT_device_properties)
-    new_circ, times = add_idle_noise_to_circuit(circ, gate_times=WACQT_gate_times ,return_time=True, rename=False)
+    new_circ, times = add_idle_noise_to_circuit(circ, gate_times=standard_times ,return_time=True, rename=False)
     print(new_circ)
 
     results = execute(

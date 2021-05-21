@@ -10,15 +10,16 @@ from qiskit import (QuantumCircuit,
                     execute,
                     Aer
                     )
-from simulator_program.custom_transpiler import *
+from qiskit.providers.aer.library.set_instructions import set_density_matrix
+from qiskit.circuit import measure, reset
+
+from simulator_program import custom_noise_models, idle_noise
 from typing import List
 from qiskit.quantum_info import Statevector, state_fidelity
 from simulator_program import custom_noise_models
-from simulator_program.idle_noise import *
 from simulator_program.post_select import get_trivial_post_select_counts, get_trivial_post_select_den_mat, get_trivial_exp_value
 from simulator_program.stabilizers import add_snapshot_to_circuit
 from matplotlib import pyplot as plt
-from qiskit.quantum_info.operators.symplectic.pauli import Pauli
 # %% Logical states (for initialization)
 
 
@@ -105,7 +106,7 @@ def pipelined_delft(n_cycles=1, reset=True, **kwargs):
             circ.reset(anReg[2])
         circ.barrier()
         add_snapshot_to_circuit(circ, ['exp', 'dm'], cycle+1, conditional=[
-                            True, False], qubits=qbReg, pauliop='ZZII')
+            True, False], qubits=qbReg, pauliop='ZZII')
         # circ.save_density_matrix(qubits=list(
         #     qbReg), label='stabilizer_' + str(cycle), conditional=True)
         # circ.save_expectation_value(
@@ -113,26 +114,37 @@ def pipelined_delft(n_cycles=1, reset=True, **kwargs):
     return circ
 # %% Custom noise models
 
-# Info of T1/T2 and gate times is the Mendeley paper
-WACQT_gate_times = custom_noise_models.GateTimes(
-    single_qubit_default=20, two_qubit_default=200,
-    custom_gate_times={'u1': 0, 'z': 0, 'measure': 500})
 
+# Info of T1/T2 and gate times is the Mendeley paper
+Delft_gate_times = custom_noise_models.GateTimes(
+    single_qubit_default=20, two_qubit_default=60,
+    custom_gate_times={'measure': 540})
+
+# Relaxation time (μs)
+T1 = [27e3, 44e3, 32e3, 102e3, 38e3, 58e3, 43e3]
+# Ramsey dephasing time,T∗2(μs)
+T2star = [44e3, 55e3, 51e3, 103e3, 55e3, 60e3, 52e3]
+# Echo dephasing time (μs)
+T2 = [59e3, 70e3, 55e3, 117e3, 69e3, 79e3, 73e3]
+
+Delft_noise_model = custom_noise_models.thermal_relaxation_model_per_qb(
+    T1, [52e3, 70e3, 55e3, 117e3, 69e3, 79e3, 73e3], gate_times=Delft_gate_times)
 # %% Demo
 if __name__ == '__main__':
-    n_cycles = 10
+    n_cycles = 15
     circ = pipelined_delft(n_cycles)
     # display(circ.draw(output='mpl'))
 
-    n_shots = 100
+    n_shots = 1024*2
     simulator = Aer.get_backend('aer_simulator')  # qasm_simulator
     simulator.set_option("method", 'density_matrix')
     # circ = transpile(circ, simulator)
 
     # Run and get saved data
-    results = simulator.run(add_idle_noise_to_circuit(circ),
+    # TODO: add_idle_noise_to_circuit does not work with specific qb params!
+    results = simulator.run(idle_noise.add_idle_noise_to_circuit(circ),
                             shots=n_shots,
-                            noise_model=thermal_relaxation_model_V2()).result()
+                            noise_model=Delft_noise_model).result()
 
     trivial_key = '101'  # A trivial syndrome is given by 101 and not 000 here
     correct_state = logical_states(None)[0]
@@ -141,10 +153,8 @@ if __name__ == '__main__':
     select_counts = get_trivial_post_select_counts(
         results.get_counts(), n_cycles, trivial_key)
 
-    trivial_key_list = [hex(int(trivial_key*(current_cycle+1), 2))
-                        for current_cycle in range(n_cycles)]
     exp_values = get_trivial_exp_value(results, n_cycles, trivial_key)
-    
+
     fig, axs = plt.subplots(2, figsize=(14, 10))
     ax1 = axs[0]
     ax2 = axs[1]
@@ -158,12 +168,14 @@ if __name__ == '__main__':
     ax1.set_ylim(0, 1)
     ax1.legend()
     ax1.grid(linewidth=1)
+    # ax1.set_yscale('log')
 
-    ax2.plot(range(n_cycles+1), select_counts, 'o-', label='No transpilation')
+    ax2.plot(range(n_cycles+1), np.array(select_counts) /
+             n_shots, 'o-', label='Model 1')
     ax2.set_xlabel(r'Error detection cycle $n$')
     ax2.set_ylabel(r'Post select fraction')
     ax2.legend()
     ax2.grid(linewidth=1)
-    ax2.set_yscale('log')
+    # ax2.set_yscale('log')
 
 # %%
