@@ -248,7 +248,7 @@ p0 = (T1, 0) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[:20], exp_0[:20], p0)
 T, c = pars
 # %% plot <Z>
-fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+fig, ax = plt.subplots(1, 2, figsize=(7, 5))
 ax[0].plot(times, exp_0, label=r'$|0_L\rangle$')
 ax[0].plot(times, monoExp(times,*pars), '--',label=r'$e^{-t/T}$,'+f' T={T:.0f} ns')
 ax[0].plot(times, exp_1, label=r'$|1_L\rangle$')
@@ -281,7 +281,7 @@ p0 = (T1, 0) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[:60], exp_plus[:60], p0)
 T, c = pars
 
-fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+fig, ax = plt.subplots(1, 2, figsize=(7, 5))
 ax[0].plot(times, exp_0, label=r'$|0_L\rangle$')
 ax[0].plot(times, exp_1, label=r'$|1_L\rangle$')
 ax[0].plot(times, exp_plus, label=r'$|+_L\rangle$')
@@ -300,24 +300,27 @@ ax[1].legend()
 p0 = (T1, 0) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[:60], fid_1[:60], p0)
 T, c = pars
-fig, ax = plt.subplots(1, 2, figsize=(16, 8))
-ax[0].plot(times, fid_0, label=r'$|0_L\rangle$')
-ax[0].plot(times, fid_1, label=r'$|1_L\rangle$')
-ax[0].plot(times, fid_plus, label=r'$|+_L\rangle$')
-ax[0].plot(times, monoExp(times,*pars), '--',label=r'$e^{-t/T}$,'+f' T={T:.0f} ns')
-ax[0].plot(times, times*0+1/16, label=r'$1/16$')
-ax[0].set_xlabel('Time [ns]')
-ax[0].set_ylabel(r'Prob of initial state')
-ax[0].legend()
-
+fig, ax = plt.subplots(1, 1, figsize=(3.5, 3.5))
+ax.plot(times/1000, fid_0, label=r'$|0_L\rangle$')
+ax.plot(times/1000, fid_1, label=r'$|1_L\rangle$')
+ax.plot(times/1000, fid_plus, label=r'$|+_L\rangle$')
+ax.plot(times/1000, monoExp(times,*pars), '--',label=r'$(1-c)e^{-t/T}+c$,'+f' T={T/1000:.0f} μs')
+ax.plot(times/1000, times*0+1/16, label=r'$1/16$')
+ax.set_xlabel(r'Time $[\mu s]$')
+ax.set_ylabel(r'Prob. of initial state')
+ax.legend()
+plt.tight_layout()
+plt.savefig('decay_cardinal.pdf')
 # Projected fid
-# fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-ax[1].plot(times, fid_0_L, label=r'$|0_L\rangle$')
-ax[1].plot(times, fid_1_L, label=r'$|1_L\rangle$')
-ax[1].plot(times, fid_plus_L, label=r'$|+_L\rangle$')
-ax[1].set_xlabel('Time [ns]')
-ax[1].set_ylabel(r'Prob of initial state after projection')
-ax[1].legend()
+fig, ax = plt.subplots(1, 1, figsize=(3.5, 3.5))
+ax.plot(times/1000, fid_0_L, label=r'$|0_L\rangle$')
+ax.plot(times/1000, fid_1_L, label=r'$|1_L\rangle$')
+ax.plot(times/1000, fid_plus_L, label=r'$|+_L\rangle$')
+ax.set_xlabel(r'Time $[\mu s]$')
+ax.set_ylabel(r'Prob. of initial state after projection')
+ax.legend()
+plt.tight_layout()
+plt.savefig('decay_proj.pdf')
 # %% Test hypothesis of P_L * F_L = F_phys
 res_0 = get_idle_encoded_513(times, snapshot_type=['dm'], T1=T1, T2=T2)
 rho = res_0.data()['dm_'+str(20)]
