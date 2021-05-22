@@ -27,19 +27,19 @@ from simulator_program.post_process import *
 from simulator_program.idle_noise import *
 
 
-#%% TEST encoding fidelities
-fid, circ = encoding_fidelity(1, gate_times=WACQT_target_times, T1=40e3, T2=60e3,
-        reset=True, idle_noise=True, theta=np.pi, phi=0,
-        snapshot_type='dm', device='Nah', pauliop='ZZZZZ')
-print(fid)
+#% TEST encoding fidelities
+#fid, circ = encoding_fidelity(1, gate_times=WACQT_target_times, T1=40e3, T2=60e3,
+#        reset=True, idle_noise=True, theta=np.pi, phi=0,
+#        snapshot_type='dm', device='Nah', pauliop='ZZZZZ')
+#print(fid)
 
 
 #%% Test run
-n_cycles=12
+n_cycles=8
 n_shots=2048
 
 fid, time =fidelity_from_scratch(n_cycles, n_shots, gate_times=standard_times,
-    reset=False, data_process_type='recovery',
+    reset=True, data_process_type='post_process',
     idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
     transpile=False, pauliop='ZZZZZ', device_properties=WACQT_device_properties,
     device=None, simulator_type='density_matrix')

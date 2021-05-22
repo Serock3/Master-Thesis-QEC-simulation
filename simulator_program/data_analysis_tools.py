@@ -210,25 +210,27 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         select_counts = get_trivial_post_select_counts(
             results.get_counts(), n_cycles)
         return fidelities, select_counts, time
-
+    # TODO: Update post-process to handle current cycle properly
+    # Currently it assumes the snapshot after 1st cycle is named "0",
+    # which is our old way. 
     elif data_process_type == 'post_process':
-        fidelities = []
-        for current_cycle in range(n_cycles+1):
-            print("\nCycle ", current_cycle)
+        fidelities = [1.0]
+        for current_cycle in range(n_cycles):
+            #print("\nCycle ", current_cycle)
             counts = get_subsystem_counts_up_to_cycle(
-                results.get_counts(), current_cycle)
+                results.get_counts(), current_cycle+1)
             fid = 0
             count_sum = 0
             # TODO: Retrieve the name from function instead
-            data = results.data()['dm_con_' + str(current_cycle)]
+            data = results.data()['dm_con_' + str(current_cycle+1)]
             for memory in data.keys():
                 den_mat = data[memory]
-                #memory = selected_state['memory']
+                #print("\n",memory)
                 fid += state_fidelity(trivial, post_process_den_mat(
                     den_mat, memory, current_cycle))*counts[int(memory, 16)]
                 count_sum += counts[int(memory, 16)]
-                print(memory)
-                print(counts[int(memory, 16)])
+                
+                #print(counts[int(memory, 16)])
                 #print(state_fidelity(trivial, post_process_den_mat(
                 #    den_mat, memory, current_cycle)))
             fidelities.append(fid/n_shots)

@@ -25,6 +25,8 @@ syndrome_table = [[],
                   [(XGate, 4), (ZGate, 4)],
                   [(XGate, 3), (ZGate, 3)]]
 
+# Coversion of no-reset syndromes into reset equivalents
+conversion_table = [0, 3, 6, 5, 12, 15, 10, 9, 8, 11, 14, 13, 2, 1]
 # %% Misc functions
 
 def _filter_readout_errors_v1(syndromes, P_e, P_r):
@@ -38,6 +40,17 @@ def _get_new_syndromes(syndromes):
     return [syndromes[0]] + [syndromes[i-1] ^ syndromes[i]
                              for i in range(1, len(syndromes))]
 
+
+def _remap_syndromes(syndromes):
+    """Remaps the syndromes of no-reset onto their reset equivalence."""
+
+    # Invert values 
+    for i in reversed(range(1,len(syndromes))):
+        if syndromes[i-1] >= 8:
+            syndromes[i] = 15-syndromes[i]
+    #return syndromes
+    return [conversion_table[syndrome] for syndrome in syndromes]
+print(_remap_syndromes([0, 11, 13]))
 # %% Post processing statevectors
 def post_process_statevec(statevector, syndromes):
     """Version two of post-processing. Takes one statevector and it corresponding syndrome,
@@ -142,19 +155,23 @@ def split_mem_into_syndromes(memory, current_cycle, cl_reg_size=4):
             2**cl_reg_size for cycle in range(current_cycle+1)]
 
 
-def get_syndromes_den_mat(memory, current_cycle):
+def get_syndromes_den_mat(memory, current_cycle,reset=True):
     """Returns the integer syndromes for each new error detected a every cycle up to current_cycle.
 
     Args:
         memory (str): memory from a density matrix snapshot taken a current_cycle, written as a string of a hexadecimal number
         current_cycle (int): current cycle in a repeated stabilizer measurement circuit
-
+        reset (bool): Whether circuit is run with ancilla resets
     Returns:
         list[int]: list of syndromes corresponding to the new errors detected at every cycle
     """
 
     # Split the hex number into groups of cl_reg_size bit numbers and covert to int
     syndromes = split_mem_into_syndromes(memory, current_cycle)
+
+    # Re-map the syndromes to those with resetting ancilla
+    if reset:
+        syndromes = _remap_syndromes(syndromes)
 
     # Convert the (running) total syndromes to new syndromes
     syndromes = _get_new_syndromes(syndromes)
