@@ -48,7 +48,7 @@ def _remap_syndromes(syndromes):
             syndromes[i] = 15-syndromes[i]
     #return syndromes
     return [conversion_table[syndrome] for syndrome in syndromes]
-print(_remap_syndromes([0, 11, 13]))
+# print(_remap_syndromes([0, 11, 13]))
 
 # %% Post processing density matrises
 def get_unitary_matrix_for_correction(syndromes, include_ancillas=False):
@@ -102,7 +102,7 @@ def get_syndromes_den_mat(memory, current_cycle,reset=True):
     syndromes = split_mem_into_syndromes(memory, current_cycle)
 
     # Re-map the syndromes to those with resetting ancilla
-    if reset:
+    if not reset:
         syndromes = _remap_syndromes(syndromes)
 
     # Convert the (running) total syndromes to new syndromes
