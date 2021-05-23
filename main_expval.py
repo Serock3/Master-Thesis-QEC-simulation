@@ -35,16 +35,16 @@ from simulator_program.idle_noise import *
 
 
 #%% Test run
-n_cycles=8
-n_shots=2048
+n_cycles=5
+n_shots=1024*4
 
 fid, time =fidelity_from_scratch(n_cycles, n_shots, gate_times=standard_times,
     reset=True, data_process_type='post_process',
     idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
     transpile=False, pauliop='ZZZZZ', device_properties=WACQT_device_properties,
     device=None, simulator_type='density_matrix')
-
-
+time = [time['dm_con_'+str(i)] for i in range(n_cycles+1)]
+plt.plot(time,fid)
 # %%
 # Settings to used across most configurations
 n_cycles = 15

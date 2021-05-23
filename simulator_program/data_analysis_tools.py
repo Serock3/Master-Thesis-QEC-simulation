@@ -221,26 +221,36 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     # Currently it assumes the snapshot after 1st cycle is named "0",
     # which is our old way. 
     elif data_process_type == 'post_process':
-        fidelities = [1.0]
-        for current_cycle in range(n_cycles):
-            #print("\nCycle ", current_cycle)
-            counts = get_subsystem_counts_up_to_cycle(
-                results.get_counts(), current_cycle+1)
-            fid = 0
-            count_sum = 0
-            # TODO: Retrieve the name from function instead
-            data = results.data()['dm_con_' + str(current_cycle+1)]
-            for memory in data.keys():
-                den_mat = data[memory]
-                #print("\n",memory)
-                fid += state_fidelity(trivial, post_process_den_mat(
-                    den_mat, memory, current_cycle))*counts[int(memory, 16)]
-                count_sum += counts[int(memory, 16)]
+        def get_av_fidelities(states_and_counts, correct_state, n_shots):
+            av_fidelities = []
+            for cycle in states_and_counts:
+                fid = 0
+                for state, counts in cycle:
+                    fid += state_fidelity(state, correct_state)*counts
+                av_fidelities.append(fid/n_shots)
+            return av_fidelities
+        fidelities = get_av_fidelities(get_states_and_counts(
+            results, n_cycles, post_process=True), trivial, n_shots)
+        # fidelities = [1.0]
+        # for current_cycle in range(n_cycles):
+        #     #print("\nCycle ", current_cycle)
+        #     counts = get_subsystem_counts_up_to_cycle(
+        #         results.get_counts(), current_cycle+1)
+        #     fid = 0
+        #     count_sum = 0
+        #     # TODO: Retrieve the name from function instead
+        #     data = results.data()['dm_con_' + str(current_cycle+1)]
+        #     for memory in data.keys():
+        #         den_mat = data[memory]
+        #         #print("\n",memory)
+        #         fid += state_fidelity(trivial, post_process_den_mat(
+        #             den_mat, memory, current_cycle))*counts[int(memory, 16)]
+        #         count_sum += counts[int(memory, 16)]
                 
-                #print(counts[int(memory, 16)])
-                #print(state_fidelity(trivial, post_process_den_mat(
-                #    den_mat, memory, current_cycle)))
-            fidelities.append(fid/n_shots)
+        #         #print(counts[int(memory, 16)])
+        #         #print(state_fidelity(trivial, post_process_den_mat(
+        #         #    den_mat, memory, current_cycle)))
+        #     fidelities.append(fid/n_shots)
         return fidelities, time
     else:
         print('Warning: No matching data_process_type')
