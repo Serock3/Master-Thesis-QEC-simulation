@@ -217,9 +217,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         select_counts = get_trivial_post_select_counts(
             results.get_counts(), n_cycles)
         return fidelities, select_counts, time
-    # TODO: Update post-process to handle current cycle properly
-    # Currently it assumes the snapshot after 1st cycle is named "0",
-    # which is our old way. 
+         
     elif data_process_type == 'post_process':
         def get_av_fidelities(states_and_counts, correct_state, n_shots):
             av_fidelities = []
