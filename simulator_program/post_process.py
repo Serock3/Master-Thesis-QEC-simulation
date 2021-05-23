@@ -1,8 +1,10 @@
 # %% Imports
 if __package__:
     from .post_select import get_subsystem_counts_up_to_cycle
+    from .stabilizers import get_snapshot_label
 else:
     from post_select import get_subsystem_counts_up_to_cycle
+    from stabilizers import get_snapshot_label
 
 from qiskit.circuit.library import XGate, ZGate
 from qiskit import QuantumCircuit, execute, Aer
@@ -27,85 +29,15 @@ syndrome_table = [[],
 
 # %% Misc functions
 
-def _filter_readout_errors_v1(syndromes, P_e, P_r):
-    # TODO: Make this?
-    pass
-
 def _get_new_syndromes(syndromes):
     """Convert a list of syndromes (from cycles of stabilizer measurements)
     into the corresponding list of syndromes for the errors that were applied at every cycle
     to cause the total syndrome."""
-    return [syndromes[0]] + [syndromes[i-1] ^ syndromes[i]
-                             for i in range(1, len(syndromes))]
+    return [([0]+syndromes)[i] ^ syndromes[i]
+                             for i in range(0, len(syndromes))]
 
-# %% Post processing statevectors
-def post_process_statevec(statevector, syndromes):
-    """Version two of post-processing. Takes one statevector and it corresponding syndrome,
-    applies post-processing and returns a corrected statevector.
-
-    Processes the syndromes using XOR to find where new errors are introduced.
-
-    Args:
-        statevector (list): comples statevector
-        syndromes (list(int)): list of syndromes as integers ('0'th element corresponds to 'stabilizer_' etc)
-
-    Returns:
-        List[float]: the processed statevector
-    """
-
-    # Convert to only new syndromes
-    syndromes = _get_new_syndromes(syndromes)
-
-    circ = QuantumCircuit(int(np.log2(statevector.shape[0])))
-    circ.initialize(statevector, [circ.qubits[i]
-                                  for i in range(7)])  # [2,3,4,5,6,0,1]
-
-    for syndrome in syndromes:
-        for correction_strategy in syndrome_table[syndrome]:
-            circ.append(correction_strategy[0](), [correction_strategy[1]])
-    results = execute(
-        circ,
-        Aer.get_backend('statevector_simulator'),
-    ).result()
-
-    return results.get_statevector()
-
-
-def post_process_statevec_all_shots(results, n_cycles):
-    """Wrapper for post_process_statvec that processes every statevector for a repeated stabilizer cycle
-    simulation with memory=True.
-
-    Args:
-        results (Results object): results from completed simulation
-        n_cycles (int): number of stabilizer cycles in simulated circuit
-
-    Returns:
-        List[List[float]]: List of corrected statvectors where first index indicates cycle, second shots
-    """
-
-    # TODO: If this crashes a lot, make it yield instead of return? (Or just return fidelities instead)
-    mem = results.get_memory()
-    shots = len(mem)
-    statevector_dim = results.data(
-    )['snapshots']['statevector']['stabilizer_0'][0].shape[0]
-    # TODO: Make this format same as with in other places?
-    post_processed_states = np.empty(
-        (n_cycles, shots, statevector_dim), dtype=np.complex_)
-    for current_cycle in range(n_cycles):
-        statevectors = results.data(
-        )['snapshots']['statevector']['stabilizer_' + str(current_cycle)]
-        assert shots == len(statevectors)
-        for shot in range(shots):
-            # Convert the text format to integers. The order is from right to left, and the last entry is for final measurements ans should be removed
-            syndromes = [int(syn, 2) for syn in reversed(
-                mem[shot].split()[-(1+current_cycle):])]
-            post_processed_states[current_cycle][shot] = post_process_statevec(
-                statevectors[shot], syndromes)
-
-    return post_processed_states
 
 # %% Post processing density matrises
-
 def get_unitary_matrix_for_correction(syndromes, include_ancillas=False):
     """Creates the unitary matrix corresponding to the correction procedure for a syndrome.
     include_ancillas adds two additional qubits to the unitary matrix, their states are not affected.
@@ -139,7 +71,7 @@ def split_mem_into_syndromes(memory, current_cycle, cl_reg_size=4):
     into current_cycle + 1 groups of cl_reg_size bits and convert to integers."""
 
     return [(int(memory, 16) >> cl_reg_size*cycle) %
-            2**cl_reg_size for cycle in range(current_cycle+1)]
+            2**cl_reg_size for cycle in range(current_cycle)]
 
 
 def get_syndromes_den_mat(memory, current_cycle):
@@ -177,9 +109,9 @@ def get_states_and_counts_in_cycle(results, current_cycle, post_process=True):
 
     subsystem_counts = get_subsystem_counts_up_to_cycle(
         results.get_counts(), current_cycle)
-    for selected_state in results.data()['snapshots']['density_matrix']['stabilizer_' + str(current_cycle)]:
-        den_mat = selected_state['value']
-        memory = selected_state['memory']
+    states_cycle = results.data()[get_snapshot_label('dm',True,current_cycle)]
+    for memory in states_cycle:
+        den_mat = states_cycle[memory]
         state = post_process_den_mat(
             den_mat, memory, current_cycle) if post_process else den_mat
         yield (state, subsystem_counts[int(memory, 16)])
@@ -190,36 +122,74 @@ def get_states_and_counts(results, n_cycles, post_process=True):
     the cycle, and the resulting 'list' contains pairs of density matrices and corresponding counts"""
 
     # NOTE: Should this be responsible for post_process = False? Can you split it into several funcs?
-    for current_cycle in range(n_cycles):
+    for current_cycle in range(n_cycles+1):
         yield get_states_and_counts_in_cycle(results, current_cycle, post_process)
 
+# %% Post processing statevectors
+def post_process_statevec(statevector, syndromes):
+    """Version two of post-processing. Takes one statevector and it corresponding syndrome,
+    applies post-processing and returns a corrected statevector.
 
-# NOTE: I made the function yield instead, if it doesn't work revert to the code below, to be removed
-# def get_states_and_counts(results, n_cycles, post_process=True):
-#     # NOTE: Should this be responsible for post_process = False? Can you split it into several funcs?
-#     # NOTE: If this becomes too heavy (since it duplicates the amount of memory needed to store the matrices)
-#     # then maybe have it yield one at a time instead of returning?
-#     # Or re-implement the fidelity calculation commented out below
+    Processes the syndromes using XOR to find where new errors are introduced.
 
-#     # running_fid = []
-#     states_and_counts = [None]*n_cycles
-#     for current_cycle in range(n_cycles):
-#         counts = get_subsystem_counts_up_to_cycle(
-#             results.get_counts(), current_cycle)
-#         # fid = 0
-#         tmp = []
-#         for selected_state in results.data()['snapshots']['density_matrix']['stabilizer_' + str(current_cycle)]:
-#             den_mat = selected_state['value']
-#             memory = selected_state['memory']
-#             # fid += state_fidelity(correct_state, post_process_den_mat(den_mat, memory, current_cycle))*counts[int(memory,16)]
-#             state = post_process_den_mat(
-#                 den_mat, memory, current_cycle) if post_process else den_mat
-#             tmp.append((state, counts[int(memory, 16)]))
-#         # running_fid.append(fid)
-#         states_and_counts[current_cycle] = tmp
-#     return states_and_counts
+    Args:
+        statevector (list): comples statevector
+        syndromes (list(int)): list of syndromes as integers ('0'th element corresponds to 'stabilizer_' etc)
+
+    Returns:
+        List[float]: the processed statevector
+    """
+    warnings.warn("Outdated. Use density matrix version.", DeprecationWarning)
+    # Convert to only new syndromes
+    syndromes = _get_new_syndromes(syndromes)
+
+    circ = QuantumCircuit(int(np.log2(statevector.shape[0])))
+    circ.initialize(statevector, [circ.qubits[i]
+                                  for i in range(7)])  # [2,3,4,5,6,0,1]
+
+    for syndrome in syndromes:
+        for correction_strategy in syndrome_table[syndrome]:
+            circ.append(correction_strategy[0](), [correction_strategy[1]])
+    results = execute(
+        circ,
+        Aer.get_backend('statevector_simulator'),
+    ).result()
+
+    return results.get_statevector()
 
 
+def post_process_statevec_all_shots(results, n_cycles):
+    """Wrapper for post_process_statvec that processes every statevector for a repeated stabilizer cycle
+    simulation with memory=True.
+
+    Args:
+        results (Results object): results from completed simulation
+        n_cycles (int): number of stabilizer cycles in simulated circuit
+
+    Returns:
+        List[List[float]]: List of corrected statvectors where first index indicates cycle, second shots
+    """
+    warnings.warn("Outdated. Use density matrix version.", DeprecationWarning)
+    # TODO: If this crashes a lot, make it yield instead of return? (Or just return fidelities instead)
+    mem = results.get_memory()
+    shots = len(mem)
+    statevector_dim = results.data(
+    )['snapshots']['statevector']['stabilizer_0'][0].shape[0]
+    # TODO: Make this format same as with in other places?
+    post_processed_states = np.empty(
+        (n_cycles, shots, statevector_dim), dtype=np.complex_)
+    for current_cycle in range(n_cycles):
+        statevectors = results.data(
+        )['snapshots']['statevector']['stabilizer_' + str(current_cycle)]
+        assert shots == len(statevectors)
+        for shot in range(shots):
+            # Convert the text format to integers. The order is from right to left, and the last entry is for final measurements ans should be removed
+            syndromes = [int(syn, 2) for syn in reversed(
+                mem[shot].split()[-(1+current_cycle):])]
+            post_processed_states[current_cycle][shot] = post_process_statevec(
+                statevectors[shot], syndromes)
+
+    return post_processed_states
 # %Code to test above, to be removed
 if __name__ == "__main__":
     from qiskit import QuantumRegister, AncillaRegister
