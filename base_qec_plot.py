@@ -65,13 +65,20 @@ fid_0_ps, counts, time = data_analysis_tools.fidelity_from_scratch(n_cycles, n_s
 times_ps = np.array([time['dm_con_' + str(n)] for n in range(n_cycles)]+[time['end']])
 print("Post selection done")
 
-# Post selection per decoding 
+# Post selection perf decoding 
 fid_0_ps_perf, counts_perf, time = data_analysis_tools.perfect_stab_circuit(
     n_cycles, n_shots, T1=T1, T2=T2, data_process_type='post_select')
 times_ps_perf = np.array([time['dm_con_' + str(n)] for n in range(n_cycles)]+[time['dm_con_' + str(n_cycles)]])
 print("Post selection per decoding done")
+
+#%% Post selection project instead of perf decoding
+fid_0_ps_perf, counts_perf, time = data_analysis_tools.fidelity_from_scratch(
+    n_cycles, n_shots, T1=T1, T2=T2, data_process_type='post_select', project= True)
+times_ps_perf = np.array([time['dm_con_' + str(n)] for n in range(n_cycles)]+[time['dm_con_' + str(n_cycles)]])
+print("Post selection per decoding done")
+
 #%% Save
-with open('base_qec_data.npy', 'wb') as f:
+with open('data/base_qec_data.npy', 'wb') as f:
     np.save(f, (fidelities,times))
     np.save(f, (fidelities_perf,times_perf))
     np.save(f, (fid_1_single,timespan))
@@ -80,7 +87,7 @@ with open('base_qec_data.npy', 'wb') as f:
     np.save(f, (fid_0_ps_perf,counts_perf,times_ps_perf))
 #%% Load
 
-with open('base_qec_data.npy', 'rb') as f:
+with open('data/base_qec_data.npy', 'rb') as f:
     fidelities,times = np.load(f)
     fidelities_perf,times_perf = np.load(f)
     fid_1_single,timespan = np.load(f)
@@ -156,7 +163,7 @@ ax.plot(times_ps_perf/1000, fid_0_ps_perf, '<', color=colors(5), label='Post-sel
 p0 = (T1, 0, 0.9)  # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times_ps_perf, np.array(counts_perf)/n_shots, p0)
 T, c, A = pars
-print('Post-select perfect decoding',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} μs, A={A:.2f}, c={c:.3f}')
+print('Post-select and project',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} μs, A={A:.2f}, c={c:.3f}')
 # Fractions
 for i,(x, y, text) in enumerate(zip(times_ps_perf,fid_0_ps_perf, counts_perf)):
     if i%3==0:
@@ -167,7 +174,7 @@ ax.plot(timespan/1000, fid_1_single, '--',
         color=colors(2), label='Single qubit decay')
 trans_offset_lifetime = mtransforms.offset_copy(ax.transData, fig=fig,
                                        x=-0.05, y=-0.20, units='inches')
-ax.text(times_perf[-3]/1000,fid_1_single[-3],rf'$T_L ={T1/1000:.0f}$ μs',color=colors(2), transform=trans_offset_lifetime)
+ax.text(times_perf[-3]/1000,fid_1_single[-3],rf'$T_1 ={T1/1000:.0f}$ μs',color=colors(2), transform=trans_offset_lifetime)
 
 ax.plot(timespan/1000, fid_0_encoded, '--',
         color=colors(3), label='Encoded qubit decay')

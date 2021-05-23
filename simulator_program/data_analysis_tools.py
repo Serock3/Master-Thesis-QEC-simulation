@@ -49,7 +49,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         reset=True, data_process_type='recovery', idle_noise=True, transpile=True, 
         snapshot_type='dm', device=None, device_properties=WACQT_device_properties,
         encoding=True, theta=0, phi=0, pauliop='ZZZZZ', simulator_type='density_matrix',
-        **kwargs):
+        project = False, **kwargs):
 
     """TODO: Update this description
     
@@ -195,9 +195,16 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     elif data_process_type == 'post_select':
         # Get the fidelity for each cycle
         if snapshot_type=='dm' or snapshot_type=='density_matrix':
-            fidelities = [state_fidelity(post_selected_state, trivial) for 
-                post_selected_state in get_trivial_post_select_den_mat(
-                results, n_cycles)]
+            # Implement this for every function and option
+            if project:
+                fidelities = [state_fidelity(project_dm_to_logical_subspace_V2(post_selected_state), trivial) for 
+                    post_selected_state in get_trivial_post_select_den_mat(
+                    results, n_cycles)]
+            else:    
+                fidelities = [state_fidelity(post_selected_state, trivial) for 
+                    post_selected_state in get_trivial_post_select_den_mat(
+                    results, n_cycles)]
+                
         elif snapshot_type=='exp' or snapshot_type=='expectation_value':
             fidelities = [post_selected_state for 
                 post_selected_state in get_trivial_exp_value(
@@ -638,3 +645,34 @@ def scale_gate_times(gate_times={}, scalings=[], return_class=False):
         for key in gate_times:
             scaled_times[key] = [gate_times[key]*scale for scale in scalings]
     return scaled_times
+
+def project_dm_to_logical_subspace_V1(rho):
+    P_L = 0
+    logical = logical_states(include_ancillas=None)
+    for i in range(2):
+        P_L += logical[i] @ rho @ logical[i]
+    rho_L = np.zeros((2, 2), dtype=complex)
+    for i in range(2):
+        for j in range(2):
+            rho_L[i, j] = (logical[i] @ rho @ logical[j])/P_L
+    return rho_L
+
+def project_dm_to_logical_subspace_V2(rho):
+    logical = logical_states(include_ancillas=None)
+    # Projector to the code space
+    I_L = np.outer(logical[0], logical[0])+np.outer(logical[1], logical[1])
+    # Note here how the projector has to be included for this to work as expected
+    logical_pauli_matrices = np.array((
+        I_L,
+        Pauli('XXXXX').to_matrix()@I_L,
+        Pauli('YYYYY').to_matrix()@I_L,
+        Pauli('ZZZZZ').to_matrix()@I_L
+    ))
+
+    P_L = np.trace(rho@logical_pauli_matrices[0])
+
+    rho_L = np.zeros((2**5, 2**5), dtype=complex)
+    for i in range(4):
+        rho_L += logical_pauli_matrices[i] * \
+            np.trace(rho@logical_pauli_matrices[i])/(2*P_L)
+    return rho_L
