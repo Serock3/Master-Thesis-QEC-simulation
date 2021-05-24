@@ -172,7 +172,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                                                T1=T1, T2=T2, return_time=True,
                                                move_feedback_delay=move_feedback_delay,
                                                **kwargs)
-    return circ, time
+
     # Run the circuit
     #results = execute(circ, Aer.get_backend('qasm_simulator'),
     #    noise_model=noise_model, shots=n_shots).result()
