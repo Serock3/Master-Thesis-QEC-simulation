@@ -49,7 +49,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         reset=True, data_process_type='recovery', idle_noise=True, transpile=True, 
         snapshot_type='dm', device=None, device_properties=WACQT_device_properties,
         encoding=True, theta=0, phi=0, pauliop='ZZZZZ', simulator_type='density_matrix',
-        project = False, **kwargs):
+        project = False, move_feedback_delay=False, **kwargs):
 
     """TODO: Update this description
     
@@ -169,8 +169,10 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     # Add idle noise (empty_circuit does this automatically)
     if idle_noise:
         circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
-                                         T1=T1, T2=T2, return_time=True)
-
+                                               T1=T1, T2=T2, return_time=True,
+                                               move_feedback_delay=move_feedback_delay,
+                                               **kwargs)
+    return circ, time
     # Run the circuit
     #results = execute(circ, Aer.get_backend('qasm_simulator'),
     #    noise_model=noise_model, shots=n_shots).result()
@@ -228,7 +230,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                 av_fidelities.append(fid/n_shots)
             return av_fidelities
         fidelities = get_av_fidelities(get_states_and_counts(
-            results, n_cycles, post_process=True), trivial, n_shots)
+            results, n_cycles, post_process=True, reset=reset), trivial, n_shots)
         # fidelities = [1.0]
         # for current_cycle in range(n_cycles):
         #     #print("\nCycle ", current_cycle)
