@@ -355,7 +355,7 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
 
 def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
         idle_noise=True, theta=0., phi=0., iswap=True,
-        snapshot_type='dm', device=None, pauliop='ZZZZZ'):
+        snapshot_type='dm', device=None, pauliop='ZZZZZ',project = False):
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
@@ -384,11 +384,12 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
     one_state = np.kron(np.array([0, 1]), extra_qubits)
     psi = np.cos(theta/2)*zero_state + np.exp(1j*phi)*np.sin(theta/2)*one_state
     circ.set_density_matrix(psi)
+    psi = np.cos(theta/2)*logical_states(include_ancillas=None)[0] + np.exp(1j*phi)*np.sin(theta/2)*logical_states(include_ancillas=None)[1]
 
     # Encoding
     if device == 'WACQT':
         circ.compose(transpiled_encoding_WACQT(registers, iswap=iswap), inplace=True)
-        qubits = [qb[3], qb[1], qb[2], an[1], qb[4]] # Qubit permutation
+        qubits = [qb[3], qb[1], qb[2], an[1], qb[4]] #F Qubit permutation
     elif device == 'DD':
         circ.compose(transpiled_encoding_DD(registers, iswap=iswap), inplace=True)
         qubits = [qb[2], an[1], qb[1], qb[3], qb[4]] # Qubit permutation
@@ -413,9 +414,14 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
         noise_model=noise_model, shots=n_shots).result()
     if snapshot_type=='dm' or snapshot_type=='density_matrix':
         state = results.data()['dm_0']
-        fidelities = state_fidelity(state, trivial)
+        if project:
+            state = project_dm_to_logical_subspace_V2(state)
+        fidelities = state_fidelity(state, psi)
     elif snapshot_type=='exp' or snapshot_type=='expectation_value':
         fidelities = results.data()['exp_0']
+    # logical = logical_states(include_ancillas=None)
+    # I_L = np.outer(logical[0], logical[0])+np.outer(logical[1], logical[1])
+    # P_L = np.trace(state@I_L)
     return fidelities, circ, time['end']
 
 #%%
