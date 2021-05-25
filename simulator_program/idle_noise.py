@@ -133,7 +133,7 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
 
         # Insert moved feedback delay
         if move_feedback_delay:
-            if node.name == 'save_density_matrix' or node.name=='save_expectation_value':
+            if node.name == 'save_density_matrix' or node.name=='save_expval':
                 thrm_relax = thermal_relaxation_error(
                         T1, T2, full_gate_times['feedback']).to_instruction()
                 if rename:
