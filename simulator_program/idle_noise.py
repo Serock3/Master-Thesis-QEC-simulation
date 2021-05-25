@@ -21,7 +21,8 @@ else:
 # %%
 
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
-                              return_time=False, rename = False):
+                              return_time=False, rename=False,move_feedback_delay=False,
+                              **kwargs):
     """Creates a copy of a circuit with added thermal relaxation noise added
     for idle qubits.
 
@@ -35,6 +36,8 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
             the total time of the circuit in addition to regular outputs.
         rename: Whether or not to replace the name 'kraus' with the 'Idle X ns' to show the idle 
         time in prints. If true, then circuit will not be runnable.
+        move_feedback_delay: Optional boolean to move the feedback time delay from
+            before corrections to beginning of next cycle.
 
     Returns:
         new_circ: Copy of circ input, with added idle noise.
@@ -78,22 +81,26 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
             # Old method (Assume instant classical feedback)
             #gate_time = full_gate_times[node.name] if not node.condition else 0
             
-            # Add idle time before any correction gates. This assumes that only
-            # the correction step has condition and that all correction gates
-            # in a cycle are in one "block" of nodes.
-            if not node.condition:
-                gate_time = full_gate_times[node.name]
-                correction_step = False
-            # First conditional gate in correction step
-            elif node.condition and not correction_step:
-                gate_time = 0
-                correction_step = True
+            if move_feedback_delay:
+                gate_time = full_gate_times[node.name] if not node.condition else 0
 
-                # Add feedback time to all bits (Only to be applied once per cycle)
-                for reg in circ.clbits:
-                    time_passed[reg] += full_gate_times['feedback']
-            else: 
-                gate_time = 0
+            else:
+                # Add idle time before any correction gates. This assumes that only
+                # the correction step has condition and that all correction gates
+                # in a cycle are in one "block" of nodes.
+                if not node.condition:
+                    gate_time = full_gate_times[node.name]
+                    correction_step = False
+                # First conditional gate in correction step
+                elif node.condition and not correction_step:
+                    gate_time = 0
+                    correction_step = True
+
+                    # Add feedback time to all bits (Only to be applied once per cycle)
+                    for reg in circ.clbits:
+                        time_passed[reg] += full_gate_times['feedback']
+                else: 
+                    gate_time = 0
             
         except KeyError as op:
             print(
@@ -123,6 +130,18 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
 
         # Add the gate
         new_circ.append(node.op, node.qargs, node.cargs)
+
+        # Insert moved feedback delay
+        if move_feedback_delay:
+            if node.name == 'save_density_matrix' or node.name=='save_expectation_value':
+                thrm_relax = thermal_relaxation_error(
+                        T1, T2, full_gate_times['feedback']).to_instruction()
+                if rename:
+                    time_diff = full_gate_times['feedback']
+                    thrm_relax.name = f'Idle {time_diff}ns'
+                for reg in new_circ.qubits:
+                    new_circ.append(thrm_relax, [reg])
+                    time_passed[reg] += full_gate_times['feedback']
 
     time_at_snapshots_and_end['end'] = max(time_passed.values())
 
