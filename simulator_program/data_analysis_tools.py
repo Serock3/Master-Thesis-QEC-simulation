@@ -188,15 +188,16 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
 
     if data_process_type == 'recovery' or data_process_type == 'none':
         fidelities = []
-
+        P_Ls = []
         if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
             for current_cycle in range(n_cycles+1):
                 state = results.data()['dm_' + str(current_cycle)]
                 if project:
                     state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
+                    P_Ls.append(P_L)
                 fidelities.append(state_fidelity(state, trivial))
             if project:
-                return fidelities, P_L, time
+                return fidelities, P_Ls, time
         elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
             for current_cycle in range(n_cycles+1):
                 fidelities.append(results.data()['exp_' + str(current_cycle)])
