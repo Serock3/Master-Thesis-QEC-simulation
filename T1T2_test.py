@@ -13,7 +13,8 @@ from simulator_program.custom_noise_models import (thermal_relaxation_model,
                                                    WACQT_target_times,
                                                    WACQT_demonstrated_times,
                                                    standard_times)
-from simulator_program.data_analysis_tools import fidelity_from_scratch
+from simulator_program.data_analysis_tools import (fidelity_from_scratch,
+                                                   perfect_stab_circuit)
 from matplotlib import colors
 default_colors = plt.get_cmap("tab10")
 
@@ -94,8 +95,14 @@ for i in range(resolution):
             continue
 
         seconds = time.time()
+
+        # Using perfect decoding instead
+        #fid_span[i][j], P_L_span[i][j], times = perfect_stab_circuit(
+        #    n_cycles, n_shots, T1=T1_span[i], T2=T2_span[j], project=True)
+        
         fid_span[i][j], P_L_span[i][j], times = fidelity_from_scratch(
             n_cycles, n_shots, T1=T1_span[i], T2=T2_span[j], encoding=False, transpile=False, project=True)
+        
         time_span[i][j] = np.array([times['dm_'+str(i)]
                                     for i in range(n_cycles+1)])
                 

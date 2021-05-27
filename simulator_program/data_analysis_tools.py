@@ -570,8 +570,10 @@ def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time,
 
 def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                          reset=True, data_process_type='recovery', snapshot_type='dm',
-                         theta=0, phi=0, pauliop='ZZZZZ', include_barriers=True):
+                         theta=0, phi=0, pauliop='ZZZZZ', include_barriers=True,
+                         project=False):
 
+    # Get gate times missing from input
     if isinstance(gate_times, dict):
         full_gate_times = standard_times.get_gate_times(
             custom_gate_times=gate_times)
@@ -581,6 +583,7 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         warnings.warn('Invalid gate times, assuming standard_times')
         full_gate_times = standard_times
 
+    # Extract times from GateTimes class
     two_qubit_gate_time = full_gate_times['cz']
     single_qubit_gate_time = full_gate_times['x']
     measure_time = full_gate_times['measure']
@@ -588,6 +591,7 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     if data_process_type == 'post_select':
         feedback_time = 0
 
+    # Calculate cycle time
     cycle_time = 8*single_qubit_gate_time + 16 * \
         two_qubit_gate_time + 4*measure_time + feedback_time
     time = {}
@@ -598,6 +602,7 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
             key = snapshot_type + '_con_' + str(i)
         time[key] = i*cycle_time
 
+    # Check the data processing method for settings
     if data_process_type == 'recovery':
         recovery = True
         conditional = False
@@ -640,12 +645,17 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
 
     trivial = get_encoded_state(theta, phi, include_ancillas=None)
     fidelities = []
+    P_Ls = []
     if data_process_type == 'recovery':
         if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
-            # TODO: Better solution to trivial?
             for current_cycle in range(n_cycles+1):
                 state = results.data()['dm_' + str(current_cycle)]
+                if project:
+                    state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
+                    P_Ls.append(P_L)
                 fidelities.append(state_fidelity(state, trivial))
+            if project:
+                return fidelities, P_Ls, time    
         elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
             for current_cycle in range(n_cycles+1):
                 fidelities.append(results.data()['exp_' + str(current_cycle)])
