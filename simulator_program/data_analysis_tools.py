@@ -49,7 +49,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                           reset=True, data_process_type='recovery', idle_noise=True, transpile=True,
                           snapshot_type='dm', device=None, device_properties=WACQT_device_properties,
                           encoding=True, theta=0, phi=0, pauliop='ZZZZZ', simulator_type='density_matrix',
-                          project=False, move_feedback_delay=False, **kwargs):
+                          project=False, **kwargs):
     """TODO: Update this description
 
     Get the fidelity of a certain setup/configuration from only its
@@ -171,7 +171,6 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     if idle_noise:
         circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
                                                T1=T1, T2=T2, return_time=True,
-                                               move_feedback_delay=move_feedback_delay,
                                                **kwargs)
 
     # Run the circuit
