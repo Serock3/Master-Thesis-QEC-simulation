@@ -39,11 +39,11 @@ def_colors = plt.get_cmap("tab10")
 n_cycles = 15
 n_shots = 1024*8
 
-resolution = 9
+resolution = 8
 T1_min = 30e3
-T1_max = 110e3
+T1_max = 100e3
 T2_min = 50e3
-T2_max = 130e3
+T2_max = 120e3
 T1_span = np.linspace(T1_min, T1_max, resolution)
 T2_span = np.linspace(T2_min, T2_max, resolution)
 fid_span = np.zeros((resolution, resolution, n_cycles+1))
@@ -182,8 +182,8 @@ cbar0 = fig.colorbar(HM, ax=ax, orientation='horizontal',
 cbar0.set_label(r'$T_L$ [$\mu s$]',
                 labelpad=0, y=1.20, rotation=0)
 
-ax.set_xticks(np.round(T1_span[0:resolution:2]/1000))
-ax.set_yticks(np.round(T2_span[0:resolution:2]/1000))
+ax.set_xticks(np.round(T1_span[0:resolution]/1000))
+ax.set_yticks(np.round(T2_span[0:resolution]/1000))
 ax.set_xlabel(r'$T_1$ [$\mu s$]')
 ax.set_ylabel(r'$T_2$ [$\mu s$]')
 

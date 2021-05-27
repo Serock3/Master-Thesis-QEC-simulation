@@ -194,7 +194,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                 state = results.data()['dm_' + str(current_cycle)]
                 if project:
                     state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
-                    P_Ls.append(P_L)
+                    P_Ls.append(np.real(P_L))
                 fidelities.append(state_fidelity(state, trivial))
             if project:
                 return fidelities, P_Ls, time
