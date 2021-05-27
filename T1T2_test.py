@@ -222,6 +222,31 @@ ax.set_xticks(np.round(T1_span[0:resolution:2]/1000))
 ax.set_yticks(np.round(T2_span[0:resolution:2]/1000))
 ax.set_xlabel(r'$T_1$ [$\mu s$]')
 ax.set_ylabel(r'$T_2$ [$\mu s$]')
+#%% Plot P_L
+var_to_plot = np.mean(P_L_span[:,:,1:], axis = 2)
+invalid_marker_tmp = 0
+var_to_plot[var_to_plot == invalid_marker_tmp] = invalid_marker
+fid_min = np.min(var_to_plot[var_to_plot != invalid_marker])
+fid_max = np.max(var_to_plot[var_to_plot != invalid_marker])
+fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+norm = colors.Normalize(vmin=fid_min, vmax=fid_max)
+T1_padding = (T1_max-T1_min)/(resolution*1000*2)
+T2_padding = (T2_max-T2_min)/(resolution*1000*2)
+aspect = (T1_max-T1_min)/(T2_max-T2_min)
+HM = ax.imshow(var_to_plot.T, extent=[T1_min/1000-T1_padding, T1_max/1000+T1_padding, T2_min /
+                                            1000-T2_padding, T2_max/1000+T2_padding], aspect=aspect, cmap='magma', origin='lower')
+
+HM.set_norm(norm)
+cbar0 = fig.colorbar(HM, ax=ax, orientation='horizontal',
+                     fraction=.1, pad=0.17)
+cbar0.set_label(r'$P_L$ - overlap with codespace',
+                labelpad=0, y=1.20, rotation=0)
+
+ax.set_xticks(np.round(T1_span[0:resolution:2]/1000))
+ax.set_yticks(np.round(T2_span[0:resolution:2]/1000))
+ax.set_xlabel(r'$T_1$ [$\mu s$]')
+ax.set_ylabel(r'$T_2$ [$\mu s$]')
+
 # %% plot any
 var_to_plot = par_L_span[:, :, 0]
 fid_min = np.min(var_to_plot[var_to_plot != invalid_marker])
