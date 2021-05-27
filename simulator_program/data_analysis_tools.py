@@ -187,7 +187,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                       noise_model=noise_model, shots=n_shots).result()
 
     if data_process_type == 'recovery' or data_process_type == 'none':
-        fidelities = []
+        fidelities = [] # If project = True, this contains F_L
         P_Ls = []
         if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
             for current_cycle in range(n_cycles+1):
@@ -205,26 +205,26 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         return fidelities, time
 
     elif data_process_type == 'post_select':
+        # Get the number of remaining shot at each cycle
+        select_counts = get_trivial_post_select_counts(results.get_counts(), n_cycles)
+
         # Get the fidelity for each cycle
+        fidelities = [] # If project = True, this contains F_L
+        P_Ls = []
         if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
             # TODO: Make this return F_L and P_L seperately and fix the references
+            for state in get_trivial_post_select_den_mat(results, n_cycles):
+                if project:
+                    state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
+                    P_Ls.append(np.real(P_L))
+                fidelities.append(state_fidelity(state, trivial))
             if project:
-                fidelities = [state_fidelity(project_dm_to_logical_subspace_V2(post_selected_state), trivial) for
-                              post_selected_state in get_trivial_post_select_den_mat(
-                    results, n_cycles)]
-            else:
-                fidelities = [state_fidelity(post_selected_state, trivial) for
-                              post_selected_state in get_trivial_post_select_den_mat(
-                    results, n_cycles)]
-
+                return fidelities, P_Ls, select_counts, time
         elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
             fidelities = [post_selected_state for
                           post_selected_state in get_trivial_exp_value(
                               results, n_cycles)]
 
-        # Get the number of remaining shot at each cycle
-        select_counts = get_trivial_post_select_counts(
-            results.get_counts(), n_cycles)
         return fidelities, select_counts, time
 
     elif data_process_type == 'post_process':
