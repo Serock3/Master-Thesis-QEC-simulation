@@ -64,7 +64,8 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
     for reg in circ.qubits + circ.clbits:
         time_passed[reg] = 0
 
-    correction_step=False
+    correction_step = False
+    passed_first_cycle = False
     for node in dag.op_nodes():
         # Set cargs to entire classical conditional register if it exists, otherwise to the cargs
         cargs = node.condition[0] if node.condition else node.cargs
@@ -127,7 +128,13 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
 
         # Insert moved feedback delay
         if full_gate_times['delay'] > 0:
+
             if node.name == 'save_density_matrix' or node.name=='save_expval':
+                # Do not add any delay before the first cycle
+                if not passed_first_cycle:
+                    passed_first_cycle = True
+                    continue
+
                 thrm_relax = thermal_relaxation_error(
                         T1, T2, full_gate_times['delay']).to_instruction()
                 if rename:
