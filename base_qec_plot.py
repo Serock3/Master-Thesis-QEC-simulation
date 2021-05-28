@@ -74,8 +74,9 @@ print("Post selection per decoding done")
 
 #%% Post selection projected
 fid_0_ps_L, P_0_ps_L, counts_L, time = data_analysis_tools.fidelity_from_scratch(
-    n_cycles, n_shots, T1=T1, T2=T2, data_process_type='post_select', project= True)
+    n_cycles, n_shots, T1=T1, T2=T2, data_process_type='post_select', project= True, encoding=False)
 times_ps_L = np.array([time['dm_con_' + str(n)] for n in range(n_cycles)]+[time['dm_con_' + str(n_cycles)]])
+# fid_0_ps = fid_0_ps_L*P_0_ps_L
 print("Post selection per decoding done")
 
 #%% Single qubit |+> decay
@@ -131,12 +132,12 @@ color_count = 0
 
 # Position of fractions
 trans_offset = mtransforms.offset_copy(ax.transData, fig=fig,
-                                       x=-0.05, y=-0.25, units='inches')
+                                       x=-0.05, y=-0.3, units='inches')
 trans_offset_perf = mtransforms.offset_copy(ax.transData, fig=fig,
-                                       x=0, y=0.08, units='inches')
+                                       x=0, y=0.1, units='inches')
 
 trans_offset_lifetime = mtransforms.offset_copy(ax.transData, fig=fig,
-                                       x=-0.05, y=0.2, units='inches')
+                                       x=-0.05, y=0.15, units='inches')
 
 # Plot normal QEC
 fidelities = [F_L_i*P_L_i for F_L_i, P_L_i in zip(F_L,P_L)]
@@ -146,21 +147,21 @@ p0 = (T1, 0, 0.9)  # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[1:], fidelities[1:], p0)
 T, c, A = pars
 ax.text(times[-3]/1000,monoExp(times[-3], *pars), rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset)
-ax.text(times[-3]/1000,monoExp(times[-3], *pars), rf'$P_L ={np.mean(P_L[1:]):.2f}$',color='k', transform=trans_offset_lifetime)
+ax.text(times[-3]/1000,monoExp(times[-3], *pars), rf'$P_L ={np.mean(P_L[1:]):.2f}$',color=colors(color_count), transform=trans_offset_lifetime)
 ax.plot(times/1000, monoExp(times, *pars), ':', color=colors(color_count))
 color_count += 1
 
-# Plot normal QEC projected
-ax.plot(times/1000, F_L, 'v', color=colors(color_count), label='Projected QEC')
-# Exp fit it
-p0 = T1  # start with values near those we expect
-pars_L, cov = scipy.optimize.curve_fit(idealExp, times[1:]-times[1], F_L[1:], p0)
-T= pars_L[0]
-ax.plot(times/1000, idealExp(times-times[1], *pars_L), ':', color=colors(color_count))
+# # Plot normal QEC projected
+# ax.plot(times/1000, F_L, 'v', color=colors(color_count), label='Projected QEC')
+# # Exp fit it
+# p0 = T1  # start with values near those we expect
+# pars_L, cov = scipy.optimize.curve_fit(idealExp, times[1:]-times[1], F_L[1:], p0)
+# T= pars_L[0]
+# ax.plot(times/1000, idealExp(times-times[1], *pars_L), ':', color=colors(color_count))
 
-ax.text(times[-3]/1000,idealExp(times[-3], *pars_L), rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
-print('QEC projected',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} μs, A=1, c=0.5')
-color_count += 1
+# ax.text(times[-3]/1000,idealExp(times[-3], *pars_L), rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
+# print('QEC projected',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} μs, A=1, c=0.5')
+# color_count += 1
 
 # # Plot P_L
 # plt.plot(times/1000, P_L, 's', label='P_L', color=colors(color_count))
@@ -169,18 +170,16 @@ color_count += 1
 # color_count += 1
 
 
-# # Plot perf decoding QEC
-# ax.plot(times_perf/1000, fidelities_perf, 'v', color=colors(color_count), label='QEC perfect decoding')
-# # Exp fit it
-# p0 = (T1, 0, 0.9)  # start with values near those we expect
-# pars, cov = scipy.optimize.curve_fit(monoExp, times_perf, fidelities_perf, p0)
-# T, c, A = pars
-# ax.plot(times_perf/1000, monoExp(times_perf, *pars), ':', color=colors(color_count))
-# trans_offset_lifetime = mtransforms.offset_copy(ax.transData, fig=fig,
-#                                        x=-0.05, y=-0.25, units='inches')
-# ax.text(times_perf[-3]/1000,monoExp(times_perf[-3], *pars),rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
-# print('QEC perf decoding',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} ns, A={A:.2f}, c={c:.3f}')
-# color_count += 1
+# Plot perf decoding QEC
+ax.plot(times_perf/1000, fidelities_perf, 'v', color=colors(color_count), label='QEC perfect decoding')
+# Exp fit it
+p0 = (T1, 0, 0.9)  # start with values near those we expect
+pars, cov = scipy.optimize.curve_fit(monoExp, times_perf, fidelities_perf, p0)
+T, c, A = pars
+ax.plot(times_perf/1000, monoExp(times_perf, *pars), ':', color=colors(color_count))
+ax.text(times_perf[-3]/1000,monoExp(times_perf[-3], *pars),rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset)
+print('QEC perf decoding',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} ns, A={A:.2f}, c={c:.3f}')
+color_count += 1
 
 # # Plot single qubit decay |1>
 # ax.plot(timespan/1000, fid_1_single, '--',
@@ -207,6 +206,7 @@ color_count += 1
 # trans_offset_lifetime = mtransforms.offset_copy(ax.transData, fig=fig,
 #                                        x=-0.05, y=0.20, units='inches')
 # ax.text(times_perf[-3]/1000,fid_0_encoded[-3],rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
+# print('Encoded qubit',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} ns, A={A:.2f}, c={c:.3f}')
 # color_count += 1
 
 # # Plot encoded qubit decay projected
@@ -219,50 +219,57 @@ color_count += 1
 ax.plot(times_ps/1000, fid_0_ps, '>', color=colors(color_count), label='Post-selection')
 # Exp fit it
 p0 = (T1, 0, 0.9)  # start with values near those we expect
-pars, cov = scipy.optimize.curve_fit(monoExp, times_ps[1:], np.array(counts)[1:]/n_shots, p0)
+pars, cov = scipy.optimize.curve_fit(monoExp, times_ps, np.array(counts)/n_shots, p0)
 T, c, A = pars
-print('Post-select',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} μs, A={A:.2f}, c={c:.3f}')
+print('Post-select',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} μs, A={A:.2f}, c={c:.3f}')
 # Fractions
-# for i,(x, y, text) in enumerate(zip(times_ps,fid_0_ps, counts)):
-#     if i == 0:
-#         continue
-#     if i%3==0:
-#         plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9 ,transform=trans_offset)
-color_count += 1
-
-# Plot post select projected
-ax.plot(times_ps/1000, fid_0_ps_L, '<', color=colors(color_count), label='Projected post-selection')
-# Exp fit it
-p0 = (T1, 0, 0.9)  # start with values near those we expect
-pars, cov = scipy.optimize.curve_fit(monoExp, times_ps[1:], np.array(counts_L)[1:]/n_shots, p0)
-T, c, A = pars
-print('Post-select',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} μs, A={A:.2f}, c={c:.3f}')
-# Fractions
-for i,(x, y, text) in enumerate(zip(times_ps,fid_0_ps_L, counts_L)):
+trans_offset_down = mtransforms.offset_copy(ax.transData, fig=fig,
+                                       x=-0.05, y=-0.25, units='inches')
+for i,(x, y, text) in enumerate(zip(times_ps,fid_0_ps, counts)):
     if i == 0:
         continue
     if i%3==0:
-        plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9 ,transform=trans_offset)
+        plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9 ,color='k',transform=trans_offset_down)
 color_count += 1
 
-# # Plot post select perf decoding
-# ax.plot(times_ps_perf/1000, fid_0_ps_perf, '<', color=colors(color_count), label='Post-selection perfect decoding')
+ax.text(times[-3]/1000,fid_0_ps[-3], rf'$P_L ={np.mean(P_0_ps_L[1:]):.2f}$',color=colors(color_count-1), transform=trans_offset_lifetime)
+
+# # Plot post select projected
+# ax.plot(times_ps/1000, fid_0_ps_L, '<', color=colors(color_count), label='Projected post-selection')
 # # Exp fit it
 # p0 = (T1, 0, 0.9)  # start with values near those we expect
-# pars, cov = scipy.optimize.curve_fit(monoExp, times_ps_perf, np.array(counts_perf)/n_shots, p0)
+# pars, cov = scipy.optimize.curve_fit(monoExp, times_ps, np.array(counts_L)/n_shots, p0)
 # T, c, A = pars
-# print('Post-select and project',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} μs, A={A:.2f}, c={c:.3f}')
+# print('Post-select',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} μs, A={A:.2f}, c={c:.3f}')
 # # Fractions
-# for i,(x, y, text) in enumerate(zip(times_ps_perf,fid_0_ps_perf, counts_perf)):
+# trans_offset = mtransforms.offset_copy(ax.transData, fig=fig,
+#                                        x=-0.05, y=-0.2, units='inches')
+# for i,(x, y, text) in enumerate(zip(times_ps,fid_0_ps_L, counts_L)):
+#     # if i == 0:
+#     #     continue
 #     if i%3==0:
-#         plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9, transform=trans_offset_perf)
+#         plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9 ,transform=trans_offset)
 # color_count += 1
+
+
+# Plot post select perf decoding
+ax.plot(times_ps_perf/1000, fid_0_ps_perf, '<', color=colors(color_count), label='Post-selection perfect decoding')
+# Exp fit it
+p0 = (T1, 0, 0.9)  # start with values near those we expect
+pars, cov = scipy.optimize.curve_fit(monoExp, times_ps_perf, np.array(counts_perf)/n_shots, p0)
+T, c, A = pars
+print('Post-select and project',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} μs, A={A:.2f}, c={c:.3f}')
+# Fractions
+for i,(x, y, text) in enumerate(zip(times_ps_perf,fid_0_ps_perf, counts_perf)):
+    if i%3==0:
+        plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9, color='k',transform=trans_offset_perf)
+color_count += 1
 
 ax.set_xlabel('Time [μs]')
 ax.set_ylabel('Probability of remaining in initial state')
 ax.set_ylim((0.4,1.05))
 ax.legend()
 
-fig.savefig('projection.pdf')
+fig.savefig('base_QEC.pdf')
 
 # %%
