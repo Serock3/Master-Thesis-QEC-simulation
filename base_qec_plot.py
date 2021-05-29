@@ -16,6 +16,7 @@ from simulator_program.stabilizers import StabilizerRegisters, get_classical_reg
 from simulator_program.custom_noise_models import thermal_relaxation_model_V2, standard_times
 from qiskit import Aer, QuantumRegister, AncillaRegister, ClassicalRegister
 from simulator_program import data_analysis_tools, decay
+
 # %% Paramters
 n_shots = 1024*8
 
@@ -147,21 +148,21 @@ p0 = (T1, 0, 0.9)  # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[1:], fidelities[1:], p0)
 T, c, A = pars
 ax.text(times[-3]/1000,monoExp(times[-3], *pars), rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset)
-ax.text(times[-3]/1000,monoExp(times[-3], *pars), rf'$P_L ={np.mean(P_L[1:]):.2f}$',color=colors(color_count), transform=trans_offset_lifetime)
+ax.text(times[-3]/1000,monoExp(times[-3], *pars), rf'$P_L ={np.mean(P_L[1:]):.2f}$',color='k', transform=trans_offset_lifetime)
 ax.plot(times/1000, monoExp(times, *pars), ':', color=colors(color_count))
 color_count += 1
 
-# # Plot normal QEC projected
-# ax.plot(times/1000, F_L, 'v', color=colors(color_count), label='Projected QEC')
-# # Exp fit it
-# p0 = T1  # start with values near those we expect
-# pars_L, cov = scipy.optimize.curve_fit(idealExp, times[1:]-times[1], F_L[1:], p0)
-# T= pars_L[0]
-# ax.plot(times/1000, idealExp(times-times[1], *pars_L), ':', color=colors(color_count))
+# Plot normal QEC projected
+ax.plot(times/1000, F_L, 'v', color=colors(color_count), label='Projected QEC')
+# Exp fit it
+p0 = T1  # start with values near those we expect
+pars_L, cov = scipy.optimize.curve_fit(idealExp, times[1:]-times[1], F_L[1:], p0)
+T= pars_L[0]
+ax.plot(times/1000, idealExp(times-times[1], *pars_L), ':', color=colors(color_count))
 
-# ax.text(times[-3]/1000,idealExp(times[-3], *pars_L), rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
-# print('QEC projected',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} μs, A=1, c=0.5')
-# color_count += 1
+ax.text(times[-3]/1000,idealExp(times[-3], *pars_L), rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
+print('QEC projected',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} μs, A=1, c=0.5')
+color_count += 1
 
 # # Plot P_L
 # plt.plot(times/1000, P_L, 's', label='P_L', color=colors(color_count))
@@ -170,24 +171,24 @@ color_count += 1
 # color_count += 1
 
 
-# Plot perf decoding QEC
-ax.plot(times_perf/1000, fidelities_perf, 'v', color=colors(color_count), label='QEC perfect decoding')
-# Exp fit it
-p0 = (T1, 0, 0.9)  # start with values near those we expect
-pars, cov = scipy.optimize.curve_fit(monoExp, times_perf, fidelities_perf, p0)
-T, c, A = pars
-ax.plot(times_perf/1000, monoExp(times_perf, *pars), ':', color=colors(color_count))
-ax.text(times_perf[-3]/1000,monoExp(times_perf[-3], *pars),rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset)
-print('QEC perf decoding',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} ns, A={A:.2f}, c={c:.3f}')
-color_count += 1
-
-# # Plot single qubit decay |1>
-# ax.plot(timespan/1000, fid_1_single, '--',
-#         color=colors(color_count), label=r'Single qubit $|1\rangle$ decay')
-# trans_offset_lifetime = mtransforms.offset_copy(ax.transData, fig=fig,
-#                                        x=-0.05, y=-0.20, units='inches')
-# ax.text(times_perf[-3]/1000,fid_1_single[-3],rf'$T_1 ={T1/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
+# # Plot perf decoding QEC
+# ax.plot(times_perf/1000, fidelities_perf, 'v', color=colors(color_count), label='QEC perfect decoding')
+# # Exp fit it
+# p0 = (T1, 0, 0.9)  # start with values near those we expect
+# pars, cov = scipy.optimize.curve_fit(monoExp, times_perf, fidelities_perf, p0)
+# T, c, A = pars
+# ax.plot(times_perf/1000, monoExp(times_perf, *pars), ':', color=colors(color_count))
+# ax.text(times_perf[-3]/1000,monoExp(times_perf[-3], *pars),rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset)
+# print('QEC perf decoding',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} ns, A={A:.2f}, c={c:.3f}')
 # color_count += 1
+
+# Plot single qubit decay |1>
+ax.plot(timespan/1000, fid_1_single, '--',
+        color=colors(color_count), label=r'Single qubit $|1\rangle$ decay')
+trans_offset_lifetime = mtransforms.offset_copy(ax.transData, fig=fig,
+                                       x=-0.05, y=-0.20, units='inches')
+ax.text(times_perf[-3]/1000,fid_1_single[-3],rf'$T_1 ={T1/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
+color_count += 1
 
 # # Plot single qubit decay |+>
 # ax.plot(timespan/1000, fid_p_single, '--',
@@ -197,17 +198,17 @@ color_count += 1
 # ax.text(times_perf[-3]/1000,fid_p_single[-3],rf'$T_2 ={T2/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
 # color_count += 1
 
-# # Plot encoded qubit decay
-# ax.plot(timespan/1000, fid_0_encoded, '--',
-#         color=colors(color_count), label='Encoded qubit decay')
-# p0 = (T1, 0, 0.9) # start with values near those we expect
-# pars, cov = scipy.optimize.curve_fit(monoExp, timespan[:-5], fid_0_encoded[:-5], p0)
-# T, c, A = pars
-# trans_offset_lifetime = mtransforms.offset_copy(ax.transData, fig=fig,
-#                                        x=-0.05, y=0.20, units='inches')
-# ax.text(times_perf[-3]/1000,fid_0_encoded[-3],rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
-# print('Encoded qubit',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} ns, A={A:.2f}, c={c:.3f}')
-# color_count += 1
+# Plot encoded qubit decay
+ax.plot(timespan/1000, fid_0_encoded, '--',
+        color=colors(color_count), label='Encoded qubit decay')
+p0 = (T1, 0, 0.9) # start with values near those we expect
+pars, cov = scipy.optimize.curve_fit(monoExp, timespan[:-5], fid_0_encoded[:-5], p0)
+T, c, A = pars
+trans_offset_lifetime = mtransforms.offset_copy(ax.transData, fig=fig,
+                                       x=-0.05, y=0.20, units='inches')
+ax.text(times_perf[-3]/1000,fid_0_encoded[-3],rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset_lifetime)
+print('Encoded qubit',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} ns, A={A:.2f}, c={c:.3f}')
+color_count += 1
 
 # # Plot encoded qubit decay projected
 # ax.plot(timespan/1000, fid_0_encoded_L, '--',
@@ -225,51 +226,51 @@ print('Post-select',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} μs, A={A:.2f}, c={c
 # Fractions
 trans_offset_down = mtransforms.offset_copy(ax.transData, fig=fig,
                                        x=-0.05, y=-0.25, units='inches')
-for i,(x, y, text) in enumerate(zip(times_ps,fid_0_ps, counts)):
-    if i == 0:
-        continue
-    if i%3==0:
-        plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9 ,color='k',transform=trans_offset_down)
+# for i,(x, y, text) in enumerate(zip(times_ps,fid_0_ps, counts)):
+#     if i == 0:
+#         continue
+#     if i%3==0:
+#         plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9 ,color='k',transform=trans_offset_down)
 color_count += 1
 
-ax.text(times[-3]/1000,fid_0_ps[-3], rf'$P_L ={np.mean(P_0_ps_L[1:]):.2f}$',color=colors(color_count-1), transform=trans_offset_lifetime)
+ax.text(times[-3]/1000,fid_0_ps[-3], rf'$P_L ={np.mean(P_0_ps_L[1:]):.2f}$',color='k', transform=trans_offset_down)
 
-# # Plot post select projected
-# ax.plot(times_ps/1000, fid_0_ps_L, '<', color=colors(color_count), label='Projected post-selection')
-# # Exp fit it
-# p0 = (T1, 0, 0.9)  # start with values near those we expect
-# pars, cov = scipy.optimize.curve_fit(monoExp, times_ps, np.array(counts_L)/n_shots, p0)
-# T, c, A = pars
-# print('Post-select',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} μs, A={A:.2f}, c={c:.3f}')
-# # Fractions
-# trans_offset = mtransforms.offset_copy(ax.transData, fig=fig,
-#                                        x=-0.05, y=-0.2, units='inches')
-# for i,(x, y, text) in enumerate(zip(times_ps,fid_0_ps_L, counts_L)):
-#     # if i == 0:
-#     #     continue
-#     if i%3==0:
-#         plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9 ,transform=trans_offset)
-# color_count += 1
-
-
-# Plot post select perf decoding
-ax.plot(times_ps_perf/1000, fid_0_ps_perf, '<', color=colors(color_count), label='Post-selection perfect decoding')
+# Plot post select projected
+ax.plot(times_ps/1000, fid_0_ps_L, '<', color=colors(color_count), label='Projected post-selection')
 # Exp fit it
 p0 = (T1, 0, 0.9)  # start with values near those we expect
-pars, cov = scipy.optimize.curve_fit(monoExp, times_ps_perf, np.array(counts_perf)/n_shots, p0)
+pars, cov = scipy.optimize.curve_fit(monoExp, times_ps, np.array(counts_L)/n_shots, p0)
 T, c, A = pars
-print('Post-select and project',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} μs, A={A:.2f}, c={c:.3f}')
+print('Post-select',r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.1f} μs, A={A:.2f}, c={c:.3f}')
 # Fractions
-for i,(x, y, text) in enumerate(zip(times_ps_perf,fid_0_ps_perf, counts_perf)):
+trans_offset = mtransforms.offset_copy(ax.transData, fig=fig,
+                                       x=-0.05, y=-0.2, units='inches')
+for i,(x, y, text) in enumerate(zip(times_ps,fid_0_ps_L, counts_L)):
+    # if i == 0:
+    #     continue
     if i%3==0:
-        plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9, color='k',transform=trans_offset_perf)
+        plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9 ,transform=trans_offset)
 color_count += 1
 
+
+# # Plot post select perf decoding
+# ax.plot(times_ps_perf/1000, fid_0_ps_perf, '<', color=colors(color_count), label='Post-selection perfect decoding')
+# # Exp fit it
+# p0 = (T1, 0, 0.9)  # start with values near those we expect
+# pars, cov = scipy.optimize.curve_fit(monoExp, times_ps_perf, np.array(counts_perf)/n_shots, p0)
+# T, c, A = pars
+# print('Post-select and project',r'$(A-c)e^{-t/T}+c$,'+f' T={T:.0f} μs, A={A:.2f}, c={c:.3f}')
+# # Fractions
+# for i,(x, y, text) in enumerate(zip(times_ps_perf,fid_0_ps_perf, counts_perf)):
+#     if i%3==0:
+#         plt.text(x/1000, y, f'{text/n_shots*100:.0f}%', size =9, color='k',transform=trans_offset_perf)
+# color_count += 1
+
 ax.set_xlabel('Time [μs]')
-ax.set_ylabel('Probability of remaining in initial state')
-ax.set_ylim((0.4,1.05))
+ax.set_ylabel(r'Probability of remaining in initial state $F$')
+ax.set_ylim((0,1.05))
 ax.legend()
 
-fig.savefig('base_QEC.pdf')
+fig.savefig('projection.pdf')
 
 # %%
