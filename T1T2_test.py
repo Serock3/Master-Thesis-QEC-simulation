@@ -74,13 +74,15 @@ function_data = [n_cycles,
                  cov_L_span]
 
 invalid_marker = float('inf')
-# %% Test run
+# %% Test run sista färdiga värdet var T1=70 T2=100
 num_data_points = 0
 for i in range(resolution):
     for j in range(resolution):
         if not T2_span[j] > 2*T1_span[i]:
             num_data_points += 1
 print('Will take roughly ',num_data_points*10, ' minutes to run')
+
+num_data_points_completed = 0
 
 for i in range(resolution):
     for j in range(resolution):
@@ -95,13 +97,15 @@ for i in range(resolution):
             continue
 
         seconds = time.time()
-
+        if fid_span[i][j][0] != 0:
+            print(i,j)
+            continue
         # Using perfect decoding instead
         #fid_span[i][j], P_L_span[i][j], times = perfect_stab_circuit(
         #    n_cycles, n_shots, T1=T1_span[i], T2=T2_span[j], project=True)
         
         fid_span[i][j], P_L_span[i][j], times = fidelity_from_scratch(
-            n_cycles, n_shots, T1=T1_span[i], T2=T2_span[j], encoding=False, transpile=False, project=True)
+            n_cycles, n_shots, gate_times={'delay': 4000*(T1_span[i]+T2_span[j])/100e3}, T1=T1_span[i], T2=T2_span[j], encoding=False, transpile=False, project=True)
         
         time_span[i][j] = np.array([times['dm_'+str(i)]
                                     for i in range(n_cycles+1)])
@@ -116,8 +120,8 @@ for i in range(resolution):
         cov_span[i][j] = cov
         cov_L_span[i][j] = cov_L
 
-        if not (i%2==0 and j%2==0):
-            continue
+        # if not (i%2==0 and j%2==0):
+        #     continue
         plt.plot(time_span[i][j]/1000, fid_span[i][j] *
                  P_L_span[i][j], 'o', label='F', color=def_colors(0))
         plt.plot(time_span[i][j]/1000, fid_span[i][j],
@@ -137,15 +141,15 @@ for i in range(resolution):
         plt.show()
 
         print('This took ', int(time.time()-seconds), 'seconds')
-        print('Time left ', int((num_data_points-(i*resolution+j+1))*(time.time()-seconds)/60),' minutes')
+        num_data_points_completed += 1
+        print('Time left ', int((num_data_points-num_data_points_completed)*(time.time()-seconds)/60),' minutes')
 
-
-#%% Save
-with open('data/T1T2_test_data.npy', 'wb') as f:
-    for data in function_data:
-        np.save(f, data)
+        #% Save
+        with open('data/T1T2_test_data_delay.npy', 'wb') as f:
+            for data in function_data:
+                np.save(f, data)
 # %% Load
-with open('data/T1T2_test_data.npy', 'rb') as f:
+with open('data/T1T2_test_data_delay.npy', 'rb') as f:
         n_cycles = np.load(f)
         n_shots = np.load(f)
         resolution = np.load(f)
