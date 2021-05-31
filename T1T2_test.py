@@ -55,24 +55,6 @@ par_L_span = np.zeros((resolution, resolution, 3))
 cov_span = np.zeros((resolution, resolution, 3,3))
 cov_L_span = np.zeros((resolution, resolution, 3,3))
 
-# Define variables to save/load
-function_data = [n_cycles,
-                 n_shots,
-                 resolution,
-                 T1_min,
-                 T1_max,
-                 T2_min,
-                 T2_max,
-                 T1_span,
-                 T2_span,
-                 fid_span,
-                 P_L_span,
-                 time_span,
-                 par_span,
-                 par_L_span,
-                 cov_span,
-                 cov_L_span]
-
 invalid_marker = float('inf')
 # %% Test run sista färdiga värdet var T1=70 T2=100
 num_data_points = 0
@@ -105,7 +87,7 @@ for i in range(resolution):
         #    n_cycles, n_shots, T1=T1_span[i], T2=T2_span[j], project=True)
         
         fid_span[i][j], P_L_span[i][j], times = fidelity_from_scratch(
-            n_cycles, n_shots, gate_times={'delay': 4000*(T1_span[i]+T2_span[j])/100e3}, T1=T1_span[i], T2=T2_span[j], encoding=False, transpile=False, project=True)
+            n_cycles, n_shots, gate_times={'delay': 5000*(T1_span[i]+T2_span[j])/100e3}, T1=T1_span[i], T2=T2_span[j], encoding=False, transpile=False, project=True)
         
         time_span[i][j] = np.array([times['dm_'+str(i)]
                                     for i in range(n_cycles+1)])
@@ -146,12 +128,28 @@ for i in range(resolution):
 
         #% Save
         with open('data/T1T2_test_data_delay.npy', 'wb') as f:
+            function_data = [n_cycles,
+                 n_shots,
+                 resolution,
+                 T1_min,
+                 T1_max,
+                 T2_min,
+                 T2_max,
+                 T1_span,
+                 T2_span,
+                 fid_span,
+                 P_L_span,
+                 time_span,
+                 par_span,
+                 par_L_span,
+                 cov_span,
+                 cov_L_span]
             for data in function_data:
                 np.save(f, data)
 # %% Load
 with open('data/T1T2_test_data_delay.npy', 'rb') as f:
-        n_cycles = np.load(f)
-        n_shots = np.load(f)
+        _ = np.load(f)
+        _ = np.load(f)
         resolution = np.load(f)
         T1_min = np.load(f)
         T1_max = np.load(f)
