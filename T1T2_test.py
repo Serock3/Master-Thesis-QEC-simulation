@@ -278,4 +278,100 @@ ax.set_xticks(np.round(T1_span[0:resolution:2]/1000))
 ax.set_yticks(np.round(T2_span[0:resolution:2]/1000))
 ax.set_xlabel(r'$T_1$ [$\mu s$]')
 ax.set_ylabel(r'$T_2$ [$\mu s$]')
+#%% Load perf stab
+with open('data/T1T2_perfect_decoding_test_data.npy', 'rb') as f:
+        n_cycles_perf = np.load(f)
+        n_shots_perf = np.load(f)
+        resolution_perf = np.load(f)
+        T1_min_perf = np.load(f)
+        T1_max_perf = np.load(f)
+        T2_min_perf = np.load(f)
+        T2_max_perf = np.load(f)
+        T1_span_perf = np.load(f)
+        T2_span_perf = np.load(f)
+        fid_span_perf = np.load(f)
+        P_L_span_perf = np.load(f)
+        time_span_perf = np.load(f)
+        par_span_perf = np.load(f)
+        par_L_span_perf = np.load(f)
+        cov_span_perf = np.load(f)
+        cov_L_span_perf = np.load(f)
+# %% 4.6 plot
+
+pad = 0.12
+aspect_c = 15 
+fraction = 0.1
+var_to_plot = par_L_span[:, :, 0]
+fid_min = np.min(var_to_plot[var_to_plot != invalid_marker])
+fid_max = np.max(var_to_plot[var_to_plot != invalid_marker])
+
+fig, ax = plt.subplots(1, 3, figsize=(10, 6))
+ax = ax.flatten()
+norm = colors.Normalize(vmin=fid_min/1000, vmax=fid_max/1000)
+# norm = colors.Normalize(vmin=15, vmax=150)
+T1_padding = (T1_max-T1_min)/(resolution*1000*2)
+T2_padding = (T2_max-T2_min)/(resolution*1000*2)
+aspect = (T1_max-T1_min)/(T2_max-T2_min)
+HM = ax[0].imshow(var_to_plot.T/1000, extent=[T1_min/1000-T1_padding, T1_max/1000+T1_padding, T2_min /
+                                                 1000-T2_padding, T2_max/1000+T2_padding], aspect=aspect, cmap='magma', origin='lower')
+
+HM.set_norm(norm)
+cbar0 = fig.colorbar(HM, ax=ax[0], orientation='horizontal',
+                     fraction=fraction, pad=pad,aspect = aspect_c)
+cbar0.set_label(r'$T_L$ [$\mu s$]',
+                labelpad=0, y=1.20, rotation=0)
+
+ax[0].set_xticks(np.round(T1_span[0:resolution]/1000))
+ax[0].set_yticks(np.round(T2_span[0:resolution]/1000))
+ax[0].set_xlabel(r'$T_1$ [$\mu s$]')
+ax[0].set_ylabel(r'$T_2$ [$\mu s$]')
+
+var_to_plot = np.mean(P_L_span[:,:,1:], axis = 2)
+invalid_marker_tmp = 0
+var_to_plot[var_to_plot == invalid_marker_tmp] = invalid_marker
+fid_min = np.min(var_to_plot[var_to_plot != invalid_marker])
+fid_max = np.max(var_to_plot[var_to_plot != invalid_marker])
+norm = colors.Normalize(vmin=fid_min, vmax=fid_max)
+T1_padding = (T1_max-T1_min)/(resolution*1000*2)
+T2_padding = (T2_max-T2_min)/(resolution*1000*2)
+aspect = (T1_max-T1_min)/(T2_max-T2_min)
+HM = ax[1].imshow(var_to_plot.T, extent=[T1_min/1000-T1_padding, T1_max/1000+T1_padding, T2_min /
+                                            1000-T2_padding, T2_max/1000+T2_padding], aspect=aspect, cmap='magma', origin='lower')
+
+HM.set_norm(norm)
+cbar0 = fig.colorbar(HM, ax=ax[1], orientation='horizontal',
+                     fraction=fraction, pad=pad, aspect = aspect_c)
+cbar0.set_label(r'$P_L$ - overlap with codespace',
+                labelpad=0, y=1.0, rotation=0)
+
+ax[1].set_xticks(np.round(T1_span[0:resolution]/1000))
+ax[1].set_yticks(np.round(T2_span[0:resolution]/1000))
+ax[1].set_xlabel(r'$T_1$ [$\mu s$]')
+ax[1].set_ylabel(r'$T_2$ [$\mu s$]')
+
+var_to_plot = par_L_span_perf[:, :, 0]
+fid_min = np.min(var_to_plot[var_to_plot != invalid_marker])
+fid_max = np.max(var_to_plot[var_to_plot != invalid_marker])
+norm = colors.Normalize(vmin=fid_min/1000, vmax=fid_max/1000)
+# norm = colors.Normalize(vmin=15, vmax=150)
+T1_padding = (T1_max-T1_min)/(resolution*1000*2)
+T2_padding = (T2_max-T2_min)/(resolution*1000*2)
+aspect = (T1_max-T1_min)/(T2_max-T2_min)
+HM = ax[2].imshow(var_to_plot.T/1000, extent=[T1_min/1000-T1_padding, T1_max/1000+T1_padding, T2_min /
+                                                 1000-T2_padding, T2_max/1000+T2_padding], aspect=aspect, cmap='magma', origin='lower')
+
+HM.set_norm(norm)
+cbar0 = fig.colorbar(HM, ax=ax[2], orientation='horizontal',
+                     fraction=fraction, pad=pad, aspect = aspect_c)
+cbar0.set_label(r'$T_L$ with perfect decoding [$\mu s$]',
+                labelpad=0, y=1.20, rotation=0)
+
+ax[2].set_xticks(np.round(T1_span[0:resolution]/1000))
+ax[2].set_yticks(np.round(T2_span[0:resolution]/1000))
+ax[2].set_xlabel(r'$T_1$ [$\mu s$]')
+ax[2].set_ylabel(r'$T_2$ [$\mu s$]')
+fig.tight_layout()
+fig.savefig('T1T2SweepNew.pdf')
+# %%
+
 # %%
