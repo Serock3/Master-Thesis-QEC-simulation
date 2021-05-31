@@ -383,8 +383,8 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
         circ.u1(-np.pi/2, qbReg[3])
     else:
         # Swap without iSwap
-        circ.u1(-np.pi/2, qbReg[0])
-        circ.u1(-np.pi/2, qbReg[3])
+        #circ.u1(np.pi/2, qbReg[0])
+        #circ.u1(np.pi/2, qbReg[3])
         circ.h(qbReg[0])
         circ.h(qbReg[3])
         circ.cz(qbReg[0],qbReg[3])
@@ -394,8 +394,8 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
         circ.h(qbReg[0])
         circ.h(qbReg[3])
         circ.cz(qbReg[0],qbReg[3])
-        circ.u1(-np.pi/2, qbReg[0])
-        circ.u1(-np.pi/2, qbReg[3])
+        #circ.u1(-np.pi/2, qbReg[0])
+        #circ.u1(-np.pi/2, qbReg[3])
 
     circ.cz(qbReg[0], qbReg[2])
     circ.cz(qbReg[1], qbReg[2])
@@ -411,8 +411,8 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
         circ.u1(-np.pi/2, anReg[1])
     else:
         # Swap without iSwap
-        circ.u1(-np.pi/2, qbReg[0])
-        circ.u1(-np.pi/2, anReg[1])
+        #circ.u1(np.pi/2, qbReg[0])
+        #circ.u1(np.pi/2, anReg[1])
         circ.h(qbReg[0])
         circ.h(anReg[1])
         circ.cz(qbReg[0],anReg[1])
@@ -422,8 +422,8 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
         circ.h(qbReg[0])
         circ.h(anReg[1])
         circ.cz(qbReg[0],anReg[1])
-        circ.u1(-np.pi/2, qbReg[0])
-        circ.u1(-np.pi/2, anReg[1])
+        #circ.u1(-np.pi/2, qbReg[0])
+        #circ.u1(-np.pi/2, anReg[1])
     if include_barriers:
         circ.barrier()
     return circ
@@ -457,8 +457,8 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.u1(-np.pi/2, qbReg[2])
     else:
         # Swap without iSwap
-        circ.u1(-np.pi/2, qbReg[0])
-        circ.u1(-np.pi/2, qbReg[2])
+        #circ.u1(np.pi/2, qbReg[0])
+        #circ.u1(np.pi/2, qbReg[2])
         circ.h(qbReg[0])
         circ.h(qbReg[2])
         circ.cz(qbReg[0],qbReg[2])
@@ -468,8 +468,8 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.h(qbReg[0])
         circ.h(qbReg[2])
         circ.cz(qbReg[0],qbReg[2])
-        circ.u1(-np.pi/2, qbReg[0])
-        circ.u1(-np.pi/2, qbReg[2])
+        #circ.u1(-np.pi/2, qbReg[0])
+        #circ.u1(-np.pi/2, qbReg[2])
 
     circ.cz(qbReg[0],qbReg[3])
     circ.cz(qbReg[2],qbReg[4])
@@ -481,8 +481,8 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.u1(-np.pi/2, qbReg[1])
     else:
         # Swap without iSwap
-        circ.u1(-np.pi/2, qbReg[0])
-        circ.u1(-np.pi/2, qbReg[1])
+        #circ.u1(np.pi/2, qbReg[0])
+        #circ.u1(np.pi/2, qbReg[1])
         circ.h(qbReg[0])
         circ.h(qbReg[1])
         circ.cz(qbReg[0],qbReg[1])
@@ -492,8 +492,8 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.h(qbReg[0])
         circ.h(qbReg[1])
         circ.cz(qbReg[0],qbReg[1])
-        circ.u1(-np.pi/2, qbReg[0])
-        circ.u1(-np.pi/2, qbReg[1])
+        #circ.u1(-np.pi/2, qbReg[0])
+        #circ.u1(-np.pi/2, qbReg[1])
 
     circ.cz(qbReg[3],qbReg[4])
     circ.h(qbReg[2])
@@ -510,8 +510,8 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.u1(-np.pi/2, anReg[1])
     else:
         # Swap without iSwap
-        circ.u1(-np.pi/2, qbReg[0])
-        circ.u1(-np.pi/2, anReg[1])
+        #circ.u1(np.pi/2, qbReg[0])
+        #circ.u1(np.pi/2, anReg[1])
         circ.h(qbReg[0])
         circ.h(anReg[1])
         circ.cz(qbReg[0],anReg[1])
@@ -521,8 +521,8 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.h(qbReg[0])
         circ.h(anReg[1])
         circ.cz(qbReg[0],anReg[1])
-        circ.u1(-np.pi/2, qbReg[0])
-        circ.u1(-np.pi/2, anReg[1])
+        #circ.u1(-np.pi/2, qbReg[0])
+        #circ.u1(-np.pi/2, anReg[1])
     if include_barriers:
         circ.barrier()
     return circ
