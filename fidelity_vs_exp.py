@@ -13,8 +13,8 @@ from qiskit import Aer, QuantumRegister, AncillaRegister, ClassicalRegister
 
 
 # %%
-n_shots = 1024*1
-n_cycles = 10
+n_shots = 1024*8
+n_cycles = 18
 reset = True
 recovery = True
 conditional = False
@@ -92,33 +92,37 @@ for current_cycle in range(n_cycles+1):
 #%%
 times = np.array([time['exp_'+ str(n)] for n in range(n_cycles)]+[time['end']])
 fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-ax.plot(times/1000, fidelities, '^',color = colors(0),label=r'$|0_L\rangle$')
 
 p0 = (T1, 0, 0.9) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[1:], fidelities[1:], p0)
 T, c, A = pars
+ax.plot(times/1000, fidelities, 'o',color = colors(0),label=rf'$|0_L\rangle$, T={T/1000:.0f} μs, A={A:.2f}, c={c:.3f}')
 
-ax.plot(times/1000, monoExp(times,*pars), '--',color = colors(0),label=r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.0f} μs, A={A:.2f}, c={c:.3f}')
+ax.plot(times/1000, monoExp(times,*pars), '--',color = colors(0),)
 
 
-ax.plot(times/1000, exp, 'o',color = colors(1) ,label=r'$|0_L\rangle$')
+ax.set_xlabel(r'Time $[\mu s]$')
+ax.set_ylabel(r'Prob. of remaining in initial state $F$')
+ax.set_ylim((0,1))
+ax2 = ax.twinx()
+ax2.plot(times/1000, exp, '^',color = colors(1) ,label=rf'$|0_L\rangle$, T={T/1000:.0f} μs, A={A:.2f}, c={c:.3f}')
 
 p0 = (T1, 0, 0.9) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[1:], exp[1:], p0)
 T, c, A= pars
 
-ax.plot(times/1000, monoExp(times,*pars), '--',color = colors(1),label=r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.0f} μs, A={A:.2f}, c={c:.3f}')
-
-ax.plot(times/1000, exp_1, 'o',color = colors(2) ,label=r'$|1_L\rangle$')
+ax2.plot(times/1000, monoExp(times,*pars), '--',color = colors(1))
+#,label=r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.0f} μs, A={A:.2f}, c={c:.3f}'
+ax2.plot(times/1000, exp_1, 'v',color = colors(2) ,label=rf'$|1_L\rangle$, T={T/1000:.0f} μs, A={A:.2f}, c={c:.3f}')
 
 p0 = (T1, 0, 0.9) # start with values near those we expect*
 pars, cov = scipy.optimize.curve_fit(monoExp, times[1:], exp_1[1:], p0)
 T, c, A= pars
 
-ax.plot(times/1000, monoExp(times,*pars), '--',color = colors(2),label=r'$(A-c)e^{-t/T}+c$,'+f' T={T/1000:.0f} μs, A={A:.2f}, c={c:.3f}')
-
-ax.legend()
-ax.set_xlabel(r'Time $[\mu s]$')
-ax.set_ylabel(r'Prob. of initial state after projection')
+ax2.plot(times/1000, monoExp(times,*pars), '--',color = colors(2))
+ax.legend(loc=4)
+ax2.legend(loc=0)
+# ax2.set_xlabel(r'Time $[\mu s]$')
+ax2.set_ylabel(r'$\langle Z_L \rangle$')
 plt.savefig('fidvsexp.pdf')
 # %%
