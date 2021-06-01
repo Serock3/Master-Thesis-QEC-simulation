@@ -393,8 +393,8 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
     # TODO: Better looking solution
     extra_qubits = np.zeros(2**6)
     extra_qubits[0] = 1.0
-    zero_state = np.kron(np.array([1, 0]), extra_qubits)
-    one_state = np.kron(np.array([0, 1]), extra_qubits)
+    zero_state = np.kron(extra_qubits,np.array([1, 0]))
+    one_state = np.kron(extra_qubits,np.array([0, 1]))
     psi = np.cos(theta/2)*zero_state + np.exp(1j*phi)*np.sin(theta/2)*one_state
     circ.set_density_matrix(psi)
     psi = np.cos(theta/2)*logical_states(include_ancillas=None)[0] + np.exp(
@@ -424,17 +424,22 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
     if idle_noise:
         circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
                                                T1=T1, T2=T2, return_time=True)
-
+    else:
+        time = {'end':None}
     # Run the circuit
     noise_model = thermal_relaxation_model_V2(
         T1=T1, T2=T2, gate_times=full_gate_times)
+    # noise_model = None
     results = execute(circ, Aer.get_backend('qasm_simulator'),
                       noise_model=noise_model, shots=n_shots).result()
     if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
         state = results.data()['dm_0']
+        true_state = psi
         if project:
-            state = project_dm_to_logical_subspace_V2(state)
-        fidelities = state_fidelity(state, psi)
+            state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
+        fidelities = state_fidelity(state, true_state)
+        if project:
+            return fidelities, circ, time['end'], P_L
     elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
         fidelities = results.data()['exp_0']
     # logical = logical_states(include_ancillas=None)
