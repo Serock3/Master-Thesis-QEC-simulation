@@ -88,7 +88,12 @@ res_p = decay.get_idle_single_qubit(
 fid_p_single = [state_fidelity([1/np.sqrt(2), 1/np.sqrt(2)], res_p.data()['dm_'+str(index)])
                 for index in range(n_datapoints)]
 
-
+#%% QEC delay
+F_L_d, P_L_d ,time_d = data_analysis_tools.fidelity_from_scratch(
+    n_cycles, n_shots, gate_times={'delay':4000} ,T1=T1, T2=T2, encoding=False, project = True)
+times_d = np.array([time_d['dm_' + str(n)] for n in range(n_cycles)]+[time_d['end']])
+print("Base QEC (hexagonal) done")
+fidelities_d = [F_L_i*P_L_i for F_L_i, P_L_i in zip(F_L_d,P_L_d)] 
             
 #%% Save
 with open('data/base_qec_data.npy', 'wb') as f:
