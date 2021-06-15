@@ -329,7 +329,7 @@ ax[1].set(ylim=(100,700))
 # The scaling of gate times investigated
 scalings = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
 gate_times = scale_gate_times(gate_times=standard_times, scalings=scalings)
-
+#%%
 T1_space = [40e3]
 T2_space = [60e3]
 single_qubit_gate_time_space = [20]
@@ -435,6 +435,102 @@ for i in range(len(scalings)):
 np.save('lifetime_scale_feedback', lifetime_scale_feedback)
 np.save('var_scale_feedback', var_scale_feedback) 
 
+#%%
+# More scalings of feedback
+scalings = [3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5]
+gate_times = scale_gate_times(gate_times=standard_times, scalings=scalings)
+lifetime_scale_feedback_extra = np.zeros(len(scalings))
+var_scale_feedback_extra = np.zeros(len(scalings))
+for i in range(len(scalings)):
+    lifetime, var = sweep_parameter_space(T1_space, T2_space, 
+                                     single_qubit_gate_time_space,
+                                     two_qubit_gate_time_space,
+                                     measure_time_space, 
+                                     gate_times['feedback'][i],
+                                     n_cycles, n_shots,
+                                     time_axis=True, **kwargs)
+    lifetime_scale_feedback_extra[i] = lifetime
+    var_scale_feedback_extra[i] = var
+    print(datetime.datetime.now().time())
+np.save('lifetime_scale_feedback_extra', lifetime_scale_feedback_extra)
+np.save('var_scale_feedback_extra', var_scale_feedback_extra) 
+#%% Even more scalings of feedback
+scalings = [3.25, 3.75, 4.25, 4.75, 5.25, 5.75, 6.25, 6.75, 7.25, 7.75, 8.0]
+gate_times = scale_gate_times(gate_times=standard_times, scalings=scalings)
+lifetime_scale_feedback_extra = np.zeros(len(scalings))
+var_scale_feedback_extra = np.zeros(len(scalings))
+for i in range(len(scalings)):
+    lifetime, var = sweep_parameter_space(T1_space, T2_space, 
+                                     single_qubit_gate_time_space,
+                                     two_qubit_gate_time_space,
+                                     measure_time_space, 
+                                     gate_times['feedback'][i],
+                                     n_cycles, n_shots,
+                                     time_axis=True, **kwargs)
+    lifetime_scale_feedback_extra[i] = lifetime
+    var_scale_feedback_extra[i] = var
+    print(datetime.datetime.now().time())
+np.save('lifetime_scale_feedback_extra2', lifetime_scale_feedback_extra)
+np.save('var_scale_feedback_extra2', var_scale_feedback_extra) 
+#%% Final scalings 
+scalings = [9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+gate_times = scale_gate_times(gate_times=standard_times, scalings=scalings)
+lifetime_scale_feedback_extra = np.zeros(len(scalings))
+var_scale_feedback_extra = np.zeros(len(scalings))
+for i in range(len(scalings)):
+    lifetime, var = sweep_parameter_space(T1_space, T2_space, 
+                                     single_qubit_gate_time_space,
+                                     two_qubit_gate_time_space,
+                                     measure_time_space, 
+                                     gate_times['feedback'][i],
+                                     n_cycles, n_shots,
+                                     time_axis=True, **kwargs)
+    lifetime_scale_feedback_extra[i] = lifetime
+    var_scale_feedback_extra[i] = var
+    print(datetime.datetime.now().time())
+np.save('lifetime_scale_feedback_extra', lifetime_scale_feedback_extra)
+np.save('var_scale_feedback_extra', var_scale_feedback_extra) 
+#%% Final final scalings 
+scalings = [16.0, 17.0, 18.0, 19.0, 20.0, 21.0]
+gate_times = scale_gate_times(gate_times=standard_times, scalings=scalings)
+lifetime_scale_feedback_extra = np.zeros(len(scalings))
+var_scale_feedback_extra = np.zeros(len(scalings))
+for i in range(len(scalings)):
+    lifetime, var = sweep_parameter_space(T1_space, T2_space, 
+                                     single_qubit_gate_time_space,
+                                     two_qubit_gate_time_space,
+                                     measure_time_space, 
+                                     gate_times['feedback'][i],
+                                     n_cycles, n_shots,
+                                     time_axis=True, **kwargs)
+    lifetime_scale_feedback_extra[i] = lifetime
+    var_scale_feedback_extra[i] = var
+    print(datetime.datetime.now().time())
+np.save('lifetime_scale_feedback_extra2', lifetime_scale_feedback_extra)
+np.save('var_scale_feedback_extra2', var_scale_feedback_extra) 
+
+#%% Test with moved delay
+scalings = [1.0, 4.0, 7.0, 10.0, 13.0]
+kwargs = {'reset': True, 'data_process_type': 'recovery', 'idle_noise': True, 
+          'snapshot_type': 'dm', 'encoding': False, 'theta': 0, 'phi': 0,
+          'transpile': False, 'simulator_type': 'statevector',
+          'move_feedback_delay': True}
+gate_times = scale_gate_times(gate_times=standard_times, scalings=scalings)
+lifetime_scale_feedback_moved = np.zeros(len(scalings))
+var_scale_feedback_moved = np.zeros(len(scalings))
+for i in range(len(scalings)):
+    lifetime, var = sweep_parameter_space(T1_space, T2_space, 
+                                     single_qubit_gate_time_space,
+                                     two_qubit_gate_time_space,
+                                     measure_time_space, 
+                                     gate_times['feedback'][i],
+                                     n_cycles, n_shots,
+                                     time_axis=True, **kwargs)
+    lifetime_scale_feedback_moved[i] = lifetime
+    var_scale_feedback_moved[i] = var
+    print(datetime.datetime.now().time())
+np.save('lifetime_scale_feedback_moved', lifetime_scale_feedback_moved)
+np.save('var_scale_feedback_moved', var_scale_feedback_moved) 
 
 #%% Load data
 lifetime_scale_all_gates = np.load('lifetime_scale_all_gates.npy')
@@ -448,6 +544,26 @@ var_scale_single_qubit_gates = np.load('var_scale_single_qubit_gates.npy')
 var_scale_two_qubit_gates = np.load('var_scale_two_qubit_gates.npy')
 var_scale_measure = np.load('var_scale_measure.npy')
 var_scale_feedback = np.load('var_scale_feedback.npy')
+#%% Appending all times
+feedback_start = lifetime_scale_feedback
+feedback_e1 = extra1
+ordering = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2]
+feedback_list = [feedback_start, feedback_e1, extra2]
+indexes = [0,0,0]
+feedback_full = []
+for i in ordering:
+    feedback_full.append(feedback_list[i][indexes[i]])
+    print("\n", i)
+    print(indexes)
+    indexes[i] += 1
+#%%
+full_scalings = [0.0,0.25,0.5,0.75, 1.0,1.25,1.5,1.75, 2.0,2.25,2.5,2.75,
+                 3.0,3.25,3.5,3.75, 4.0,4.25,4.5,4.75, 5.0,5.25,5.5,5.75,
+                 6.0,6.25,6.5,6.75, 7.0,7.25,7.5,7.75, 8.0, 
+                 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,16.0, 17.0, 18.0, 19.0, 20.0, 21.0]
+lifetime_scale_feedback = np.array(feedback_full)
 #%% Plot gate time scalings
 fig, ax = plt.subplots(1,1, figsize=(7, 5))
 scalings = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
@@ -504,7 +620,8 @@ plt.plot(x, m*x + b) #add line of best fit.
 # %%
 def get_circuit_time_formula(gate_times = {}):
     tot_gate_times= standard_times.get_gate_times(gate_times)
-    return (8*tot_gate_times['h']+16*tot_gate_times['cz']+ 4*tot_gate_times['measure']+tot_gate_times['feedback'])/1000
+    return (8*tot_gate_times['h']+16*tot_gate_times['cz']+ 4*tot_gate_times['measure']+ \
+            tot_gate_times['feedback'] + tot_gate_times['delay'])/1000
 
 def get_scaled_circ_times(key,scales):
     if key == 'all':
@@ -518,23 +635,36 @@ def get_scaled_circ_times(key,scales):
     else:
         return [get_circuit_time_formula({key:standard_times[key]*scale}) for scale in scales]
 
-get_scaled_circ_times('feedback',[0,1,2])
+#get_scaled_circ_times('feedback',[0,1,2])
 # %%
 import matplotlib.transforms as mtransforms
 fig, ax = plt.subplots(1,1, figsize=(7, 5))
-scalings = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
-
-times_all_gates = get_scaled_circ_times('all', scalings[2:])
-times_single_qubit_gates = get_scaled_circ_times('h', scalings)
-times_two_qubit_gates = get_scaled_circ_times('cz',scalings)
-times_measure = get_scaled_circ_times('measure',scalings)
+#scalings = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
+scalings = [0.0,0.25,0.5,0.75, 1.0,1.25,1.5,1.75, 2.0,2.25,2.5,2.75,
+            3.0,3.25,3.5,3.75, 4.0,4.25,4.5,4.75, 5.0,5.25,5.5,5.75,
+            6.0,6.25,6.5,6.75, 7.0,7.25,7.5,7.75, 8.0,
+            9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0]
+times_all_gates = get_scaled_circ_times('all', scalings[2:13])
+times_single_qubit_gates = get_scaled_circ_times('h', scalings[:13])
+times_two_qubit_gates = get_scaled_circ_times('cz',scalings[:13])
+times_measure = get_scaled_circ_times('measure',scalings[:13])
 times_feedback = get_scaled_circ_times('feedback',scalings)
+
+moved_scalings = [1.0, 4.0, 7.0, 10.0, 13.0]
+times_moved = get_scaled_circ_times('feedback',moved_scalings)
 # Subplot 1: Target gate times
 ax.plot(times_all_gates, lifetime_scale_all_gates*1e-3, 'o', label='All gates proportionally') # Missing data at 0 and 0.25
 ax.plot(times_single_qubit_gates, lifetime_scale_single_qubit_gates*1e-3, 's', label='Single-qubit gates')
 ax.plot(times_two_qubit_gates, lifetime_scale_two_qubit_gates*1e-3, 'D', label='Two-qubit gates', zorder=5)
 ax.plot(times_measure, lifetime_scale_measure*1e-3, '^', label='Measurements')
 ax.plot(times_feedback, lifetime_scale_feedback*1e-3, 'v', label='Feedback')
+#ax.plot(times_moved, delay*1e-3, 's', label='Delay',zorder=100)
+
+# Fit a 2nd degree polynomial to feedback
+#c0, c1, c2 = np.polyfit(times_feedback, lifetime_scale_feedback*1e-3, 2)
+#x = np.linspace(2.7, 9.0, 100)
+#y = c2 + c1*x + c0*(x**2)
+#ax.plot(x, y, '--', color='C4')
 
 #yerr=np.sqrt(var_scale_single_qubit_gates)
 #ax.errorbar(scalings, lifetime_scale_single_qubit_gates*1e-3, yerr*1e-3, linestyle='-',marker='s', label='Single-qubit gates')
@@ -549,7 +679,7 @@ ax.text(times_two_qubit_gates[-1],lifetime_scale_two_qubit_gates[-1]*1e-3,rf'$t_
 ax.text(times_measure [-1],lifetime_scale_measure [-1]*1e-3,rf'$t_M ={times_measure [-1]:.0f}$ μs',color=colors_def(3), transform=trans_offset)
 ax.text(times_feedback[-1],lifetime_scale_feedback[-1]*1e-3,rf'$t_f ={times_feedback[-1]:.0f}$ μs',color=colors_def(4), transform=trans_offset)
 
-ax.set_title(r'Logical Lifetime over scaling gate times')
+#ax.set_title(r'Logical Lifetime over scaling gate times')
 ax.set_xlabel('Total stabilizer cycle duration $[\mu s]$')
 ax.set_ylabel(r'Logical lifetime $[\mu s]$')
 ax.legend()
