@@ -50,18 +50,14 @@ fid_L_s, P_L_s, time_s = fidelity_from_scratch(n_cycles, n_shots,
     gate_times=standard_times, reset=True, data_process_type='recovery',
     idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
     transpile=False, project=True)
-#%%
-print(datetime.datetime.now().time())
 fid_L_f, P_L_f, time_f = fidelity_from_scratch(n_cycles, n_shots, 
     gate_times={'feedback': 5000}, reset=True, data_process_type='recovery',
     idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
     transpile=False, project=True)
-print(datetime.datetime.now().time())
 fid_L_d, P_L_d, time_d = fidelity_from_scratch(n_cycles, n_shots, 
     gate_times={'delay': 5000}, reset=True, data_process_type='recovery',
     idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
     transpile=False, project=True)
-print(datetime.datetime.now().time())
 
 #%% Reformat data
 # Reformat as np arrays

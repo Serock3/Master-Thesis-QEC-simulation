@@ -36,7 +36,8 @@ def get_circuit_time_formula(gate_times = {}):
     return (8*tot_gate_times['h']+16*tot_gate_times['cz']+ 4*tot_gate_times['measure']+ \
             tot_gate_times['feedback'] + tot_gate_times['delay'])/1000
 
-#%%
+#%% Initialize settings
+# Comment away the parts not used for the specific run
 n_cycles = 15
 n_shots = 1024*8*2
 
@@ -92,26 +93,90 @@ par_L_span = np.zeros((resolution, 3))
 cov_span = np.zeros((resolution, 3,3))
 cov_L_span = np.zeros((resolution, 3,3))
 
-
 # Define variables to save/load
+# Scaling single qubit
+#function_data = [n_cycles,
+#                 n_shots,
+#                 resolution,
+#                 single_qubit_min,
+#                 single_qubit_max,
+#                 single_qubit_span,
+#                 fid_span,
+#                 P_L_span,
+#                 time_span,
+#                 par_span,
+#                 par_L_span,
+#                 cov_span,
+#                 cov_L_span]
+
+# Scaling two-qubit gates
+#function_data = [n_cycles,
+#                 n_shots,
+#                 resolution,
+#                 two_qubit_min,
+#                 two_qubit_max,
+#                 two_qubit_span,
+#                 fid_span,
+#                 P_L_span,
+#                 time_span,
+#                 par_span,
+#                 par_L_span,
+#                 cov_span,
+#                 cov_L_span]
+
+# Scaling measure time
+#function_data = [n_cycles,
+#                 n_shots,
+#                 resolution,
+#                 measure_min,
+#                 measure_max,
+#                 measure_span,
+#                 fid_span,
+#                 P_L_span,
+#                 time_span,
+#                 par_span,
+#                 par_L_span,
+#                 cov_span,
+#                 cov_L_span]
+
+# Scaling feedback time
+#function_data = [n_cycles,
+#                 n_shots,
+#                 resolution,
+#                 feedback_min,
+#                 feedback_max,
+#                 feedback_span,
+#                 fid_span,
+#                 P_L_span,
+#                 time_span,
+#                 par_span,
+#                 par_L_span,
+#                 cov_span,
+#                 cov_L_span]
+
+# Scaling delay time
+#function_data = [n_cycles,
+#                 n_shots,
+#                 resolution,
+#                 delay_min,
+#                 delay_max,
+#                 delay_span,
+#                 fid_span,
+#                 P_L_span,
+#                 time_span,
+#                 par_span,
+#                 par_L_span,
+#                 cov_span,
+#                 cov_L_span]
+
+# Scaling all gate times:
 function_data = [n_cycles,
                  n_shots,
                  resolution,
-                 #single_qubit_min,
-                 #single_qubit_max,
                  single_qubit_span,
-                 #two_qubit_min,
-                 #two_qubit_max,
                  two_qubit_span,
-                 #measure_min,
-                 #measure_max,
                  measure_span,
-                 #feedback_min,
-                 #feedback_max,
                  feedback_span,
-                 #delay_min,
-                 #delay_max,
-                 #delay_span,
                  scalings,
                  fid_span,
                  P_L_span,
@@ -121,7 +186,6 @@ function_data = [n_cycles,
                  cov_span,
                  cov_L_span]
 
-invalid_marker = float('inf')
 # %% Test run
 num_data_points = resolution
 print('Will take roughly ',num_data_points*10, ' minutes to run')
@@ -132,10 +196,10 @@ for i in range(resolution):
 
     # Define the gatetime we're scaling
     gate_times = {
-        #'h': single_qubit_span[i],
-        #'cz': two_qubit_span[i],
+        'h': single_qubit_span[i],
+        'cz': two_qubit_span[i],
         'measure': measure_span[i],
-        #'feedback': feedback_span[i],
+        'feedback': feedback_span[i],
         #'delay': delay_span[i],
     }
 
@@ -187,7 +251,6 @@ for i in range(resolution):
 
     print('This took ', int(time.time()-seconds), 'seconds')
     print('current_iteration: ', i)
-    #print('Time left ', int((num_data_points-(i*resolution+j+1))*(time.time()-seconds)/60),' minutes')
 
 
 #%% Save
