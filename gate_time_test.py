@@ -253,7 +253,7 @@ for i in range(resolution):
     print('current_iteration: ', i)
 
 
-#%% Save
+#%% Save data: Uncomment the relevant block of code to save it
 #with open('data/single_qubit_test_data.npy', 'wb') as f:
 #    for data in function_data:
 #        np.save(f, data)
@@ -262,7 +262,7 @@ for i in range(resolution):
 #    for data in function_data:
 #        np.save(f, data)
 #%%
-#with open('data/measure_test_data2.npy', 'wb') as f:
+#with open('data/measure_test_data.npy', 'wb') as f:
 #    for data in function_data:
 #        np.save(f, data)
 #%%
@@ -270,13 +270,10 @@ for i in range(resolution):
 #    for data in function_data:
 #        np.save(f, data)
 #%%
-#with open('data/delay_test_data2.npy', 'wb') as f:
+#with open('data/delay_test_data.npy', 'wb') as f:
 #    for data in function_data:
 #        np.save(f, data)
-#%%
-with open('data/all_gates_test_data2.npy', 'wb') as f:
-    for data in function_data:
-        np.save(f, data)
+
 
 # %% Load
 with open('data/two_qubit_test_data.npy', 'rb') as f:
@@ -355,7 +352,7 @@ with open('data/all_gates_test_data.npy', 'rb') as f:
 #%% Plots
 
 import matplotlib.transforms as mtransforms
-fig, ax = plt.subplots(1,1, figsize=(7, 5))
+fig, ax = plt.subplots(1,2, figsize=(10, 4))
 
 # Calculate cycle times
 times_all = []
@@ -382,58 +379,64 @@ for time in delay_span:
     times_delay.append(get_circuit_time_formula({'delay': time}))
 
 # Subplot 1: T_L
-#ax[0].plot(times_two_qubit, par_L_span_two_qubit[:,0]*1e-3, 'v', label='Two qubit gate')
-#ax[0].plot(times_measure, par_L_span_measure[:,0]*1e-3, 'v', label='Measure')
-#ax[0].plot(times_feedback, par_L_span_feedback[:,0]*1e-3, 'v', label='Feedback')
-#ax[0].plot(times_delay, par_L_span_delay[:,0]*1e-3, 'v', label='Delay')
-ax.errorbar(times_all, par_L_span_all[:,0]*1e-3, 
-               np.sqrt(cov_L_span_all[:,0,0])*1e-3,
-               linestyle='None',marker='o', label='All gates')
-ax.errorbar(times_two_qubit, par_L_span_two_qubit[:,0]*1e-3, 
-               np.sqrt(cov_L_span_two_qubit[:,0,0])*1e-3,
-               linestyle='None',marker='s', label='Two qb gates')
-ax.errorbar(times_measure, par_L_span_measure[:,0]*1e-3, 
-               np.sqrt(cov_L_span_measure[:,0,0])*1e-3,
-               linestyle='None',marker='D', label='Measure')
-ax.errorbar(times_feedback, par_L_span_feedback[:,0]*1e-3, 
-               np.sqrt(cov_L_span_feedback[:,0,0])*1e-3,
-               linestyle='None',marker='^', label='Feedback')
-ax.errorbar(times_delay[:16], par_L_span_delay[:16,0]*1e-3, 
-               np.sqrt(cov_L_span_delay[:16,0,0])*1e-3,
-               linestyle='None',marker='v', label='Delay')
+ax[0].plot(times_all, par_L_span_all[:,0]*1e-3,
+    linestyle='None', marker='o', label='All gates')
+ax[0].plot(times_two_qubit, par_L_span_two_qubit[:,0]*1e-3,
+    linestyle='None', marker='s', label='Two qb gates')
+ax[0].plot(times_measure, par_L_span_measure[:,0]*1e-3,
+    linestyle='None', marker='D', label='Measure')
+ax[0].plot(times_feedback, par_L_span_feedback[:,0]*1e-3, 
+    linestyle='None', marker='^', label='Feedback')
+ax[0].plot(times_delay, par_L_span_delay[:,0]*1e-3,
+    linestyle='None', marker='v', label='Delay')
+#ax.errorbar(times_all, par_L_span_all[:,0]*1e-3, 
+#               np.sqrt(cov_L_span_all[:,0,0])*1e-3,
+#               linestyle='None',marker='o', label='All gates')
+#ax.errorbar(times_two_qubit, par_L_span_two_qubit[:,0]*1e-3, 
+#               np.sqrt(cov_L_span_two_qubit[:,0,0])*1e-3,
+#               linestyle='None',marker='s', label='Two qb gates')
+#ax.errorbar(times_measure, par_L_span_measure[:,0]*1e-3, 
+#               np.sqrt(cov_L_span_measure[:,0,0])*1e-3,
+#               linestyle='None',marker='D', label='Measure')
+#ax.errorbar(times_feedback, par_L_span_feedback[:,0]*1e-3, 
+#               np.sqrt(cov_L_span_feedback[:,0,0])*1e-3,
+#               linestyle='None',marker='^', label='Feedback')
+#ax.errorbar(times_delay[:16], par_L_span_delay[:16,0]*1e-3, 
+#               np.sqrt(cov_L_span_delay[:16,0,0])*1e-3,
+#               linestyle='None',marker='v', label='Delay')
 
 
-trans_offset_up = mtransforms.offset_copy(ax.transData, fig=fig,
+trans_offset_up = mtransforms.offset_copy(ax[0].transData, fig=fig,
                                        x=.05, y=-0.15, units='inches')
-trans_offset_down = mtransforms.offset_copy(ax.transData, fig=fig,
+trans_offset_down = mtransforms.offset_copy(ax[0].transData, fig=fig,
                                        x=.05, y=0.15, units='inches')
-trans_offset_left = mtransforms.offset_copy(ax.transData, fig=fig,
+trans_offset_left = mtransforms.offset_copy(ax[0].transData, fig=fig,
                                        x=-.65, y=-0.1, units='inches')
-trans_offset_delay = mtransforms.offset_copy(ax.transData, fig=fig,
+trans_offset_delay = mtransforms.offset_copy(ax[0].transData, fig=fig,
                                        x=-.65, y=0.3, units='inches')
 #ax[0].text(times_all[-1], par_L_span_all[-1,0]*1e-3, 
 #           rf'$t_2 ={two_qubit_span[-1]*1e-3:.1f}$ μs',
 #           color=colors_def(1), transform=trans_offset_up)
-ax.text(times_two_qubit[-1], par_L_span_two_qubit[-1,0]*1e-3, 
+ax[0].text(times_two_qubit[-1], par_L_span_two_qubit[-1,0]*1e-3, 
            rf'$t_2 ={two_qubit_span[-1]*1e-3:.1f}$ μs',
-           color=colors_def(1), transform=trans_offset_up)
-ax.text(times_measure[-1], par_L_span_measure[-1,0]*1e-3,
+           color='C1', transform=trans_offset_up)
+ax[0].text(times_measure[-1], par_L_span_measure[-1,0]*1e-3,
            rf'$t_M ={measure_span[-1]*1e-3:.1f}$ μs',
-           color=colors_def(2), transform=trans_offset_down)
-ax.text(times_feedback[-1], par_L_span_feedback[-1,0]*1e-3,
+           color='C2', transform=trans_offset_down)
+ax[0].text(times_feedback[-1], par_L_span_feedback[-1,0]*1e-3,
            rf'$t_f ={feedback_span[-1]*1e-3:.0f}$ μs',
-           color=colors_def(3), transform=trans_offset_left)
-ax.text(times_delay[-1], par_L_span_delay[-1,0]*1e-3,
+           color='C3', transform=trans_offset_left)
+ax[0].text(times_delay[-1], par_L_span_delay[-1,0]*1e-3,
            rf'$t_d ={delay_span[-1]*1e-3:.0f}$ μs',
-           color=colors_def(4), transform=trans_offset_delay)
+           color='C4', transform=trans_offset_delay)
 
 #ax.set_title(r'Logical Lifetime over scaling gate times')
-ax.set_xlabel(r'Total stabilizer cycle duration $[\mu s]$')
-ax.set_ylabel(r'Logical lifetime $T_L$ $[\mu s]$')
-ax.set(ylim=(20,42))
+ax[0].set_xlabel(r'Total stabilizer cycle duration $[\mu s]$')
+ax[0].set_ylabel(r'Logical lifetime $T_L$ $[\mu s]$')
+ax[0].set(ylim=(20,42))
 
-ax.legend()
-#%%
+ax[0].legend(loc='upper left')
+#%
 
 # Subplot 2: P_L
 P_L_all = np.sum(P_L_span_all[:,1:],1)/n_cycles
