@@ -23,6 +23,7 @@ from qiskit.quantum_info import state_fidelity
 if __package__:
     from .custom_noise_models import (thermal_relaxation_model,
                                       thermal_relaxation_model_V2,
+                                      thermal_relaxation_model_per_qb,
                                       WACQT_target_times,
                                       WACQT_demonstrated_times,
                                       standard_times)
@@ -121,6 +122,17 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     # Noise model
     noise_model = thermal_relaxation_model_V2(
         T1=T1, T2=T2, gate_times=full_gate_times)
+    # The code below is used to experiment with the nois model
+    # noise_model = thermal_relaxation_model_per_qb(
+    #     T1=[T1]*7, T2=[T2]*7, gate_times=full_gate_times)
+    # This remove
+    # noise_model = thermal_relaxation_model_per_qb(
+    #     T1=[T1]*5+[10000000000,10000000000], T2=[T2]*5+[10000000000,10000000000], gate_times=full_gate_times)
+    # noise_model = thermal_relaxation_model_per_qb(
+    #     T1=[T1]*5+[1,1], T2=[T2]*5+[1,1], gate_times=full_gate_times)
+    # noise_model = thermal_relaxation_model_per_qb(
+    #     T1=[1,1]*7, T2=[1,1]*7, gate_times=full_gate_times)
+
 
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
@@ -172,6 +184,8 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
                                                T1=T1, T2=T2, return_time=True,
                                                **kwargs)
+    else: 
+        time = get_circuit_time(circ=circ, gate_times=full_gate_times)
 
     # Run the circuit
     # results = execute(circ, Aer.get_backend('qasm_simulator'),
@@ -189,7 +203,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         fidelities = [] # If project = True, this contains F_L
         P_Ls = []
         if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
-            for current_cycle in range(n_cycles+1):
+            for current_cycle in range(label_counter.value):
                 state = results.data()['dm_' + str(current_cycle)]
                 if project:
                     state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
@@ -636,7 +650,7 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         circ.compose(unflagged_stabilizer_cycle(registers, reset=reset, recovery=recovery,
                                                 current_cycle=current_cycle, current_step=0,
                                                 include_barriers=include_barriers), inplace=True)
-        add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=current_cycle+1,
+        add_snapshot_to_circuit(circ, snapshot_type=snapshot_type,
                                 qubits=qb, conditional=conditional, pauliop=pauliop,
                                 include_barriers=include_barriers)
         for reg in circ.qubits:
@@ -653,7 +667,7 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     if data_process_type == 'recovery':
         if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
             for current_cycle in range(n_cycles+1):
-                state = results.data()['dm_' + str(current_cycle)]
+                state = results.data(circ)['dm_' + str(current_cycle)]
                 if project:
                     state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
                     P_Ls.append(P_L)

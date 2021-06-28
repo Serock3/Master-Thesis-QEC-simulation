@@ -141,17 +141,45 @@ def get_repeated_stabilization(registers, n_cycles=1,
                                             **kwargs
                                             ), inplace=True)
 
-        add_snapshot_to_circuit(circ, snapshot_type, current_cycle+1, 
-                                registers.QubitRegister,conditional=conditional,
+        add_snapshot_to_circuit(circ, snapshot_type, 
+                                qubits = registers.QubitRegister,conditional=conditional,
                                 pauliop=pauliop)
 
     return circ
 
+# Mutable int object to surve as a global counter for the snapshot labels
+class Int(object):
+    def __init__(self, value):
+        self.value = value
 
-def add_snapshot_to_circuit(circ, snapshot_type, current_cycle,
+    def __add__(self, other):
+        self.value += other
+        return self
+
+    def __str__(self):
+        return str(self.value)
+
+    def inc(self):
+        self.value += 1
+
+label_counter = Int(0)
+
+# Here, I utilize a quirk of how standard args in functions work. 
+# The same 'label_counter' will be used for every call of the function,
+# even if it is modified. This only works for mutable objects so
+# 'int' will not be shared, but 'Int' will.
+def add_snapshot_to_circuit(circ, snapshot_type, current_cycle = label_counter,
                             qubits=None, conditional=False,
                             pauliop='ZZZZZ', include_barriers=True):
     """Appends a snapshot to circuit."""
+
+    # Intended functionality: Set label_counter to current_cycle if given
+    # if current_cycle != label_counter:
+    #     label_counter.value = current_cycle
+
+    # Temp functionality: Reset label_counter if current_cycle == 0
+    if current_cycle == 0:
+        label_counter.value = 0
 
     if not isinstance(snapshot_type, list):
         snapshot_type = [snapshot_type]
@@ -177,6 +205,8 @@ def add_snapshot_to_circuit(circ, snapshot_type, current_cycle,
                             label=snap_label, conditional=con)
                 if include_barriers:
                     circ.barrier()
+    label_counter.inc()
+    
     return circ
 
 
@@ -873,6 +903,11 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     for i in range(4):
         circ.compose(stabilizer_list[i](registers, anQb=anQb_list[i],
                      syn_bit=syn_bit_list[i], reset=reset), inplace=True)
+
+        # TODO: Make this work for all setting (e.g. conditional=True)
+        add_snapshot_to_circuit(circ, snapshot_type= 'dm', 
+                        qubits = registers.QubitRegister,conditional=False)
+                        
         if include_barriers:
             circ.barrier()
     # Add an extra measurement to the next syndrome register
@@ -885,7 +920,12 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
                 circ.barrier()
 
     # Recovery
-    if recovery is True:
+    if recovery is True: 
+
+        # TODO: Make this work for all setting (e.g. conditional=True)
+        add_snapshot_to_circuit(circ, snapshot_type= 'dm', 
+                        qubits = registers.QubitRegister,conditional=False)
+
         circ.barrier()
         circ.compose(unflagged_recovery(registers, reset, current_cycle), inplace=True)
         # if include_barriers:
