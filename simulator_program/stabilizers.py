@@ -580,6 +580,152 @@ def get_encoded_state(theta, phi, include_ancillas='back'):
 
 
 
+#%% [[4,2,2]] stabilizer code 
+# TODO: Rethink how to do this. New file? Generalize present functions?
+
+def stabilizer_cycle_422(registers, reset=True, current_cycle=0,
+                         include_barriers=True,  **kwargs):
+    """Circuit for performing a full stabilizer cycle of the [[4,2,2]] code."""
+
+    # Stabilizers in one cycle
+    stabilizer_list = [stabilizer_XXXX,
+                       stabilizer_ZZZZ]
+
+    # Create list of syndrome bits
+    if isinstance(registers.SyndromeRegister, list):
+        syn_reg = registers.SyndromeRegister[0][current_cycle][0]
+        syn_bit_list = [syn_reg[n] for n in range(2)]
+    else:
+        syn_bit_list = [registers.SyndromeRegister[n] for n in range(2)]
+
+    # Create circuit and run stabilizers
+    circ = get_empty_stabilizer_circuit(registers)
+    for i in range(2):
+        circ.compose(stabilizer_list[i](registers,
+                     syn_bit=syn_bit_list[i], reset=reset), inplace=True)
+        if include_barriers:
+            circ.barrier()
+
+    return circ
+
+def stabilizer_XXXX(registers, syn_bit=None, reset=True):
+    """Gives the circuit for running the regular XXXX stabilizer for the
+    [[4,2,2]] code.
+
+    Args:
+        registers (StabilizerRegister): Register object
+        syn_bit (clbit): The classical bit or register to store measurement in.
+        reset (bool, optional): Whether to reset ancillas between measurements.
+                                Defaults to True.
+    Returns:
+        circ: QuantumCircuit object for measuring the XXXX stabilizer.
+    """
+
+    # Create a circuit
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    circ = get_empty_stabilizer_circuit(registers)
+    
+    # TODO: This might be redundant since we only have a single ancilla
+    if not anReg.size == 1:
+        warnings.warn('Ancilla register has size >1, something might be wrong.')
+    anQb = anReg[0]
+
+    # Entangle ancilla
+    circ.h(anQb)
+    circ.cx(anQb, qbReg)
+    circ.h(anQb)
+
+    # Measure
+    circ.measure(anQb, syn_bit)
+
+    # Reset
+    if reset:
+        circ.reset(anQb)
+
+    return circ
+
+def stabilizer_ZZZZ(registers, syn_bit=None, reset=True):
+    """Gives the circuit for running the regular XXXX stabilizer for the
+    [[4,2,2]] code.
+
+    Args:
+        registers (StabilizerRegister): Register object
+        syn_bit (clbit): The classical bit or register to store measurement in.
+        reset (bool, optional): Whether to reset ancillas between measurements.
+                                Defaults to True.
+    Returns:
+        circ: QuantumCircuit object for measuring the XXXX stabilizer.
+    """
+
+    # Create a circuit
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    circ = get_empty_stabilizer_circuit(registers)
+    
+    # TODO: This might be redundant since we only have a single ancilla
+    if not anReg.size == 1:
+        warnings.warn('Ancilla register has size >1, something might be wrong.')
+    anQb = anReg[0]
+
+    # Entangle ancilla
+    circ.h(anQb)
+    circ.cz(anQb, qbReg)
+    circ.h(anQb)
+
+    # Measure
+    circ.measure(anQb, syn_bit)
+
+    # Reset
+    if reset:
+        circ.reset(anQb)
+
+    return circ
+
+
+def logical_states_422(include_ancillas='front') -> List[List[float]]:
+    """Returns the logical states for the [[4,2,2]] code.
+
+    Args:
+        include_ancillas (str/None, optional): Whether to append the ancillas by tensor product to the end. Defaults to True.
+
+    Returns:
+        List[List[float]]: List of all four logical states
+    """
+    logical_00 = np.zeros(2**4)
+    logical_00[0b0000] = 1/np.sqrt(2)
+    logical_00[0b1111] = 1/np.sqrt(2)
+
+    logical_01 = np.zeros(2**4)
+    logical_01[0b0011] = 1/np.sqrt(2)
+    logical_01[0b1100] = 1/np.sqrt(2)
+
+    logical_10 = np.zeros(2**4)
+    logical_10[0b0101] = 1/np.sqrt(2)
+    logical_10[0b0101] = 1/np.sqrt(2)
+
+    logical_11 = np.zeros(2**4)
+    logical_11[0b0110] = 1/np.sqrt(2)
+    logical_11[0b1001] = 1/np.sqrt(2)
+
+    if include_ancillas:
+        # Add an ancilla in |0>
+        an0 = np.zeros(2)
+        an0[0] = 1.0
+        if include_ancillas == 'front':
+            logical_00 = np.kron(logical_00, an0)
+            logical_01 = np.kron(logical_01, an0)
+            logical_10 = np.kron(logical_10, an0)
+            logical_11 = np.kron(logical_11, an0)
+        elif include_ancillas == 'back':
+            logical_00 = np.kron(an0, logical_00)
+            logical_01 = np.kron(an0, logical_01)
+            logical_10 = np.kron(an0, logical_10)
+            logical_11 = np.kron(an0, logical_11)
+
+    return [logical_00, logical_01, logical_10, logical_11]
+
+
 # %% All flagged stabilizers
 def flagged_stabilizer_cycle(registers, reset=True, recovery=True,
                              current_cycle=0):
