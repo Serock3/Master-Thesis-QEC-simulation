@@ -551,7 +551,161 @@ def get_encoded_state(theta, phi, include_ancillas='back'):
 
 
 #%% [[4,2,2]] stabilizer code 
-# TODO: Rethink how to do this. New file? Generalize present functions?
+
+def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
+                                reset=True,
+                                snapshot_type='density_matrix',
+                                include_barriers=True, conditional=True,
+                                initial_state=[1.,0.,0.,0.], encoding=True,
+                                pauliop='ZZZZZ',
+                                simulator_type='density_matrix', **kwargs):
+    """Returns the circuit for a full repeating stabilizer circuit, including encoding,
+    n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
+    """
+
+    # If no registers are defined, generate a standard set.
+    if not registers:
+        registers = StabilizerRegisters(qbReg=QuantumRegister(4, 'code_qubit'),
+                                        anReg=AncillaRegister(1, 'ancilla_qubit'),
+                                        clReg=ClassicalRegister(2*n_cycles,'syndrome_bit'),
+                                        readout=ClassicalRegister(4, 'readout'))
+
+    # Unpack registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    readout = registers.ReadoutRegister
+    if not anReg.size == 1:
+        raise Exception('Ancilla register must be of size 1')
+
+    # Define the circuit
+    circ = get_empty_stabilizer_circuit_422(registers)
+
+    if encoding:
+        # TODO: Add the encoding circuit
+        #circ.compose(encode_input_422(registers), inplace=True)
+        warnings.warn('Encoding circuit not yet added, performing perfect initialization instead')
+        if simulator_type == 'statevector':
+            circ.set_statevector(get_encoded_state_422(initial_state))
+        else:
+            circ.set_density_matrix(get_encoded_state_422(initial_state))
+    
+    else:
+        if simulator_type == 'statevector':
+            circ.set_statevector(get_encoded_state_422(initial_state))
+        else:
+            circ.set_density_matrix(get_encoded_state_422(initial_state))
+        
+
+            
+    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qbReg,
+                            conditional=conditional, pauliop=pauliop,
+                            include_barriers=include_barriers)
+
+    # Stabilizer
+    circ.compose(get_repeated_stabilization_422(registers, n_cycles=n_cycles,
+                                            reset=reset,
+                                            snapshot_type=snapshot_type,
+                                            conditional=conditional,
+                                            include_barriers=include_barriers,
+                                            pauliop=pauliop, 
+                                            **kwargs), inplace=True)
+
+    # Final readout
+    circ.measure(qbReg, readout)
+    return circ
+
+
+def get_repeated_stabilization_422(registers, n_cycles=1,
+                               reset=True, snapshot_type='density_matrix',
+                               include_barriers=True, conditional=True, 
+                               pauliop='ZZZZZ', **kwargs):
+    """Generates a circuit for repeated stabilizers. Including recovery and
+    fault tolerant flagged circuits of selected.
+
+    Args:
+        registers (Register): Register object containing all registers
+        n_cycles (int, optional): Number of stabilizer circuits. Defaults to 1.
+        reset (bool, optional): Whether or not to reset ancillas. Defaults to True.
+        recovery (bool, optional): Whether or not to apply recovery operations. Defaults to False.
+        flag (bool, optional): Whether or not to use the fault-tolerant flagged circuit. Defaults to True.
+        snapshot_type (str, optional): Type of snapshot (None,'statevector' or 'density_matrix'). Defaults to 'statevector'.
+
+    Returns:
+        QuantumCircuit: The resulting circuit
+    """
+
+    circ = get_empty_stabilizer_circuit(registers)
+
+    for current_cycle in range(n_cycles):
+        circ.compose(stabilizer_cycle_422(registers,
+                                          reset=reset,
+                                          current_cycle=current_cycle,
+                                          include_barriers=include_barriers,
+                                          **kwargs
+                                          ), inplace=True)
+
+        add_snapshot_to_circuit(circ, snapshot_type, current_cycle+1, 
+                                registers.QubitRegister,conditional=conditional,
+                                pauliop=pauliop)
+
+    return circ
+
+
+def get_empty_stabilizer_circuit_422(registers):
+    """Create an empty qiskit circuit adapted for stabilizer circuits"""
+
+    # Unpack registers
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    clReg = registers.SyndromeRegister
+    readout = registers.ReadoutRegister
+
+    circ = QuantumCircuit(qbReg, anReg)
+    if isinstance(clReg, list):
+        circ = QuantumCircuit(qbReg, anReg)
+        for reg in clReg:
+            circ.add_register(reg)
+    else:
+        circ.add_register(clReg)
+    circ.add_register(readout)
+
+    return circ
+
+def get_encoded_state_422(initial_state, include_ancillas='back'):
+    """Create the correct encoded state for the [[4,2,2]] code.
+    
+    Args:
+        initial_state (list): List corresponding to the (unnormalized) initial
+                              two_qubit state. 
+        include_ancillas (str/None, optional): Whether to append the ancillas by
+                                               tensor product to the end. 
+                                               Defaults to True.
+        
+    Returns:
+        The encoded state plus (optional) one ancilla in 0 state, as a 1D 
+        numpy array.
+        
+    Example: get_encoded_state([1,0,0,0]) gives the |00> state.
+             get_encoded_state([1,1,1,1]) gives the |++> state.
+             get_encoded_state([1,-1,-1,1]) gives the |--> state.
+    """
+
+    if isinstance(initial_state, list):
+        initial_state = np.array(initial_state)
+    #initial_state = np.kron(initial_state, np.array([1., 0.]))
+    # Get the four logical states
+    logical = logical_states_422(include_ancillas)
+
+    # Map the initial state to the encoded equivalent
+    statevec = np.zeros(2**5)
+    for i in range(len(logical)):
+        statevec += initial_state[i]*logical[i]
+
+    # Normalize
+    statevec /= np.linalg.norm(statevec)
+
+    return statevec
+
 
 def stabilizer_cycle_422(registers, reset=True, current_cycle=0,
                          include_barriers=True,  **kwargs):
@@ -652,12 +806,15 @@ def stabilizer_ZZZZ(registers, syn_bit=None, reset=True):
 
     return circ
 
-
 def logical_states_422(include_ancillas='front') -> List[List[float]]:
-    """Returns the logical states for the [[4,2,2]] code.
+    """Returns the logical states for the [[4,2,2]] code. This follows the
+    opposite of Qiskits ordering of qubits, i.e. |10> corresponds to the
+    0:th qubit (uppermost in circuits) being in the |1> and is represented by the vector
+    [0, 0, 1, 0].
 
     Args:
-        include_ancillas (str/None, optional): Whether to append the ancillas by tensor product to the end. Defaults to True.
+        include_ancillas (str/None, optional): Whether to append the ancillas by
+                                    tensor product to the end. Defaults to True.
 
     Returns:
         List[List[float]]: List of all four logical states
@@ -672,7 +829,7 @@ def logical_states_422(include_ancillas='front') -> List[List[float]]:
 
     logical_10 = np.zeros(2**4)
     logical_10[0b0101] = 1/np.sqrt(2)
-    logical_10[0b0101] = 1/np.sqrt(2)
+    logical_10[0b1010] = 1/np.sqrt(2)
 
     logical_11 = np.zeros(2**4)
     logical_11[0b0110] = 1/np.sqrt(2)
