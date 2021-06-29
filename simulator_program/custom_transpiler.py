@@ -3,7 +3,7 @@ from qiskit.compiler import transpile
 from qiskit.transpiler import PassManager, CouplingMap, Layout
 from qiskit.visualization import plot_circuit_layout
 from qiskit.circuit.equivalence_library import SessionEquivalenceLibrary
-from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZGate
+from qiskit.circuit.library.standard_gates import iSwapGate, SwapGate, SGate, CZGate, CXGate
 from qiskit import QuantumCircuit, QuantumRegister
 if __package__:
     from . import idle_noise
@@ -56,6 +56,16 @@ coupling_map_triangle = CouplingMap(
 triangle_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map_triangle}
 
+# Cross-shape 5 qb
+cross_couplinglist = [[0, 4], [1, 4], [2, 4], [3, 4]]
+reverse_cross_couplinglist = [[y, x] for [x, y] in cross_couplinglist]
+cross_coupling_map = CouplingMap(
+    couplinglist=cross_couplinglist+reverse_cross_couplinglist,
+    description='A 5 qubit cross/plus with a single ancilla')
+
+# Dict with device properties of the "Double diamond" chip for transpilation.
+cross_device_properties = {
+    "basis_gates": basis_gates, "coupling_map": cross_coupling_map}
 #%% Functions
 
 def weighted_gate_time_cost_fun(circ, t_single=15, t_multi=300):
@@ -126,6 +136,12 @@ def _add_custom_device_equivalences():
         def_swap.append(inst, qargs, cargs)
     SessionEquivalenceLibrary.add_equivalence(SwapGate(), def_swap)
 
+    # Remove a superfluous decomposition of cx into iSWAPs
+    # TODO: Maybe there's a solution where the transpiler instead prioritizes
+    #       other decompositions rather than removing this one completely.
+    cx_decompositions = SessionEquivalenceLibrary.get_entry(CXGate())
+    cx_decompositions.pop(5)
+    SessionEquivalenceLibrary.set_entry(CXGate(), cx_decompositions)
 
 # This function will automatically run the first time you import this file
 _add_custom_device_equivalences()

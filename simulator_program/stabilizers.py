@@ -629,10 +629,8 @@ def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
     # If no registers are defined, generate a standard set.
     if not registers:
         registers = StabilizerRegisters(qbReg=QuantumRegister(4, 'code_qubit'),
-                                        anReg=AncillaRegister(
-                                            1, 'ancilla_qubit'),
-                                        clReg=ClassicalRegister(
-                                            2*n_cycles, 'syndrome_bit'),
+                                        anReg=AncillaRegister(1, 'ancilla_qubit'),
+                                        clReg=get_classical_register_422(n_cycles),
                                         readout=ClassicalRegister(4, 'readout'))
 
     # Unpack registers
@@ -698,7 +696,7 @@ def get_repeated_stabilization_422(registers, n_cycles=1,
         QuantumCircuit: The resulting circuit
     """
 
-    circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit_422(registers)
 
     for current_cycle in range(n_cycles):
         circ.compose(stabilizer_cycle_422(registers,
@@ -726,7 +724,6 @@ def get_empty_stabilizer_circuit_422(registers):
 
     circ = QuantumCircuit(qbReg, anReg)
     if isinstance(clReg, list):
-        circ = QuantumCircuit(qbReg, anReg)
         for reg in clReg:
             circ.add_register(reg)
     else:
@@ -734,6 +731,18 @@ def get_empty_stabilizer_circuit_422(registers):
     circ.add_register(readout)
 
     return circ
+
+
+def get_classical_register_422(n_cycles):
+    """Generate a list of classical registers for storing all measurement data.
+    Each register contains two bits (the two syndrome measurements), each
+    register in the list corresponding to one stabilizer cycle.
+    """    
+
+    # A register of four bits per cycle
+    syndrome_register = [ClassicalRegister(2, 'syndrome_cycle_' + str(i))
+                         for i in range(n_cycles)]
+    return syndrome_register
 
 
 def get_encoded_state_422(initial_state, include_ancillas='back'):
@@ -762,7 +771,10 @@ def get_encoded_state_422(initial_state, include_ancillas='back'):
     logical = logical_states_422(include_ancillas)
 
     # Map the initial state to the encoded equivalent
-    statevec = np.zeros(2**5)
+    if include_ancillas:
+        statevec = np.zeros(2**5)
+    else:
+        statevec = np.zeros(2**4)
     for i in range(len(logical)):
         statevec += initial_state[i]*logical[i]
 
@@ -782,13 +794,13 @@ def stabilizer_cycle_422(registers, reset=True, current_cycle=0,
 
     # Create list of syndrome bits
     if isinstance(registers.SyndromeRegister, list):
-        syn_reg = registers.SyndromeRegister[0][current_cycle][0]
+        syn_reg = registers.SyndromeRegister[current_cycle]
         syn_bit_list = [syn_reg[n] for n in range(2)]
     else:
-        syn_bit_list = [registers.SyndromeRegister[n] for n in range(2)]
+        syn_bit_list = [registers.SyndromeRegister[n+2*current_cycle] for n in range(2)]
 
     # Create circuit and run stabilizers
-    circ = get_empty_stabilizer_circuit(registers)
+    circ = get_empty_stabilizer_circuit_422(registers)
     for i in range(2):
         circ.compose(stabilizer_list[i](registers,
                                         syn_bit=syn_bit_list[i], reset=reset), inplace=True)
@@ -814,8 +826,8 @@ def stabilizer_XXXX(registers, syn_bit=None, reset=True):
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
-    circ = get_empty_stabilizer_circuit(registers)
-
+    circ = get_empty_stabilizer_circuit_422(registers)
+    
     # TODO: This might be redundant since we only have a single ancilla
     if not anReg.size == 1:
         warnings.warn(
@@ -853,8 +865,8 @@ def stabilizer_ZZZZ(registers, syn_bit=None, reset=True):
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
-    circ = get_empty_stabilizer_circuit(registers)
-
+    circ = get_empty_stabilizer_circuit_422(registers)
+    
     # TODO: This might be redundant since we only have a single ancilla
     if not anReg.size == 1:
         warnings.warn(
