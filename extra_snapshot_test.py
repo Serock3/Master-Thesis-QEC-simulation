@@ -70,9 +70,9 @@ def idealExp(t, T):
     return 0.5 * np.exp(-t/T) + 0.5
 
 
-n_shots = 1024*4
+n_shots = 1024*2
 
-n_cycles = 3
+n_cycles = 8
 pauliop = 'ZZZZZ'
 gate_times = standard_times
 
@@ -81,8 +81,8 @@ T2 = 60e3
 
 # %%
 F_L, P_L, time = fidelity_from_scratch(
-    n_cycles, n_shots, T1=T1, T2=T2, encoding=False, project=True, gate_times={'delay': 5000},
-    transpile=False)
+    n_cycles, n_shots, T1=T1, T2=T2, encoding=False, project=True, gate_times={'delay': 0},
+    transpile=True)
 times = np.array([time['dm_' + str(n)] for n in range(label_counter.value)])
 print("Base QEC (hexagonal) done")
 
@@ -97,6 +97,17 @@ fid_0_encoded_L = [state_fidelity([1, 0], project_dm_to_logical_subspace_V1(res_
                    for index in range(n_datapoints)]
 print("Decay encoded qubit done")
 
+# F_L_5, P_L_5, time = fidelity_from_scratch(
+#     n_cycles, n_shots, T1=T1, T2=T2, encoding=False, project=True, gate_times={'delay': 5000},
+#     transpile=False)
+# times_5 = np.array([time['dm_' + str(n)] for n in range(label_counter.value)])
+# print("Base QEC (hexagonal) done")
+
+# F_L_10, P_L_10, time = fidelity_from_scratch(
+#     n_cycles, n_shots, T1=T1, T2=T2, encoding=False, project=True, gate_times={'delay': 10000},
+#     transpile=False)
+# times_10 = np.array([time['dm_' + str(n)] for n in range(label_counter.value)])
+# print("Base QEC (hexagonal) done")
 # # Perfect decoding (no noise in stabilizer cycle)
 # fidelities_perf, time = perfect_stab_circuit(
 #     n_cycles, n_shots, T1=T1, T2=T2)
@@ -120,28 +131,36 @@ trans_offset_lifetime = mtransforms.offset_copy(ax.transData, fig=fig,
 fidelities = [F_L_i*P_L_i for F_L_i, P_L_i in zip(F_L, P_L)]
 ax.plot(times/1000, fidelities, '.-', color=colors(color_count),
         label=r'$F$, (fid inital state)')
-# Exp fit it
-# p0 = (T1, 0, 0.9)  # start with values near those we expect
-# pars, cov = scipy.optimize.curve_fit(monoExp, times[1:], fidelities[1:], p0)
-# T, c, A = pars
-# ax.text(times[-3]/1000,monoExp(times[-3], *pars), rf'$T_L ={T/1000:.0f}$ μs',color=colors(color_count), transform=trans_offset)
-# ax.text(times[-3]/1000,monoExp(times[-3], *pars), rf'$P_L ={np.mean(P_L[1:]):.2f}$',color='k', transform=trans_offset_lifetime)
-# ax.plot(times/1000, monoExp(times, *pars), ':', color=colors(color_count))
+color_count += 1
+
+# Plot normal QEC 5 us delay
+fidelities = [F_L_i*P_L_i for F_L_i, P_L_i in zip(F_L_5, P_L_5)]
+ax.plot(times_5/1000, fidelities, '.-', color=colors(color_count),
+        label=r'$F$, (fid inital state)')
+color_count += 1
+
+# Plot normal QEC 10 us delay
+fidelities = [F_L_i*P_L_i for F_L_i, P_L_i in zip(F_L_10, P_L_10)]
+ax.plot(times_10/1000, fidelities, '.-', color=colors(color_count),
+        label=r'$F$, (fid inital state)')
 color_count += 1
 
 # Plot normal QEC projected
 ax.plot(times/1000, F_L, '.-', color=colors(color_count),
         label=r'$F_L$, (projected fid)')
-# Exp fit it
-# p0 = T1  # start with values near those we expect
-# pars_L, cov = scipy.optimize.curve_fit(idealExp, times[1:]-times[1], F_L[1:], p0)
-# T= pars_L[0]
-# ax.plot(times/1000, idealExp(times-times[1], *pars_L), ':', color=colors(color_count))
 color_count += 1
 
-# Plot P_L
-ax.plot(times/1000, P_L, '.-', color=colors(color_count), label=r'$P_L=F/F_L$')
+ax.plot(times_5/1000, F_L_5, '.-', color=colors(color_count),
+        label=r'$F_L$, (projected fid)')
 color_count += 1
+
+ax.plot(times_10/1000, F_L_10, '.-', color=colors(color_count),
+        label=r'$F_L$, (projected fid)')
+color_count += 1
+
+# # Plot P_L
+# ax.plot(times/1000, P_L, '.-', color=colors(color_count), label=r'$P_L=F/F_L$')
+# color_count += 1
 
 # Plot encoded qubit decay
 ax.plot(timespan/1000, fid_0_encoded, '--',
@@ -163,8 +182,21 @@ color_count += 1
 ax.set_xlabel('Time [μs]')
 ax.set_ylabel(r'Probability')
 ax.set_ylim((0.2, 1.05))
+ax.set_xlim((0, 25))
 ax.legend()
 # %%
+with open('data/extra_snapshot.npy', 'wb') as f:
+    np.save(f, (F_L,P_L,times))
+    np.save(f, (F_L_5,P_L_5,times_5))
+    np.save(f, (F_L_10,P_L_10,times_10))
+
+
+#%%
+with open('data/extra_snapshot.npy', 'rb') as f:
+    F_L,P_L,times = np.load(f)
+    F_L_5,P_L_5,times_5 = np.load(f)
+    F_L_10,P_L_10,times_10 = np.load(f)
+
 
 # %% Testing adding idle noise
 n_cycles = 2
