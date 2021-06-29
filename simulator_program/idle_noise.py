@@ -10,15 +10,16 @@ import warnings
 
 if __package__:
     from .stabilizers import (encode_input_v2,
-                                            get_empty_stabilizer_circuit)
+                              get_empty_stabilizer_circuit)
     from . import custom_transpiler
     from .custom_noise_models import WACQT_gate_times, GateTimes, standard_times
 else:
     from stabilizers import (encode_input_v2,
-                                            get_empty_stabilizer_circuit)
+                             get_empty_stabilizer_circuit)
     import custom_transpiler
     from custom_noise_models import WACQT_gate_times, GateTimes, standard_times
 # %%
+
 
 def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
                               return_time=False, rename=False, **kwargs):
@@ -42,12 +43,27 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
     """
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = standard_times.get_gate_times(custom_gate_times = gate_times)
+        full_gate_times = standard_times.get_gate_times(
+            custom_gate_times=gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
         warnings.warn('Invalid gate times, assuming standard_times')
         full_gate_times = standard_times
+
+    # TODO: Fix this hack solution? I am really ashamed of having coded this
+    # The label info on the delay custom unitaries cannot be obtained from nodes,
+    # so here we scan through the entire circuit just to grab this info
+    delay_partitions = 1
+    for dat in circ.data:
+        inst = dat[0]
+        if hasattr(inst, 'label'):
+            if inst.label != None:
+                if len(inst.label) > 6:
+                    if inst.label[:5] == 'delay':
+                        delay_partitions = int(inst.label[6:])
+                        break
+
 
     # Convert circuit to DAG
     dag = circuit_to_dag(circ)
@@ -65,7 +81,6 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         time_passed[reg] = 0
 
     correction_step = False
-    passed_first_cycle = False
     for node in dag.op_nodes():
         # Set cargs to entire classical conditional register if it exists, otherwise to the cargs
         cargs = node.condition[0] if node.condition else node.cargs
@@ -78,13 +93,15 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         try:
             # Old method (Assume instant classical feedback)
             #gate_time = full_gate_times[node.name] if not node.condition else 0
-            
+
             # Add idle time before any correction gates. This assumes that only
             # the correction step has condition and that all correction gates
             # in a cycle are in one "block" of nodes.
             if not node.condition:
                 gate_time = full_gate_times[node.name]
                 correction_step = False
+                if node.name == 'unitary':
+                    gate_time = full_gate_times['delay']/delay_partitions
 
             # First conditional gate in correction step
             elif node.condition and not correction_step:
@@ -94,9 +111,9 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
                 # Add feedback time to all bits (Only to be applied once per cycle)
                 for reg in circ.clbits:
                     time_passed[reg] += full_gate_times['feedback']
-            else: 
+            else:
                 gate_time = 0
-            
+
         except KeyError as op:
             print(
                 f'WARNING! No operation duration specified for {op.args}, assuming instant.')
@@ -113,8 +130,6 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
                     thrm_relax.name = f'Idle {time_diff}ns'
                 new_circ.append(thrm_relax, [qarg])
 
-        
-
         # Advance the time for the qubits included in the gate
         for gate_arg in gate_args:
             time_passed[gate_arg] = latest_time + gate_time
@@ -127,22 +142,22 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
         new_circ.append(node.op, node.qargs, node.cargs)
 
         # Insert moved feedback delay
-        if full_gate_times['delay'] > 0:
+        # if full_gate_times['delay'] > 0:
 
-            if node.name == 'save_density_matrix' or node.name=='save_expval':
-                # Do not add any delay before the first cycle
-                if not passed_first_cycle:
-                    passed_first_cycle = True
-                    continue
+        #     if node.name == 'save_density_matrix' or node.name == 'save_expval':
+        #         # Do not add any delay before the first cycle
+        #         if not passed_first_cycle:
+        #             passed_first_cycle = True
+        #             continue
 
-                thrm_relax = thermal_relaxation_error(
-                        T1, T2, full_gate_times['delay']).to_instruction()
-                if rename:
-                    time_diff = full_gate_times['delay']
-                    thrm_relax.name = f'Idle {time_diff}ns'
-                for reg in new_circ.qubits:
-                    new_circ.append(thrm_relax, [reg])
-                    time_passed[reg] += full_gate_times['delay']
+        #         thrm_relax = thermal_relaxation_error(
+        #             T1, T2, full_gate_times['delay']).to_instruction()
+        #         if rename:
+        #             time_diff = full_gate_times['delay']
+        #             thrm_relax.name = f'Idle {time_diff}ns'
+        #         for reg in new_circ.qubits:
+        #             new_circ.append(thrm_relax, [reg])
+        #             time_passed[reg] += full_gate_times['delay']
 
     time_at_snapshots_and_end['end'] = max(time_passed.values())
 
@@ -166,7 +181,8 @@ def get_circuit_time(circ, gate_times={}):
     """
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = standard_times.get_gate_times(custom_gate_times = gate_times)
+        full_gate_times = standard_times.get_gate_times(
+            custom_gate_times=gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
@@ -193,7 +209,7 @@ def get_circuit_time(circ, gate_times={}):
             gate_args.append(arg)
 
         latest_time = max([time_passed[gate_arg] for gate_arg in gate_args])
-        
+
         for gate_arg in gate_args:
             time_passed[gate_arg] = latest_time + full_gate_times[node.name]
 
@@ -207,8 +223,10 @@ def get_circuit_time(circ, gate_times={}):
 
 # Crashes when transpile=True
 # Cannot handle transpiled circuits
+
+
 def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
-        gate_times={}, T1=40e3, T2=60e3, transpile=False):
+                            gate_times={}, T1=40e3, T2=60e3, transpile=False):
     """
     DEPRECATED
 
@@ -220,7 +238,7 @@ def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
     if encode_logical:
         circ = get_empty_stabilizer_circuit(registers)
         circ += encode_input_v2(registers)
-        
+
     else:
         circ = get_empty_stabilizer_circuit(registers)
 
@@ -230,22 +248,25 @@ def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
         time_diff = snapshot_times[key]-time_passed
         if time_diff > 0:
             thrm_relax = thermal_relaxation_error(
-                    T1, T2, time_diff).to_instruction()
+                T1, T2, time_diff).to_instruction()
             for qubit in circ.qubits:
                 circ.append(thrm_relax, [qubit])
-        circ.append(Snapshot(key, 'density_matrix', num_qubits=5), registers.QubitRegister)
+        circ.append(Snapshot(key, 'density_matrix', num_qubits=5),
+                    registers.QubitRegister)
         time_passed = snapshot_times[key]
 
     if transpile:
         return custom_transpiler.shortest_transpile_from_distribution(circ, print_cost=False,
-            repeats=10, routing_method='sabre', initial_layout=None,
-            translation_method=None, layout_method='sabre',
-            optimization_level=1)
+                                                                      repeats=10, routing_method='sabre', initial_layout=None,
+                                                                      translation_method=None, layout_method='sabre',
+                                                                      optimization_level=1)
     return circ
 
 # This one should work with transpilation when encode_logical=True
+
+
 def get_empty_noisy_circuit_v2(circ, snapshot_times, encode_logical=False,
-        gate_times={}, T1=40e3, T2=60e3):
+                               gate_times={}, T1=40e3, T2=60e3):
     """
     DEPRECATED
 
@@ -253,7 +274,6 @@ def get_empty_noisy_circuit_v2(circ, snapshot_times, encode_logical=False,
     times from add_idle_noise_to_circuit. Assumes that all involved qubtits
     are at the same time at snapshots.
     """
-
 
     new_circ = QuantumCircuit()
     time_passed = 0
@@ -266,7 +286,7 @@ def get_empty_noisy_circuit_v2(circ, snapshot_times, encode_logical=False,
 
     # Append all snapshots from the circuit
     dag = circuit_to_dag(circ)
-    snapshots = []    
+    snapshots = []
     for node in dag.op_nodes():
         if node.name == 'snapshot':
             snapshots.append(node)
@@ -279,16 +299,18 @@ def get_empty_noisy_circuit_v2(circ, snapshot_times, encode_logical=False,
         time_diff = snapshot_times[key]-time_passed
         if time_diff > 0:
             thrm_relax = thermal_relaxation_error(
-                    T1, T2, time_diff).to_instruction()
+                T1, T2, time_diff).to_instruction()
             for qubit in new_circ.qubits:
                 new_circ.append(thrm_relax, [qubit])
-        new_circ.append(snapshots[index].op, snapshots[index].qargs, snapshots[index].cargs)
+        new_circ.append(snapshots[index].op,
+                        snapshots[index].qargs, snapshots[index].cargs)
         time_passed = snapshot_times[key]
         index += 1
     return new_circ
-    
-def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={}, 
-        T1=40e3, T2=60e3):
+
+
+def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
+                               T1=40e3, T2=60e3):
     """Creates a circuit with only idle noise and snapshots that matches the
     times from get_circuit_time. Assumes that all involved qubtits
     are at the same time at snapshots.
@@ -320,7 +342,7 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
 
     # Create a list of all snapshots
     dag = circuit_to_dag(circ)
-    snapshots = []    
+    snapshots = []
     for node in dag.op_nodes():
         if node.name == 'snapshot' or node.name.split('_')[0] == 'save':
             snapshots.append(node)
@@ -335,27 +357,30 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
         # snapshot which messes up the permutation. Maybe some nice solution can
         # fix this?
         elif key == 'post_encoding' or key.split('_')[-1] == '0':
-            index +=1
-            continue # Skip the post_encoding snapshot due to changes in encode
+            index += 1
+            continue  # Skip the post_encoding snapshot due to changes in encode
         time_diff = snapshot_times[key]-time_passed
         if time_diff > 0:
             thrm_relax = thermal_relaxation_error(
-                    T1, T2, time_diff).to_instruction()
+                T1, T2, time_diff).to_instruction()
             for qubit in new_circ.qubits:
                 new_circ.append(thrm_relax, [qubit])
         elif time_diff < 0:
             print('Time difference less than zero, something might be wrong...')
-        new_circ.append(snapshots[index].op, snapshots[index].qargs, snapshots[index].cargs)
+        new_circ.append(snapshots[index].op,
+                        snapshots[index].qargs, snapshots[index].cargs)
         time_passed = snapshot_times[key]
         index += 1
     return new_circ
+
 
 def rebuild_circuit_up_to_barrier(circ, gate_times={}):
     """Build a copy of a circuit up until (and inculding) the first barrier."""
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
-        full_gate_times = standard_times.get_gate_times(custom_gate_times = gate_times)
+        full_gate_times = standard_times.get_gate_times(
+            custom_gate_times=gate_times)
     elif isinstance(gate_times, GateTimes):
         full_gate_times = gate_times
     else:
@@ -377,6 +402,7 @@ def rebuild_circuit_up_to_barrier(circ, gate_times={}):
 
     new_circ._layout = circ._layout
     return new_circ
+
 
 def rebuild_circuit_up_to_encoding(circ):
     """Build a copy of a circuit up until (and inculding) final iSwap, plus the
@@ -412,7 +438,7 @@ def rebuild_circuit_up_to_encoding(circ):
             barrier_reached = True
         if not barrier_reached:
             new_circ.append(nodes[i].op, nodes[i].qargs, nodes[i].cargs)
-        
+
         # Find the next iSwap
         if barrier_reached and nodes[i].name == 'iswap':
             new_circ.append(nodes[i].op, nodes[i].qargs, nodes[i].cargs)
@@ -424,6 +450,7 @@ def rebuild_circuit_up_to_encoding(circ):
 
     new_circ._layout = circ._layout
     return new_circ
+
 
 # %% Internal testing with a standard stabilizer circuit
 if __name__ == '__main__':
@@ -443,8 +470,8 @@ if __name__ == '__main__':
     circ.x(qb[1])
     circ.x(qb[1])
     circ.x(qb[1])
-    circ.swap(qb[2],qb[1])
-    circ.swap(qb[0],qb[1])
+    circ.swap(qb[2], qb[1])
+    circ.swap(qb[0], qb[1])
     circ.measure(qb[1], readout[1])
     circ.measure(qb[0], readout[0])
 
@@ -468,7 +495,8 @@ if __name__ == '__main__':
     #                                               repeats=1, routing_method='sabre', initial_layout=None,
     #                                               translation_method=None, layout_method='sabre',
     #                                               optimization_level=1, **WAQCT_device_properties)
-    new_circ, times = add_idle_noise_to_circuit(circ, gate_times=standard_times ,return_time=True, rename=False)
+    new_circ, times = add_idle_noise_to_circuit(
+        circ, gate_times=standard_times, return_time=True, rename=False)
     print(new_circ)
 
     results = execute(
@@ -513,6 +541,3 @@ if __name__ == '__main__':
     # print(new_circ)
     # print(times)
     # display(new_circ.draw(output='mpl'))
-
-
-# %%
