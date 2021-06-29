@@ -28,7 +28,7 @@ class GateTimes:
     single_qubit_gates = {'x', 'y', 'z', 'h', 'sx',
                           'sz', 'sy', 's', 't', 'ry', 'u1', 'u2', 'u3'}
     two_qubit_gates = {'cx', 'cz', 'swap', 'iswap'}
-    special_ops = {'measure', 'reset'}
+    special_ops = {'measure', 'reset', 'unitary'}
     directives = {'barrier', 'set_density_matrix', 'save_density_matrix', 
                   'save_expval', 'save_expval_var', 'snapshot', 'feedback', 'delay'}
 
@@ -111,6 +111,9 @@ standard_times = GateTimes(
     single_qubit_default=20, two_qubit_default=100,
     custom_gate_times={'u1': 0, 'z': 0, 'measure': 300, 'feedback': 350})
 
+standard_times_delay = GateTimes(
+    single_qubit_default=20, two_qubit_default=100,
+    custom_gate_times={'u1': 0, 'z': 0, 'measure': 300, 'feedback': 350, 'delay': 5000})
 # Define noise models
 
 def thermal_relaxation_model_V2(T1=40e3, T2=60e3, gate_times=WACQT_gate_times):
@@ -170,6 +173,18 @@ def thermal_relaxation_model_V2(T1=40e3, T2=60e3, gate_times=WACQT_gate_times):
     error_measure = thermal_relaxation_error(T1, T2, gate_times['measure'])
     noise_damping.add_all_qubit_quantum_error(error_measure, "measure")
 
+    # Include delay and treat it as normal gates
+    error_delay = thermal_relaxation_error(T1, T2, gate_times['delay'])
+    noise_damping.add_all_qubit_quantum_error(error_delay,
+                                                  "delay")
+
+    # Delay divided into smaller fractions
+    max_fraction = 10
+    for n in range(2,max_fraction+1):
+        error_delay = thermal_relaxation_error(T1, T2, gate_times['delay']/n)
+        noise_damping.add_all_qubit_quantum_error(error_delay,
+                                                  "delay/"+str(n))
+    noise_damping.add_basis_gates(['unitary'])
     return noise_damping
 
 

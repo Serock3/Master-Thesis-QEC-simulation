@@ -14,6 +14,7 @@ from qiskit import *
 # Import from Qiskit Aer noise module
 from qiskit.providers.aer.noise import thermal_relaxation_error
 from qiskit.providers.aer.library import save_density_matrix, save_expectation_value
+from qiskit.providers.aer import AerSimulator, QasmSimulator
 
 from qiskit.quantum_info import partial_trace
 from qiskit.quantum_info import DensityMatrix
@@ -149,7 +150,8 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                                        conditional=conditional,
                                        encoding=encoding, theta=theta, phi=phi,
                                        pauliop=pauliop, device=device,
-                                       simulator_type=simulator_type, **kwargs)
+                                       simulator_type=simulator_type, final_measure=False
+                                       , **kwargs)
 
     if transpile:
         circ = shortest_transpile_from_distribution(circ, print_cost=False,
@@ -190,14 +192,17 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     # Run the circuit
     # results = execute(circ, Aer.get_backend('qasm_simulator'),
     #    noise_model=noise_model, shots=n_shots).result()
-    simulator = Aer.get_backend('qasm_simulator')
+    # simulator = Aer.get_backend('qasm_simulator')
+    simulator = QasmSimulator(noise_model=noise_model)
     try:
         simulator.set_option('method', simulator_type)
     except:
         print('Invalid simulator type, defaulting to density_matrix')
         simulator.set_option('method', 'density_matrix')
-    results = execute(circ, simulator,
-                      noise_model=noise_model, shots=n_shots).result()
+
+    results = simulator.run(circ, shots=n_shots).result()
+    # results = execute(circ, simulator,
+    #                   noise_model=noise_model, shots=n_shots).result()
 
     if data_process_type == 'recovery' or data_process_type == 'none':
         fidelities = [] # If project = True, this contains F_L

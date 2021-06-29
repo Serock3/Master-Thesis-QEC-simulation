@@ -48,8 +48,8 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
                                 snapshot_type='density_matrix',
                                 include_barriers=True, conditional=True,
                                 initial_state=0, encoding=True, theta=0, phi=0,
-                                pauliop='ZZZZZ', device=None, 
-                                simulator_type='density_matrix', **kwargs):
+                                pauliop='ZZZZZ', device=None,
+                                simulator_type='density_matrix', final_measure=True, **kwargs):
     """Returns the circuit for a full repeating stabilizer circuit, including encoding,
     n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
     """
@@ -76,9 +76,7 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
             circ.set_statevector(get_encoded_state(theta=theta, phi=phi))
         else:
             circ.set_density_matrix(get_encoded_state(theta=theta, phi=phi))
-        
 
-            
     add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qbReg,
                             conditional=conditional, pauliop=pauliop,
                             include_barriers=include_barriers)
@@ -93,15 +91,16 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
                                             **kwargs), inplace=True)
 
     # Final readout
-    circ.measure(qbReg, readout)
+    if final_measure:
+        circ.measure(qbReg, readout)
     return circ
 
 
 def get_repeated_stabilization(registers, n_cycles=1,
                                reset=True, recovery=False,
                                flag=False, snapshot_type='density_matrix',
-                               include_barriers=True, conditional=True, 
-                               pauliop='ZZZZZ', device=None, **kwargs):
+                               include_barriers=True, conditional=True,
+                               pauliop='ZZZZZ', device=None, idle_snapshots = 10, **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -131,23 +130,29 @@ def get_repeated_stabilization(registers, n_cycles=1,
                                              reset=reset,
                                              recovery=recovery,
                                              current_cycle=current_cycle,
-                                             ), inplace=True)       
+                                             ), inplace=True)
         else:
             circ.compose(unflagged_stabilizer_cycle(registers,
-                                            reset=reset,
-                                            recovery=recovery,
-                                            current_cycle=current_cycle,
-                                            include_barriers=include_barriers,
-                                            **kwargs
-                                            ), inplace=True)
+                                                    reset=reset,
+                                                    recovery=recovery,
+                                                    current_cycle=current_cycle,
+                                                    include_barriers=include_barriers,
+                                                    **kwargs
+                                                    ), inplace=True)
 
-        add_snapshot_to_circuit(circ, snapshot_type, 
-                                qubits = registers.QubitRegister,conditional=conditional,
+        add_snapshot_to_circuit(circ, snapshot_type,
+                                qubits=registers.QubitRegister, conditional=conditional,
                                 pauliop=pauliop)
+        
+        add_delay_marker(circ, registers, idle_snapshots, snapshot_type,
+                         qubits=registers.QubitRegister, conditional=conditional,
+                         pauliop=pauliop, include_barriers=include_barriers)
 
     return circ
 
 # Mutable int object to surve as a global counter for the snapshot labels
+
+
 class Int(object):
     def __init__(self, value):
         self.value = value
@@ -162,13 +167,16 @@ class Int(object):
     def inc(self):
         self.value += 1
 
+
 label_counter = Int(0)
 
-# Here, I utilize a quirk of how standard args in functions work. 
+# Here, I utilize a quirk of how standard args in functions work.
 # The same 'label_counter' will be used for every call of the function,
 # even if it is modified. This only works for mutable objects so
 # 'int' will not be shared, but 'Int' will.
-def add_snapshot_to_circuit(circ, snapshot_type, current_cycle = label_counter,
+
+
+def add_snapshot_to_circuit(circ, snapshot_type, current_cycle=label_counter,
                             qubits=None, conditional=False,
                             pauliop='ZZZZZ', include_barriers=True):
     """Appends a snapshot to circuit."""
@@ -191,7 +199,7 @@ def add_snapshot_to_circuit(circ, snapshot_type, current_cycle = label_counter,
         for snap in snapshot_type:
             for con in conditional:
                 snap_label = get_snapshot_label(snap, con,
-                                                current_cycle)
+                                                label_counter)
                 if include_barriers:
                     circ.barrier()
                 if snap == 'dm' or snap == 'density_matrix':
@@ -202,13 +210,12 @@ def add_snapshot_to_circuit(circ, snapshot_type, current_cycle = label_counter,
                                                 label=snap_label, conditional=con)
                 elif snap == 'expvar' or snap == 'expectation_value_variance':
                     circ.save_expectation_value_variance(Pauli(pauliop), qubits,
-                            label=snap_label, conditional=con)
+                                                         label=snap_label, conditional=con)
                 if include_barriers:
                     circ.barrier()
     label_counter.inc()
-    
-    return circ
 
+    return circ
 
 
 def get_snapshot_label(snapshot_type, conditional, current_cycle):
@@ -310,8 +317,35 @@ def get_classical_register(n_cycles, reset=True, recovery=False, flag=True):
         return [syndrome_register]
 
 
+# %% Delay
 
-#%% ENCODING
+def add_delay_marker(circ, registers, snapshots=0, snapshot_type='dm', qubits=None, conditional=False, pauliop='ZZZZZ', include_barriers=True):
+    """Add a custom gate that does nothing but mark where delay time should be inserted, which is picked up by the noise model.
+    It can also divide this idle time into paritions and put a number of snapshots after each of them.
+    """
+
+    partitions = max(1, snapshots)  # Zero snapshots still gives one partition
+    if partitions > 1:
+        gate_name = 'delay/'+str(partitions)
+    else:
+        gate_name = 'delay'
+
+    # sub_circ = QuantumCircuit(1, name=gate_name)
+    # sub_circ.id(0)
+    # sub_inst = sub_circ.to_instruction()
+
+    for _ in range(partitions):
+        for qb in registers.QubitRegister:
+            # circ.append(sub_inst, [qb])
+            circ.unitary([[1,0],[0,1]], [qb],label=gate_name)
+        for an in registers.AncillaRegister:
+            # circ.append(sub_inst, [an])
+            circ.unitary([[1,0],[0,1]], [an],label=gate_name)
+        if snapshots:
+            add_snapshot_to_circuit(circ, snapshot_type, qubits=qubits,
+                                    conditional=conditional, pauliop=pauliop, include_barriers=include_barriers)
+# %% ENCODING
+
 
 def encode_input(registers):
     """Encode the input into logical 0 and 1 for the [[5,1,3]] code. This
@@ -407,8 +441,8 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
     circ.cz(qbReg[0], qbReg[1])
 
     if iswap:
-        circ.iswap(qbReg[0],qbReg[3])
-        circ.cz(qbReg[0],qbReg[3])
+        circ.iswap(qbReg[0], qbReg[3])
+        circ.cz(qbReg[0], qbReg[3])
         circ.u1(-np.pi/2, qbReg[0])
         circ.u1(-np.pi/2, qbReg[3])
     else:
@@ -417,13 +451,13 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
         #circ.u1(np.pi/2, qbReg[3])
         circ.h(qbReg[0])
         circ.h(qbReg[3])
-        circ.cz(qbReg[0],qbReg[3])
+        circ.cz(qbReg[0], qbReg[3])
         circ.h(qbReg[0])
         circ.h(qbReg[3])
-        circ.cz(qbReg[0],qbReg[3])
+        circ.cz(qbReg[0], qbReg[3])
         circ.h(qbReg[0])
         circ.h(qbReg[3])
-        circ.cz(qbReg[0],qbReg[3])
+        circ.cz(qbReg[0], qbReg[3])
         #circ.u1(-np.pi/2, qbReg[0])
         #circ.u1(-np.pi/2, qbReg[3])
 
@@ -433,10 +467,10 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
     circ.cz(qbReg[0], qbReg[4])
     if include_barriers:
         circ.barrier()
-    
+
     if iswap:
-        circ.iswap(qbReg[0],anReg[1])
-        circ.cz(qbReg[0],anReg[1])
+        circ.iswap(qbReg[0], anReg[1])
+        circ.cz(qbReg[0], anReg[1])
         circ.u1(-np.pi/2, qbReg[0])
         circ.u1(-np.pi/2, anReg[1])
     else:
@@ -445,13 +479,13 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
         #circ.u1(np.pi/2, anReg[1])
         circ.h(qbReg[0])
         circ.h(anReg[1])
-        circ.cz(qbReg[0],anReg[1])
+        circ.cz(qbReg[0], anReg[1])
         circ.h(qbReg[0])
         circ.h(anReg[1])
-        circ.cz(qbReg[0],anReg[1])
+        circ.cz(qbReg[0], anReg[1])
         circ.h(qbReg[0])
         circ.h(anReg[1])
-        circ.cz(qbReg[0],anReg[1])
+        circ.cz(qbReg[0], anReg[1])
         #circ.u1(-np.pi/2, qbReg[0])
         #circ.u1(-np.pi/2, anReg[1])
     if include_barriers:
@@ -476,13 +510,13 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
     circ.h(qbReg[3])
     circ.h(qbReg[4])
 
-    circ.cz(qbReg[0],qbReg[1])
-    circ.cz(qbReg[0],qbReg[2])
-    circ.cz(qbReg[0],qbReg[3])
+    circ.cz(qbReg[0], qbReg[1])
+    circ.cz(qbReg[0], qbReg[2])
+    circ.cz(qbReg[0], qbReg[3])
 
     if iswap:
-        circ.iswap(qbReg[0],qbReg[2])
-        circ.cz(qbReg[0],qbReg[2])
+        circ.iswap(qbReg[0], qbReg[2])
+        circ.cz(qbReg[0], qbReg[2])
         circ.u1(-np.pi/2, qbReg[0])
         circ.u1(-np.pi/2, qbReg[2])
     else:
@@ -491,22 +525,22 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         #circ.u1(np.pi/2, qbReg[2])
         circ.h(qbReg[0])
         circ.h(qbReg[2])
-        circ.cz(qbReg[0],qbReg[2])
+        circ.cz(qbReg[0], qbReg[2])
         circ.h(qbReg[0])
         circ.h(qbReg[2])
-        circ.cz(qbReg[0],qbReg[2])
+        circ.cz(qbReg[0], qbReg[2])
         circ.h(qbReg[0])
         circ.h(qbReg[2])
-        circ.cz(qbReg[0],qbReg[2])
+        circ.cz(qbReg[0], qbReg[2])
         #circ.u1(-np.pi/2, qbReg[0])
         #circ.u1(-np.pi/2, qbReg[2])
 
-    circ.cz(qbReg[0],qbReg[3])
-    circ.cz(qbReg[2],qbReg[4])
+    circ.cz(qbReg[0], qbReg[3])
+    circ.cz(qbReg[2], qbReg[4])
 
     if iswap:
-        circ.iswap(qbReg[0],qbReg[1])
-        circ.cz(qbReg[0],qbReg[1])
+        circ.iswap(qbReg[0], qbReg[1])
+        circ.cz(qbReg[0], qbReg[1])
         circ.u1(-np.pi/2, qbReg[0])
         circ.u1(-np.pi/2, qbReg[1])
     else:
@@ -515,27 +549,27 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         #circ.u1(np.pi/2, qbReg[1])
         circ.h(qbReg[0])
         circ.h(qbReg[1])
-        circ.cz(qbReg[0],qbReg[1])
+        circ.cz(qbReg[0], qbReg[1])
         circ.h(qbReg[0])
         circ.h(qbReg[1])
-        circ.cz(qbReg[0],qbReg[1])
+        circ.cz(qbReg[0], qbReg[1])
         circ.h(qbReg[0])
         circ.h(qbReg[1])
-        circ.cz(qbReg[0],qbReg[1])
+        circ.cz(qbReg[0], qbReg[1])
         #circ.u1(-np.pi/2, qbReg[0])
         #circ.u1(-np.pi/2, qbReg[1])
 
-    circ.cz(qbReg[3],qbReg[4])
+    circ.cz(qbReg[3], qbReg[4])
     circ.h(qbReg[2])
-    circ.cz(qbReg[0],qbReg[2])
-    circ.cz(qbReg[0],qbReg[1])
-    circ.cz(qbReg[2],qbReg[4])
+    circ.cz(qbReg[0], qbReg[2])
+    circ.cz(qbReg[0], qbReg[1])
+    circ.cz(qbReg[2], qbReg[4])
     if include_barriers:
         circ.barrier()
 
     if iswap:
-        circ.iswap(qbReg[0],anReg[1])
-        circ.cz(qbReg[0],anReg[1])
+        circ.iswap(qbReg[0], anReg[1])
+        circ.cz(qbReg[0], anReg[1])
         circ.u1(-np.pi/2, qbReg[0])
         circ.u1(-np.pi/2, anReg[1])
     else:
@@ -544,13 +578,13 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         #circ.u1(np.pi/2, anReg[1])
         circ.h(qbReg[0])
         circ.h(anReg[1])
-        circ.cz(qbReg[0],anReg[1])
+        circ.cz(qbReg[0], anReg[1])
         circ.h(qbReg[0])
         circ.h(anReg[1])
-        circ.cz(qbReg[0],anReg[1])
+        circ.cz(qbReg[0], anReg[1])
         circ.h(qbReg[0])
         circ.h(anReg[1])
-        circ.cz(qbReg[0],anReg[1])
+        circ.cz(qbReg[0], anReg[1])
         #circ.u1(-np.pi/2, qbReg[0])
         #circ.u1(-np.pi/2, anReg[1])
     if include_barriers:
@@ -561,14 +595,14 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
 def get_encoded_state(theta, phi, include_ancillas='back'):
     """Create the correct 7qb density matrix for an arbitary logical 5qb state.
     Angles are defined as on Bloch sphere.
-    
+
     Args:
         theta (float): Zenith angle.
         phi (float): Azimuthal angle.
-        
+
     Returns:
         The encoded state plus two ancilla in 0 state, as a 128x128 numpy array.
-        
+
     Example: get_encoded_state(np.pi, 0) gives the |1> state.
              get_encoded_state(np.pi/2, np.pi/2) gives the |+> state.
              get_encoded_state(np.pi/2, -np.pi/2) gives the |-> state.
@@ -579,16 +613,15 @@ def get_encoded_state(theta, phi, include_ancillas='back'):
         np.exp(1j*phi)*np.sin(theta/2)*logical_1
 
 
-
-#%% [[4,2,2]] stabilizer code 
+# %% [[4,2,2]] stabilizer code
 
 def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
-                                reset=True,
-                                snapshot_type='density_matrix',
-                                include_barriers=True, conditional=True,
-                                initial_state=[1.,0.,0.,0.], encoding=True,
-                                pauliop='ZZZZZ',
-                                simulator_type='density_matrix', **kwargs):
+                                    reset=True,
+                                    snapshot_type='density_matrix',
+                                    include_barriers=True, conditional=True,
+                                    initial_state=[1., 0., 0., 0.], encoding=True,
+                                    pauliop='ZZZZZ',
+                                    simulator_type='density_matrix', **kwargs):
     """Returns the circuit for a full repeating stabilizer circuit, including encoding,
     n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
     """
@@ -596,8 +629,10 @@ def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
     # If no registers are defined, generate a standard set.
     if not registers:
         registers = StabilizerRegisters(qbReg=QuantumRegister(4, 'code_qubit'),
-                                        anReg=AncillaRegister(1, 'ancilla_qubit'),
-                                        clReg=ClassicalRegister(2*n_cycles,'syndrome_bit'),
+                                        anReg=AncillaRegister(
+                                            1, 'ancilla_qubit'),
+                                        clReg=ClassicalRegister(
+                                            2*n_cycles, 'syndrome_bit'),
                                         readout=ClassicalRegister(4, 'readout'))
 
     # Unpack registers
@@ -613,32 +648,31 @@ def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
     if encoding:
         # TODO: Add the encoding circuit
         #circ.compose(encode_input_422(registers), inplace=True)
-        warnings.warn('Encoding circuit not yet added, performing perfect initialization instead')
+        warnings.warn(
+            'Encoding circuit not yet added, performing perfect initialization instead')
         if simulator_type == 'statevector':
             circ.set_statevector(get_encoded_state_422(initial_state))
         else:
             circ.set_density_matrix(get_encoded_state_422(initial_state))
-    
+
     else:
         if simulator_type == 'statevector':
             circ.set_statevector(get_encoded_state_422(initial_state))
         else:
             circ.set_density_matrix(get_encoded_state_422(initial_state))
-        
 
-            
     add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qbReg,
                             conditional=conditional, pauliop=pauliop,
                             include_barriers=include_barriers)
 
     # Stabilizer
     circ.compose(get_repeated_stabilization_422(registers, n_cycles=n_cycles,
-                                            reset=reset,
-                                            snapshot_type=snapshot_type,
-                                            conditional=conditional,
-                                            include_barriers=include_barriers,
-                                            pauliop=pauliop, 
-                                            **kwargs), inplace=True)
+                                                reset=reset,
+                                                snapshot_type=snapshot_type,
+                                                conditional=conditional,
+                                                include_barriers=include_barriers,
+                                                pauliop=pauliop,
+                                                **kwargs), inplace=True)
 
     # Final readout
     circ.measure(qbReg, readout)
@@ -646,9 +680,9 @@ def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
 
 
 def get_repeated_stabilization_422(registers, n_cycles=1,
-                               reset=True, snapshot_type='density_matrix',
-                               include_barriers=True, conditional=True, 
-                               pauliop='ZZZZZ', **kwargs):
+                                   reset=True, snapshot_type='density_matrix',
+                                   include_barriers=True, conditional=True,
+                                   pauliop='ZZZZZ', **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -674,8 +708,8 @@ def get_repeated_stabilization_422(registers, n_cycles=1,
                                           **kwargs
                                           ), inplace=True)
 
-        add_snapshot_to_circuit(circ, snapshot_type, current_cycle+1, 
-                                registers.QubitRegister,conditional=conditional,
+        add_snapshot_to_circuit(circ, snapshot_type, current_cycle+1,
+                                registers.QubitRegister, conditional=conditional,
                                 pauliop=pauliop)
 
     return circ
@@ -701,20 +735,21 @@ def get_empty_stabilizer_circuit_422(registers):
 
     return circ
 
+
 def get_encoded_state_422(initial_state, include_ancillas='back'):
     """Create the correct encoded state for the [[4,2,2]] code.
-    
+
     Args:
         initial_state (list): List corresponding to the (unnormalized) initial
                               two_qubit state. 
         include_ancillas (str/None, optional): Whether to append the ancillas by
                                                tensor product to the end. 
                                                Defaults to True.
-        
+
     Returns:
         The encoded state plus (optional) one ancilla in 0 state, as a 1D 
         numpy array.
-        
+
     Example: get_encoded_state([1,0,0,0]) gives the |00> state.
              get_encoded_state([1,1,1,1]) gives the |++> state.
              get_encoded_state([1,-1,-1,1]) gives the |--> state.
@@ -756,11 +791,12 @@ def stabilizer_cycle_422(registers, reset=True, current_cycle=0,
     circ = get_empty_stabilizer_circuit(registers)
     for i in range(2):
         circ.compose(stabilizer_list[i](registers,
-                     syn_bit=syn_bit_list[i], reset=reset), inplace=True)
+                                        syn_bit=syn_bit_list[i], reset=reset), inplace=True)
         if include_barriers:
             circ.barrier()
 
     return circ
+
 
 def stabilizer_XXXX(registers, syn_bit=None, reset=True):
     """Gives the circuit for running the regular XXXX stabilizer for the
@@ -779,10 +815,11 @@ def stabilizer_XXXX(registers, syn_bit=None, reset=True):
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     circ = get_empty_stabilizer_circuit(registers)
-    
+
     # TODO: This might be redundant since we only have a single ancilla
     if not anReg.size == 1:
-        warnings.warn('Ancilla register has size >1, something might be wrong.')
+        warnings.warn(
+            'Ancilla register has size >1, something might be wrong.')
     anQb = anReg[0]
 
     # Entangle ancilla
@@ -798,6 +835,7 @@ def stabilizer_XXXX(registers, syn_bit=None, reset=True):
         circ.reset(anQb)
 
     return circ
+
 
 def stabilizer_ZZZZ(registers, syn_bit=None, reset=True):
     """Gives the circuit for running the regular XXXX stabilizer for the
@@ -816,10 +854,11 @@ def stabilizer_ZZZZ(registers, syn_bit=None, reset=True):
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     circ = get_empty_stabilizer_circuit(registers)
-    
+
     # TODO: This might be redundant since we only have a single ancilla
     if not anReg.size == 1:
-        warnings.warn('Ancilla register has size >1, something might be wrong.')
+        warnings.warn(
+            'Ancilla register has size >1, something might be wrong.')
     anQb = anReg[0]
 
     # Entangle ancilla
@@ -835,6 +874,7 @@ def stabilizer_ZZZZ(registers, syn_bit=None, reset=True):
         circ.reset(anQb)
 
     return circ
+
 
 def logical_states_422(include_ancillas='front') -> List[List[float]]:
     """Returns the logical states for the [[4,2,2]] code. This follows the
@@ -1205,12 +1245,12 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     circ = get_empty_stabilizer_circuit(registers)
     for i in range(4):
         circ.compose(stabilizer_list[i](registers, anQb=anQb_list[i],
-                     syn_bit=syn_bit_list[i], reset=reset), inplace=True)
+                                        syn_bit=syn_bit_list[i], reset=reset), inplace=True)
 
         # TODO: Make this work for all setting (e.g. conditional=True)
-        add_snapshot_to_circuit(circ, snapshot_type= 'dm', 
-                        qubits = registers.QubitRegister,conditional=False)
-                        
+        add_snapshot_to_circuit(circ, snapshot_type='dm',
+                                qubits=registers.QubitRegister, conditional=False)
+
         if include_barriers:
             circ.barrier()
     # Add an extra measurement to the next syndrome register
@@ -1223,14 +1263,15 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
                 circ.barrier()
 
     # Recovery
-    if recovery is True: 
+    if recovery is True:
 
         # TODO: Make this work for all setting (e.g. conditional=True)
-        add_snapshot_to_circuit(circ, snapshot_type= 'dm', 
-                        qubits = registers.QubitRegister,conditional=False)
+        add_snapshot_to_circuit(circ, snapshot_type='dm',
+                                qubits=registers.QubitRegister, conditional=False)
 
         circ.barrier()
-        circ.compose(unflagged_recovery(registers, reset, current_cycle), inplace=True)
+        circ.compose(unflagged_recovery(
+            registers, reset, current_cycle), inplace=True)
         # if include_barriers:
         circ.barrier()
     return circ
@@ -1419,9 +1460,11 @@ def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
 
     return circ
 
-#%%
+# %%
+
+
 def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
-        recovery=False):
+                        recovery=False):
     """Gives the circuit for a full stabilizer cycle following the double 
     diamond connectivity.
     """
@@ -1448,18 +1491,18 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     circ.sx(anReg[1])
     circ.u1(np.pi/2, anReg[1])
 
-    #circ.h(qbReg[0])
-    #circ.h(qbReg[3])
-    #circ.h(anReg[1])
+    # circ.h(qbReg[0])
+    # circ.h(qbReg[3])
+    # circ.h(anReg[1])
 
     circ.cz(anReg[1], qbReg[0])
     circ.cz(anReg[1], qbReg[1])
     circ.cz(anReg[1], qbReg[2])
     circ.cz(anReg[1], qbReg[3])
 
-    #circ.h(qbReg[0])
-    #circ.h(qbReg[3])
-    #circ.h(anReg[1])
+    # circ.h(qbReg[0])
+    # circ.h(qbReg[3])
+    # circ.h(anReg[1])
 
     circ.u1(np.pi/2, qbReg[0])
     circ.sx(qbReg[0])
@@ -1485,9 +1528,9 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     circ.sx(anReg[1])
     circ.u1(np.pi/2, anReg[1])
 
-    #circ.h(anReg[1])
-    #circ.h(qbReg[1])
-    #circ.h(qbReg[4])
+    # circ.h(anReg[1])
+    # circ.h(qbReg[1])
+    # circ.h(qbReg[4])
 
     circ.cz(anReg[1], qbReg[1])
 
@@ -1498,11 +1541,11 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
 
     circ.cz(anReg[1], qbReg[2])
     circ.cz(anReg[1], qbReg[3])
-    circ.cz(anReg[1], qbReg[1]) #4-1
-    
-    #circ.h(anReg[1])
-    #circ.h(qbReg[1])
-    #circ.h(qbReg[4])
+    circ.cz(anReg[1], qbReg[1])  # 4-1
+
+    # circ.h(anReg[1])
+    # circ.h(qbReg[1])
+    # circ.h(qbReg[4])
 
     circ.u1(np.pi/2, qbReg[1])
     circ.sx(qbReg[1])
@@ -1516,7 +1559,7 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     circ.measure(anReg[1], syn_bit_list[1])
     if reset:
         circ.reset(anReg[1])
-    
+
     # XIXZZ
     circ.u1(np.pi/2, qbReg[0])
     circ.sx(qbReg[0])
@@ -1528,18 +1571,18 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     circ.sx(anReg[1])
     circ.u1(np.pi/2, anReg[1])
 
-    #circ.h(anReg[1])
-    #circ.h(qbReg[0])
-    #circ.h(qbReg[2])
+    # circ.h(anReg[1])
+    # circ.h(qbReg[0])
+    # circ.h(qbReg[2])
 
     circ.cz(anReg[1], qbReg[0])
     circ.cz(anReg[1], qbReg[2])
     circ.cz(anReg[1], qbReg[3])
-    circ.cz(anReg[1], qbReg[1]) #4-1
+    circ.cz(anReg[1], qbReg[1])  # 4-1
 
-    #circ.h(anReg[1])
-    #circ.h(qbReg[0])
-    #circ.h(qbReg[2])
+    # circ.h(anReg[1])
+    # circ.h(qbReg[0])
+    # circ.h(qbReg[2])
 
     circ.u1(np.pi/2, qbReg[0])
     circ.sx(qbReg[0])
@@ -1570,9 +1613,9 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     circ.sx(anReg[1])
     circ.u1(np.pi/2, anReg[1])
 
-    #circ.h(anReg[1])
-    #circ.h(qbReg[1])
-    #circ.h(qbReg[3])
+    # circ.h(anReg[1])
+    # circ.h(qbReg[1])
+    # circ.h(qbReg[3])
 
     circ.cz(anReg[1], qbReg[0])
     circ.cz(anReg[1], qbReg[1])
@@ -1581,25 +1624,25 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     circ.u1(np.pi/2, qbReg[1])
     circ.sx(qbReg[1])
     circ.u1(np.pi/2, qbReg[1])
-    #circ.h(qbReg[1])
+    # circ.h(qbReg[1])
 
     circ.iswap(qbReg[1], qbReg[4])
     circ.cz(qbReg[1], qbReg[4])
     circ.u1(-np.pi/2, qbReg[1])
     circ.u1(-np.pi/2, qbReg[4])
 
-    circ.cz(anReg[1], qbReg[1])#4-1
-    
-    #circ.h(anReg[1])
-    #circ.h(qbReg[3])
-    
+    circ.cz(anReg[1], qbReg[1])  # 4-1
+
+    # circ.h(anReg[1])
+    # circ.h(qbReg[3])
+
     circ.u1(np.pi/2, qbReg[3])
     circ.sx(qbReg[3])
     circ.u1(np.pi/2, qbReg[3])
     circ.u1(np.pi/2, anReg[1])
     circ.sx(anReg[1])
     circ.u1(np.pi/2, anReg[1])
-    
+
     circ.iswap(qbReg[1], qbReg[4])
     circ.cz(qbReg[1], qbReg[4])
     circ.u1(-np.pi/2, qbReg[1])
@@ -1611,7 +1654,8 @@ def transpiled_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     # Recovery
     if recovery is True:
         circ.barrier()
-        circ.compose(unflagged_recovery(registers, reset, current_cycle), inplace=True)
+        circ.compose(unflagged_recovery(
+            registers, reset, current_cycle), inplace=True)
         circ.barrier()
     return circ
 
@@ -2097,11 +2141,11 @@ def logical_states(include_ancillas='front') -> List[List[float]]:
 
 if __name__ == "__main__":
     # The settings for our circuit
-    n_cycles = 1
+    n_cycles = 2
     reset = True
     recovery = False
     flag = False
-
+    encoding = False
     # Define our registers (Maybe to be written as function?)
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
@@ -2119,34 +2163,19 @@ if __name__ == "__main__":
                                         reset=reset,
                                         recovery=recovery,
                                         flag=flag,
+                                        encoding=encoding,
+                                        final_measure=False
                                         )
 
-    display(circ.draw())
-    # Run it
-    n_shots = 2000
-    results = execute(
-        circ,
-        Aer.get_backend('qasm_simulator'),
-        noise_model=None,
-        shots=n_shots
-    ).result()
+    display(circ.draw(output='mpl'))
+    # # Run it
+    # n_shots = 2000
+    # results = execute(
+    #     circ,
+    #     Aer.get_backend('qasm_simulator'),
+    #     noise_model=None,
+    #     shots=n_shots
+    # ).result()
 
-    # Analyze results
-    logical = logical_states()
-    sv_post_encoding = results.data(
-    )['snapshots']['statevector']['stabilizer_0'][0]
-    fid = 0
-    for i in range(10):
-        sv_post_encoding = results.data(
-        )['snapshots']['statevector']['stabilizer_0'][i]
 
-        log0 = logical[0][np.arange(128, step=4)]
-        sv_test = sv_post_encoding[0:32]
-        fid += state_fidelity(log0, sv_test)
-
-    print('Average fidelity across 10 shots:')
-    print(fid/10)
-
-    # Plot results
-    counts = results.get_counts()
-    plot_histogram(counts)
+# %%
