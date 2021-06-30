@@ -70,9 +70,9 @@ def idealExp(t, T):
     return 0.5 * np.exp(-t/T) + 0.5
 
 
-n_shots = 1024*2
+n_shots = 1024*4
 
-n_cycles = 8
+n_cycles = 20
 pauliop = 'ZZZZZ'
 gate_times = standard_times
 
@@ -113,6 +113,20 @@ print("Decay encoded qubit done")
 #     n_cycles, n_shots, T1=T1, T2=T2)
 # times_perf = np.array([time['dm_' + str(n)] for n in range(n_cycles)]+[time['dm_' + str(n_cycles)]])
 # print("Perfect decoding (no noise in stabilizer cycle) done")
+
+# %%
+with open('data/extra_snapshot.npy', 'wb') as f:
+    np.save(f, (F_L,P_L,times))
+    np.save(f, (F_L_5,P_L_5,times_5))
+    np.save(f, (F_L_10,P_L_10,times_10))
+    np.save(f, (fid_0_encoded,timespan))
+
+#%%
+with open('data/extra_snapshot.npy', 'rb') as f:
+    F_L,P_L,times = np.load(f)
+    F_L_5,P_L_5,times_5 = np.load(f)
+    F_L_10,P_L_10,times_10 = np.load(f)
+    fid_0_encoded,timespan = np.load(f)
 # %%
 fig, ax = plt.subplots(1, 1, figsize=(7, 5))
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
@@ -130,33 +144,32 @@ trans_offset_lifetime = mtransforms.offset_copy(ax.transData, fig=fig,
 # Plot normal QEC
 fidelities = [F_L_i*P_L_i for F_L_i, P_L_i in zip(F_L, P_L)]
 ax.plot(times/1000, fidelities, '.-', color=colors(color_count),
-        label=r'$F$, (fid inital state)')
+        label=r'$F$')
+ax.plot(times/1000, F_L, '.--', color=colors(color_count),
+        label=r'$F_L$')
 color_count += 1
 
 # Plot normal QEC 5 us delay
 fidelities = [F_L_i*P_L_i for F_L_i, P_L_i in zip(F_L_5, P_L_5)]
 ax.plot(times_5/1000, fidelities, '.-', color=colors(color_count),
-        label=r'$F$, (fid inital state)')
+        label=r'$F$, (5 $\mu s$ delay)')
+ax.plot(times_5/1000, F_L_5, '.--', color=colors(color_count),
+        label=r'$F_L$, (5 $\mu s$ delay)')
 color_count += 1
 
 # Plot normal QEC 10 us delay
 fidelities = [F_L_i*P_L_i for F_L_i, P_L_i in zip(F_L_10, P_L_10)]
 ax.plot(times_10/1000, fidelities, '.-', color=colors(color_count),
-        label=r'$F$, (fid inital state)')
+        label=r'$F$, (10 $\mu s$ delay)')
+ax.plot(times_10/1000, F_L_10, '.--', color=colors(color_count),
+        label=r'$F_L$, (10 $\mu s$ delay)')
 color_count += 1
 
 # Plot normal QEC projected
-ax.plot(times/1000, F_L, '.-', color=colors(color_count),
-        label=r'$F_L$, (projected fid)')
-color_count += 1
 
-ax.plot(times_5/1000, F_L_5, '.-', color=colors(color_count),
-        label=r'$F_L$, (projected fid)')
-color_count += 1
 
-ax.plot(times_10/1000, F_L_10, '.-', color=colors(color_count),
-        label=r'$F_L$, (projected fid)')
-color_count += 1
+
+
 
 # # Plot P_L
 # ax.plot(times/1000, P_L, '.-', color=colors(color_count), label=r'$P_L=F/F_L$')
@@ -182,20 +195,8 @@ color_count += 1
 ax.set_xlabel('Time [μs]')
 ax.set_ylabel(r'Probability')
 ax.set_ylim((0.2, 1.05))
-ax.set_xlim((0, 25))
+ax.set_xlim((0, 80))
 ax.legend()
-# %%
-with open('data/extra_snapshot.npy', 'wb') as f:
-    np.save(f, (F_L,P_L,times))
-    np.save(f, (F_L_5,P_L_5,times_5))
-    np.save(f, (F_L_10,P_L_10,times_10))
-
-
-#%%
-with open('data/extra_snapshot.npy', 'rb') as f:
-    F_L,P_L,times = np.load(f)
-    F_L_5,P_L_5,times_5 = np.load(f)
-    F_L_10,P_L_10,times_10 = np.load(f)
 
 
 # %% Testing adding idle noise
