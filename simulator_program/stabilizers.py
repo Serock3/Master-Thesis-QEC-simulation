@@ -46,7 +46,7 @@ class StabilizerRegisters:
         self.ReadoutRegister = readout
 
 
-def get_full_stabilizer_circuit(registers, n_cycles=1,
+def get_full_stabilizer_circuit(registers = None, n_cycles=1,
                                 reset=True, recovery=False, flag=False,
                                 snapshot_type='density_matrix',
                                 include_barriers=True, conditional=True,
@@ -57,11 +57,20 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
     n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
     """
 
-    # Unpack registers
-    # qbReg, anReg, clReg, readout = registers
-    qbReg = registers.QubitRegister
-    anReg = registers.AncillaRegister
-    readout = registers.ReadoutRegister
+    # TODO: Make this compatible with other codes?
+    if registers is None:
+        qbReg = QuantumRegister(5, 'code_qubit')
+        anReg = AncillaRegister(2, 'ancilla_qubit')
+        crReg = ClassicalRegister(4, 'syndrome_bit')  # The typical register
+        # cr = get_classical_register(n_cycles, flag) # Advanced list of registers
+        readout = ClassicalRegister(5, 'readout')
+
+        registers = StabilizerRegisters(qbReg, anReg, crReg, readout)
+    else:
+        qbReg = registers.QubitRegister
+        anReg = registers.AncillaRegister
+        readout = registers.ReadoutRegister
+
     if not anReg.size == 2 and not anReg.size == 5:
         raise Exception('Ancilla register must be of size 2 or 5')
 
@@ -2202,9 +2211,11 @@ if __name__ == "__main__":
         'recovery': True,
         'flag': False,
         'encoding': False,
+        'conditional': True,
         'include_barriers': True,
         'generator_snapshot': True,
-        'idle_snapshots': 1}
+        'idle_snapshots': 1,
+        'final_measure':False}
     # Define our registers (Maybe to be written as function?)
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
@@ -2220,14 +2231,14 @@ if __name__ == "__main__":
     circ += get_full_stabilizer_circuit(registers, **kwargs)
 
     display(circ.draw(output='mpl'))
-    # # Run it
-    # n_shots = 2000
-    # results = execute(
-    #     circ,
-    #     Aer.get_backend('qasm_simulator'),
-    #     noise_model=None,
-    #     shots=n_shots
-    # ).result()
+    # Run it
+    n_shots = 2000
+    results = execute(
+        circ,
+        Aer.get_backend('qasm_simulator'),
+        noise_model=None,
+        shots=n_shots
+    ).result()
 
 
 # %%

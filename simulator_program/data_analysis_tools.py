@@ -47,6 +47,51 @@ else:
 # %%
 
 
+def extend_standard_gate_times(gate_times={}):
+    # TODO: move this to custom_noise_model.py?
+    if isinstance(gate_times, dict):
+        full_gate_times = standard_times.get_gate_times(
+            custom_gate_times=gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
+    return full_gate_times
+
+
+def default_execute(circ, shots=None, noise_model=None, gate_times={}, T1=40e3, T2=60e3, simulator_name='qasm_simulator', simulator_method='density_matrix'):
+    """Execute with our standard settings. Use this to make sure that the noise model i applied to delays.
+
+    Args:
+        circ (Circuit): circuit
+        noise_model (NoiseMode, optional): defaults to thermal_relaxation_model_V2.
+        gate_times (dict, optional)
+        T1 ([type], optional): Defaults to 40e3.
+        T2 ([type], optional):  Defaults to 60e3.
+        simulator_type (str, optional): Simulation method. Defaults to 'density_matrix'.
+
+    Returns:
+        Results: Qiskit results object.
+    """
+    if noise_model is None:
+        full_gate_times = extend_standard_gate_times(gate_times)
+        if noise_model is None:
+            noise_model = thermal_relaxation_model_V2(
+                T1=T1, T2=T2, gate_times=full_gate_times)
+
+    simulator = Aer.get_backend(simulator_name)
+
+    simulator.set_option('noise_model', noise_model)
+    try:
+        simulator.set_option('method', simulator_method)
+    except:
+        print('Invalid simulator type, defaulting to density_matrix')
+        simulator.set_option('method', 'density_matrix')
+
+    return simulator.run(circ, shots=shots).result()
+
+
 def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                           reset=True, data_process_type='recovery', idle_noise=True, transpile=True,
                           snapshot_type='dm', device=None, device_properties=WACQT_device_properties,
@@ -93,15 +138,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
             only returned if using post_select=True.
     """
 
-    # Get gate times missing from input
-    if isinstance(gate_times, dict):
-        full_gate_times = standard_times.get_gate_times(
-            custom_gate_times=gate_times)
-    elif isinstance(gate_times, GateTimes):
-        full_gate_times = gate_times
-    else:
-        warnings.warn('Invalid gate times, assuming standard_times')
-        full_gate_times = standard_times
+    full_gate_times = extend_standard_gate_times(gate_times)
 
     # Check the data processing method for settings
     if data_process_type == 'recovery':
@@ -120,9 +157,10 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         recovery = False
         conditional = False
 
+    # TODO: Delete these
     # Noise model
-    noise_model = thermal_relaxation_model_V2(
-        T1=T1, T2=T2, gate_times=full_gate_times)
+    # noise_model = thermal_relaxation_model_V2(
+    #     T1=T1, T2=T2, gate_times=full_gate_times)
     # The code below is used to experiment with the nois model
     # noise_model = thermal_relaxation_model_per_qb(
     #     T1=[T1]*7, T2=[T2]*7, gate_times=full_gate_times)
@@ -133,7 +171,6 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     #     T1=[T1]*5+[1,1], T2=[T2]*5+[1,1], gate_times=full_gate_times)
     # noise_model = thermal_relaxation_model_per_qb(
     #     T1=[1,1]*7, T2=[1,1]*7, gate_times=full_gate_times)
-
 
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
@@ -150,8 +187,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                                        conditional=conditional,
                                        encoding=encoding, theta=theta, phi=phi,
                                        pauliop=pauliop, device=device,
-                                       simulator_type=simulator_type, final_measure=False
-                                       , **kwargs)
+                                       simulator_type=simulator_type, final_measure=False, **kwargs)
 
     if transpile:
         circ = shortest_transpile_from_distribution(circ, print_cost=False,
@@ -167,8 +203,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         time = get_circuit_time(circ, full_gate_times)
         circ = get_empty_noisy_circuit_v3(circ, time, full_gate_times,
                                           T1=T1, T2=T2)
-        results = execute(circ, Aer.get_backend('qasm_simulator'),
-                          noise_model=noise_model, shots=n_shots).result()
+        results = default_execute(circ, n_shots)
 
         # Calculate fidelity at each snapshot
         fidelities = []
@@ -186,32 +221,20 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
                                                T1=T1, T2=T2, return_time=True,
                                                **kwargs)
-    else: 
+    else:
         time = get_circuit_time(circ=circ, gate_times=full_gate_times)
 
-    # Run the circuit
-    # results = execute(circ, Aer.get_backend('qasm_simulator'),
-    #    noise_model=noise_model, shots=n_shots).result()
-    # simulator = Aer.get_backend('qasm_simulator')
-    simulator = QasmSimulator(noise_model=noise_model)
-    try:
-        simulator.set_option('method', simulator_type)
-    except:
-        print('Invalid simulator type, defaulting to density_matrix')
-        simulator.set_option('method', 'density_matrix')
-
-    results = simulator.run(circ, shots=n_shots).result()
-    # results = execute(circ, simulator,
-    #                   noise_model=noise_model, shots=n_shots).result()
-
+    results = default_execute(circ, n_shots)
+    
     if data_process_type == 'recovery' or data_process_type == 'none':
-        fidelities = [] # If project = True, this contains F_L
+        fidelities = []  # If project = True, this contains F_L
         P_Ls = []
         if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
             for current_cycle in range(label_counter.value):
                 state = results.data()['dm_' + str(current_cycle)]
                 if project:
-                    state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
+                    state, P_L = project_dm_to_logical_subspace_V2(
+                        state, return_P_L=True)
                     P_Ls.append(np.real(P_L))
                 fidelities.append(state_fidelity(state, trivial))
             if project:
@@ -219,21 +242,23 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
             for current_cycle in range(n_cycles+1):
                 fidelities.append(results.data()['exp_' + str(current_cycle)])
-        
+
         return fidelities, time
 
     elif data_process_type == 'post_select':
         # Get the number of remaining shot at each cycle
-        select_counts = get_trivial_post_select_counts(results.get_counts(), n_cycles)
+        select_counts = get_trivial_post_select_counts(
+            results.get_counts(), n_cycles)
 
         # Get the fidelity for each cycle
-        fidelities = [] # If project = True, this contains F_L
+        fidelities = []  # If project = True, this contains F_L
         P_Ls = []
         if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
             # TODO: Make this return F_L and P_L seperately and fix the references
             for state in get_trivial_post_select_den_mat(results, n_cycles):
                 if project:
-                    state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
+                    state, P_L = project_dm_to_logical_subspace_V2(
+                        state, return_P_L=True)
                     P_Ls.append(np.real(P_L))
                 fidelities.append(state_fidelity(state, trivial))
             if project:
@@ -412,8 +437,8 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
     # TODO: Better looking solution
     extra_qubits = np.zeros(2**6)
     extra_qubits[0] = 1.0
-    zero_state = np.kron(extra_qubits,np.array([1, 0]))
-    one_state = np.kron(extra_qubits,np.array([0, 1]))
+    zero_state = np.kron(extra_qubits, np.array([1, 0]))
+    one_state = np.kron(extra_qubits, np.array([0, 1]))
     psi = np.cos(theta/2)*zero_state + np.exp(1j*phi)*np.sin(theta/2)*one_state
     circ.set_density_matrix(psi)
     psi = np.cos(theta/2)*logical_states(include_ancillas=None)[0] + np.exp(
@@ -444,7 +469,7 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
         circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
                                                T1=T1, T2=T2, return_time=True)
     else:
-        time = {'end':None}
+        time = {'end': None}
     # Run the circuit
     noise_model = thermal_relaxation_model_V2(
         T1=T1, T2=T2, gate_times=full_gate_times)
@@ -455,7 +480,8 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
         state = results.data()['dm_0']
         true_state = psi
         if project:
-            state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
+            state, P_L = project_dm_to_logical_subspace_V2(
+                state, return_P_L=True)
         fidelities = state_fidelity(state, true_state)
         if project:
             return fidelities, circ, time['end'], P_L
@@ -674,11 +700,12 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
             for current_cycle in range(n_cycles+1):
                 state = results.data(circ)['dm_' + str(current_cycle)]
                 if project:
-                    state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
+                    state, P_L = project_dm_to_logical_subspace_V2(
+                        state, return_P_L=True)
                     P_Ls.append(P_L)
                 fidelities.append(state_fidelity(state, trivial))
             if project:
-                return fidelities, P_Ls, time    
+                return fidelities, P_Ls, time
         elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
             for current_cycle in range(n_cycles+1):
                 fidelities.append(results.data()['exp_' + str(current_cycle)])
@@ -769,7 +796,7 @@ def project_dm_to_logical_subspace_V1(rho):
     return rho_L
 
 
-def project_dm_to_logical_subspace_V2(rho, return_P_L = False):
+def project_dm_to_logical_subspace_V2(rho, return_P_L=False):
     """Projects a density-matrix to the logical codespace. This version 
     does not reduce the dimension, and returns a 2^5 x 2^5 matrix.
 
