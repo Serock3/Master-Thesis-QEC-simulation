@@ -4,6 +4,7 @@
 import numpy as np
 import scipy
 import itertools
+import warnings
 from qiskit import *
 #from qiskit.visualization import plot_histogram
 
@@ -115,7 +116,6 @@ def fidelity_from_scratch_422(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3
     # Noise model
     noise_model = thermal_relaxation_model_V2(
         T1=T1, T2=T2, gate_times=full_gate_times)
-    noise_model = None
 
     # Circuits
     circ = get_full_stabilizer_circuit_422(n_cycles=n_cycles, 
@@ -147,7 +147,7 @@ def fidelity_from_scratch_422(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3
         simulator.set_option('method', 'density_matrix')
     results = execute(circ, simulator,
                       noise_model=noise_model, shots=n_shots).result()
-    #return results
+
     # Get the number of remaining shot at each cycle
     select_counts = get_trivial_post_select_counts(results.get_counts(), n_cycles, '00')
 
@@ -159,8 +159,9 @@ def fidelity_from_scratch_422(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3
         # TODO: Make this return F_L and P_L seperately and fix the references
         for state in get_trivial_post_select_den_mat(results, n_cycles, '00'):
             if project:
-                state, P_L = project_dm_to_logical_subspace_V2(state, return_P_L=True)
+                state, P_L = project_dm_to_logical_subspace_422(state, return_P_L=True)
                 P_Ls.append(np.real(P_L))
+                state = get_encoded_state_422(np.diag(state), include_ancillas=None)
             fidelities.append(state_fidelity(state, trivial))
         if project:
             return fidelities, P_Ls, select_counts, time
@@ -171,9 +172,223 @@ def fidelity_from_scratch_422(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3
                           results, n_cycles)]
     return fidelities, select_counts, time
 
-# %%
-res = fidelity_from_scratch_422(0, 1024, transpile=True, encoding=True,
-                                idle_noise=False, initial_state=[0., 0., 0., 1.],
-                                extra_snapshots=True)
-#fid, counts, time = fidelity_from_scratch_422(5, 1024, transpile=False)
-print(res.get_counts())
+def project_dm_to_logical_subspace_422_V2(rho, return_P_L = False):
+    """WARNING: THIS DOES NOT WORK!! Use project_dm_to_logical_subspace_422().
+    
+    Projects a density-matrix to the logical codespace. This is it the
+    [[4,2,2]] equivalent of project_dm_to_logical_subspace_422.
+
+    F(|0_L>, rho_L) where rho_L is returned from this function is equal to
+    F(|0>, rho_L) wherre rho_L is the 2x2 matrix returned from V1 above.
+
+    Args:
+        rho (DensityMatrix): The 4-qubit state
+
+    Returns:
+        DensityMatrix: Projected 4-qubit logical state
+    """
+    logical = logical_states_422(include_ancillas=None)
+    # Projector to the code space
+    I_L = (np.outer(logical[0b00], logical[0b00]) + \
+          np.outer(logical[0b01], logical[0b01]) + \
+          np.outer(logical[0b10], logical[0b10]) + \
+          np.outer(logical[0b11], logical[0b11]))#/np.sqrt(2)
+    #I_L = Pauli('YYYY').to_matrix()
+    # Note here how the projector has to be included for this to work as expected
+    logical_pauli_matrices = np.array((
+        I_L,
+        #Pauli('XXXX').to_matrix()@I_L,
+        #Pauli('YYYY').to_matrix()@I_L,
+        #Pauli('ZZZZ').to_matrix()@I_L,
+        Pauli('XIXI').to_matrix()@I_L,
+        Pauli('XZYI').to_matrix()@I_L,
+        Pauli('IZZI').to_matrix()@I_L,
+        Pauli('XIIX').to_matrix()@I_L,
+        Pauli('YIZX').to_matrix()@I_L,
+        Pauli('ZIZI').to_matrix()@I_L,
+    ))
+    P_L = np.trace(rho@logical_pauli_matrices[0])
+
+    rho_L = np.zeros((2**4, 2**4), dtype=complex)
+    for i in range(len(logical_pauli_matrices)):
+        rho_L += logical_pauli_matrices[i] * \
+            np.trace(rho@logical_pauli_matrices[i])/(P_L) #
+    rho_L /= np.linalg.norm(rho_L)
+    if return_P_L:
+        return rho_L, P_L
+    return rho_L
+
+def project_dm_to_logical_subspace_422(rho, return_P_L=False):
+    P_L = 0
+    logical = logical_states_422(include_ancillas=None)
+    for i in range(len(logical)):
+        P_L += logical[i] @ rho @ logical[i]
+    rho_L = np.zeros((4, 4), dtype=complex)
+    for i in range(len(logical)):
+        for j in range(len(logical)):
+            rho_L[i, j] = (logical[i] @ rho @ logical[j])/P_L
+    if return_P_L:
+        return rho_L, P_L
+    return rho_L
+
+# %% Simulations
+kwargs = {
+    'transpile': False,
+    'project': True,
+    #'extra_snapshots': True,
+}
+n_cycles=20
+n_shots = 1024
+fid_L_00, P_L_00, counts_00, times = fidelity_from_scratch_422(n_cycles, n_shots,
+                                    initial_state = [1.,0.,0.,0.], **kwargs)
+#%% Encoded idle decay
+n_datapoints = 41
+snapshot_times = np.linspace(0,1480*20, n_datapoints)
+res_00 = get_idle_encoded_422(snapshot_times, initial_state=[1., 0., 0., 0.])
+res_01 = get_idle_encoded_422(snapshot_times, initial_state=[0., 1., 0., 0.])
+res_10 = get_idle_encoded_422(snapshot_times, initial_state=[0., 0., 1., 0.])
+res_11 = get_idle_encoded_422(snapshot_times, initial_state=[0., 0., 0., 1.])
+
+fid_00_d = [state_fidelity(logical_states_422(include_ancillas=None)[0],
+            res_00.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_01_d = [state_fidelity(logical_states_422(include_ancillas=None)[1],
+            res_01.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_10_d = [state_fidelity(logical_states_422(include_ancillas=None)[2],
+            res_10.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_11_d = [state_fidelity(logical_states_422(include_ancillas=None)[3],
+            res_11.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+
+#%% Plot post-selection
+fid_00 = []
+fid_01 = []
+fid_10 = []
+fid_11 = []
+for i in range(n_cycles+1):
+    fid_00.append(fid_L_00[i]*P_L_00[i])
+    fid_01.append(fid_L_00[i]*P_L_00[i])
+    fid_10.append(fid_L_00[i]*P_L_00[i])
+    fid_11.append(fid_L_00[i]*P_L_00[i])
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+t_cycles = np.array([times['dm_con_'+str(i)] for i in range(n_cycles+1)])
+ax[0].plot(t_cycles, fid_00, '-o', color='C0', label=r'Fid $|00\rangle_L$')
+ax[0].plot(t_cycles, fid_01, '-o', color='C1', label=r'Fid $|01\rangle_L$')
+ax[0].plot(t_cycles, fid_10, '-o', color='C2', label=r'Fid $|10\rangle_L$')
+ax[0].plot(t_cycles, fid_11, '-o', color='C3', label=r'Fid $|11\rangle_L$')
+
+ax[0].plot(snapshot_times, fid_00_d, color='C0', label=r'Decay $|00\rangle_L$')
+ax[0].plot(snapshot_times, fid_01_d, color='k', label=r'Decay $|01\rangle_L$, $|10\rangle_L$, $|11\rangle_L$')
+#ax[0].plot(snapshot_times, fid_10_d, color='C2', label=r'$|10_L\rangle$')
+#ax[0].plot(snapshot_times, fid_11_d, color='C3', label=r'$|11_L\rangle$')
+ax[0].set_xlabel('Time [ns]')
+ax[0].set_ylabel(r'State fidelity, $F$')
+ax[0].set_title('[[4,2,2]] Post selection fidelity')
+ax[0].legend()
+
+frac_00 = []
+frac_01 = []
+frac_10 = []
+frac_11 = []
+for i in range(n_cycles+1):
+    frac_00.append(counts_00[i]/n_shots)
+    frac_01.append(counts_01[i]/n_shots)
+    frac_10.append(counts_10[i]/n_shots)
+    frac_11.append(counts_11[i]/n_shots)
+ax[1].plot(t_cycles, frac_00, '-o', color='C0', label=r'Frac. runs $|00\rangle_L$')
+ax[1].plot(t_cycles, frac_01, '-o', color='C1', label=r'Frac. runs $|01\rangle_L$')
+ax[1].plot(t_cycles, frac_10, '-o', color='C2', label=r'Frac. runs $|10\rangle_L$')
+ax[1].plot(t_cycles, frac_11, '-o', color='C3', label=r'Frac. runs $|11\rangle_L$')
+
+ax[1].plot(snapshot_times, fid_00_d, color='C0', label=r'Decay $|00\rangle_L$')
+ax[1].plot(snapshot_times, fid_01_d, color='k', label=r'Decay $|01\rangle_L$, $|10\rangle_L$, $|11\rangle_L$')
+
+
+ax[1].set_xlabel('Time [ns]')
+ax[1].set_ylabel(r'Fraction of runs left')
+ax[1].set_title('Fraction of remaining runs')
+ax[1].legend()
+
+# %% More encoded decay (longer times)
+snapshot_times = np.linspace(0,1480*80, n_datapoints)
+state_00 = get_encoded_state_422([1., 0., 0., 0.], include_ancillas=None)
+state_01 = get_encoded_state_422([0., 1., 0., 0.], include_ancillas=None)
+state_10 = get_encoded_state_422([0., 0., 1., 0.], include_ancillas=None)
+state_11 = get_encoded_state_422([0., 0., 0., 1.], include_ancillas=None)
+state_0p = get_encoded_state_422([1., 1., 0., 0.], include_ancillas=None)
+state_p1 = get_encoded_state_422([0., 1., 0., 1.], include_ancillas=None)
+state_1p = get_encoded_state_422([0., 0., 1., 1.], include_ancillas=None)
+state_p0 = get_encoded_state_422([1., 0., 1., 0.], include_ancillas=None)
+state_pp = get_encoded_state_422([1., 1., 1., 1.], include_ancillas=None)
+#%%
+n_datapoints = 41*2
+snapshot_times = np.linspace(0,1480*80, n_datapoints)
+res_00 = get_idle_encoded_422(snapshot_times, initial_state=[1., 0., 0., 0.])
+res_01 = get_idle_encoded_422(snapshot_times, initial_state=[0., 1., 0., 0.])
+res_10 = get_idle_encoded_422(snapshot_times, initial_state=[0., 0., 1., 0.])
+res_11 = get_idle_encoded_422(snapshot_times, initial_state=[0., 0., 0., 1.])
+
+res_0p = get_idle_encoded_422(snapshot_times, initial_state=[1., 1., 0., 0.])
+res_p1 = get_idle_encoded_422(snapshot_times, initial_state=[0., 1., 0., 1.])
+res_1p = get_idle_encoded_422(snapshot_times, initial_state=[0., 0., 1., 1.])
+res_p0 = get_idle_encoded_422(snapshot_times, initial_state=[1., 0., 1., 0.])
+res_pp = get_idle_encoded_422(snapshot_times, initial_state=[1., 1., 1., 1.])
+
+
+def projected_fidelity(res, trivial, n_datapoints):
+    P_Ls = []
+    fid_L = []
+    for state in [res.data()['dm_'+str(index)] for index in range(n_datapoints)]:
+        state, P_L = project_dm_to_logical_subspace_422(state, return_P_L=True)
+        P_Ls.append(np.real(P_L))
+        state = get_encoded_state_422(np.diag(state), include_ancillas=None)
+        fid_L.append(state_fidelity(state, trivial))
+    return fid_L, P_Ls
+
+fid_L_00_d, P_L_00_d = projected_fidelity(res_00, state_00, n_datapoints)
+fid_L_01_d, P_L_01_d = projected_fidelity(res_01, state_01, n_datapoints)
+fid_L_10_d, P_L_10_d = projected_fidelity(res_10, state_10, n_datapoints)
+fid_L_11_d, P_L_11_d = projected_fidelity(res_11, state_11, n_datapoints)
+fid_L_0p_d, P_L_0p_d = projected_fidelity(res_0p, state_0p, n_datapoints)
+fid_L_p1_d, P_L_p1_d = projected_fidelity(res_p1, state_p1, n_datapoints)
+fid_L_1p_d, P_L_1p_d = projected_fidelity(res_1p, state_1p, n_datapoints)
+fid_L_p0_d, P_L_p0_d = projected_fidelity(res_p0, state_p0, n_datapoints)
+fid_L_pp_d, P_L_pp_d = projected_fidelity(res_pp, state_pp, n_datapoints)
+#%%
+fid_00_d = [state_fidelity(state_00,
+            res_00.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_01_d = [state_fidelity(state_01,
+            res_01.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_10_d = [state_fidelity(state_10,
+            res_10.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_11_d = [state_fidelity(state_11,
+            res_11.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_0p_d = [state_fidelity(state_0p,
+            res_0p.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_p1_d = [state_fidelity(state_p1,
+            res_p1.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_1p_d = [state_fidelity(state_1p,
+            res_1p.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_p0_d = [state_fidelity(state_p0,
+            res_p0.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fid_pp_d = [state_fidelity(state_pp,
+            res_pp.data()['dm_'+str(index)]) for index in range(n_datapoints)]
+fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+
+
+ax[0].plot(snapshot_times, fid_00_d, label=r'Decay $|00\rangle_L$')
+ax[0].plot(snapshot_times, fid_01_d, label=r'Decay $|01\rangle_L$, $|10\rangle_L$, $|11\rangle_L$, $|$+$1\rangle_L$, $|1$+$\rangle_L$')
+ax[0].plot(snapshot_times, fid_0p_d, label=r'Decay $|0$+$\rangle_L$, $|$+$0\rangle_L$')
+ax[0].plot(snapshot_times, fid_pp_d, label=r'Decay $|$++$\rangle_L$')
+ax[0].set_xlabel(r'Time [ns]')
+ax[0].set_ylabel(r'State fidelity, F')
+ax[0].set_title(r'Decay of encoded state')
+ax[0].legend()
+
+ax[1].plot(snapshot_times, fid_L_00_d, label=r'Decay $|00\rangle_L$')
+ax[1].plot(snapshot_times, fid_L_01_d, label=r'Decay $|01\rangle_L$, $|10\rangle_L$, $|11\rangle_L$, $|$+$1\rangle_L$, $|1$+$\rangle_L$')
+ax[1].plot(snapshot_times, fid_L_0p_d, label=r'Decay $|0$+$\rangle_L$, $|$+$0\rangle_L$')
+ax[1].plot(snapshot_times, fid_L_pp_d, label=r'Decay $|$++$\rangle_L$')
+ax[1].set_xlabel(r'Time [ns]')
+ax[1].set_ylabel(r'Logical state fidelity, $F_L$')
+ax[1].set_title(r'Decay of encoded state, projected')
+ax[1].legend(loc='lower left')
