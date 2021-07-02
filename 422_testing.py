@@ -17,7 +17,6 @@ from qiskit.quantum_info import DensityMatrix
 from qiskit.quantum_info import state_fidelity
 
 # Our own files
-
 from simulator_program.custom_noise_models import (thermal_relaxation_model,
                                  thermal_relaxation_model_V2,
                                  WACQT_target_times,
@@ -28,6 +27,7 @@ from simulator_program.stabilizers import *
 from simulator_program.post_select import *
 from simulator_program.post_process import *
 from simulator_program.idle_noise import *
+from simulator_program.decay import *
 
 from simulator_program.data_analysis_tools import project_dm_to_logical_subspace_V2
 #%%
@@ -237,10 +237,24 @@ kwargs = {
     'project': True,
     #'extra_snapshots': True,
 }
+
+#%% Post selection
 n_cycles=20
 n_shots = 1024
+kwargs = {
+    'transpile': False,
+    'project': True,
+    #'extra_snapshots': True,
+}
+
 fid_L_00, P_L_00, counts_00, times = fidelity_from_scratch_422(n_cycles, n_shots,
                                     initial_state = [1.,0.,0.,0.], **kwargs)
+fid_L_01, P_L_01, counts_01, times = fidelity_from_scratch_422(n_cycles, n_shots,
+                                    initial_state = [0.,1.,0.,0.], **kwargs)
+fid_L_10, P_L_10, counts_10, times = fidelity_from_scratch_422(n_cycles, n_shots,
+                                    initial_state = [0.,0.,1.,0.], **kwargs)
+fid_L_11, P_L_11, counts_11, times = fidelity_from_scratch_422(n_cycles, n_shots,
+                                    initial_state = [0.,0.,0.,1.], **kwargs)
 #%% Encoded idle decay
 n_datapoints = 41
 snapshot_times = np.linspace(0,1480*20, n_datapoints)
@@ -392,3 +406,153 @@ ax[1].set_xlabel(r'Time [ns]')
 ax[1].set_ylabel(r'Logical state fidelity, $F_L$')
 ax[1].set_title(r'Decay of encoded state, projected')
 ax[1].legend(loc='lower left')
+
+#%%
+def encoding_fidelity_422(n_shots, gate_times={}, T1=40e3, T2=60e3, idle_noise=True,
+                          initial_state=[1,0,0,0], include_swap=False, 
+                          transpile=False, snapshot_type='dm', project=False, 
+                          measure=True, **kwargs):
+
+    # Get gate times missing from input
+    if isinstance(gate_times, dict):
+        full_gate_times = standard_times.get_gate_times(
+            custom_gate_times=gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
+
+    # Registers
+    qb = QuantumRegister(4, 'code_qubit')
+    an = AncillaRegister(1, 'ancilla_qubit')
+    cr = get_classical_register_422(0)
+    readout = ClassicalRegister(4, 'readout')
+    registers = StabilizerRegisters(qb, an, cr, readout)
+
+    # Circuits
+    circ = get_empty_stabilizer_circuit_422(registers)
+
+    # Initial state
+    # TODO: Add a method here if using the general encoding scheme
+
+    # Encoding
+    circ.compose(encode_input_422(registers, initial_state=initial_state,
+                 include_swap=include_swap, **kwargs),
+                 inplace=True)
+    if include_swap:
+        qubits = [an[0], qb[1], qb[2], qb[3], qb[0]]  # Qubit permutation
+    else:
+        qubits = qb
+    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0,
+                            qubits=qubits, **kwargs)
+
+    # Optional measurement of output
+    if measure:
+        if include_swap:
+            circ.measure([an[0],qb[1], qb[2], qb[3]], readout)
+        else:
+            circ.measure(qb, readout)
+
+    # Transpile
+    if transpile:
+        circ = shortest_transpile_from_distribution(circ, print_cost=False)
+
+    # Trivial state
+    if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
+        trivial_res = execute(circ, Aer.get_backend(
+            'qasm_simulator'), shots=1).result()
+        trivial = trivial_res.data()['dm_0']
+
+    # Add idle noise
+    if idle_noise:
+        circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
+                                               T1=T1, T2=T2, return_time=True)
+    else:
+        time = {'end': None}
+
+    # Run the circuit
+    noise_model = thermal_relaxation_model_V2(
+        T1=T1, T2=T2, gate_times=full_gate_times)
+    results = execute(circ, Aer.get_backend('qasm_simulator'),
+                      noise_model=noise_model, shots=n_shots).result()
+
+    # Analyze results
+    if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
+        state = results.data()['dm_0']
+        
+        if project:
+            state, P_L = project_dm_to_logical_subspace_422(
+                state, return_P_L=True)
+            state = get_encoded_state_422(np.diag(state), include_ancillas=None)
+        fidelities = state_fidelity(state, trivial)
+        if project:
+            return fidelities, circ, time['end'], P_L
+    elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
+        fidelities = results.data()['exp_0']
+
+    return fidelities, circ, results, time['end']
+#%% ENCODING
+n_shots=1e6
+fid_list = []
+circ_list = []
+res_list = []
+times_list = []
+state_list = [[1,0,0,0], [0,1,0,0], [0,0,1,0], [0,0,0,1] ]
+for i in range(4):
+    fid, circ, res, times = encoding_fidelity_422(n_shots, gate_times={},
+                      T1=40e3, T2=60e3,
+                      idle_noise=True, initial_state=state_list[i], 
+                      include_swap=False,
+                      transpile=True,
+                      snapshot_type='dm', project=False)
+    fid_list.append(fid)
+    circ_list.append(circ)
+    res_list.append(res)
+    times_list.append(times)   
+
+#%% Print LaTeX table of probabilitiy of
+# Correctly measured & Incorrect logical & Syndrome measured
+outcomes = [bin(i)[2:].zfill(4) for i in range(16)]
+syndrome_idx = [1,2,4,7,8,11,13,14]
+
+for i in range(4):
+    group_counts = [0,0,0]
+    counts = res_list[i].get_counts()
+    for key in outcomes:
+        if key not in counts.keys():
+            counts[key] = 0
+    logical_idx = [[0,15], [6,9], [5,10],[3,12]]
+
+    # Correct measurements
+    correct_idx = logical_idx.pop(i)
+    for idx in correct_idx:
+        group_counts[0] += counts[outcomes[idx]]
+
+    # Wrong logical state measured
+    for entry in logical_idx:
+        for idx in entry:
+            group_counts[1] += counts[outcomes[idx]]
+
+    # Other states measured
+    for idx in syndrome_idx:
+        group_counts[2] += counts[outcomes[idx]]
+
+    print('State: \t&', group_counts[0]/n_shots, '\t& ', group_counts[1]/n_shots,  \
+          '\t& ',group_counts[2]/n_shots, ' \\\\ \\hline')
+
+
+#%% Show transpiled circuit
+registers = StabilizerRegisters(qbReg=QuantumRegister(4, 'code_qubit'),
+                                anReg=AncillaRegister(1, 'ancilla_qubit'),
+                                clReg=get_classical_register_422(0),
+                                readout=ClassicalRegister(4, 'readout'))
+
+circ = encode_input_422(registers, initial_state=[1,0,0,0], include_swap=True)
+circ = shortest_transpile_from_distribution(circ, print_cost=False, 
+                                            **cross_device_properties)
+#time = get_circuit_time(circ, gate_times=standard_times)
+#print(time)
+circ.draw(output='mpl')
+
+

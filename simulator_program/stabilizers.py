@@ -809,15 +809,15 @@ def computational_state(state, threshold=1e-2):
     string."""
     comp_states = np.eye(4)
     fidelities = [state_fidelity(state, comp_states[i,:]) for i in range(4)]
-    #correct_state = np.argmax(np.array(fidelities))
     max_fid = max(fidelities)
     max_idx = fidelities.index(max_fid)
     if max_fid < 1-threshold:
-        warnings.warn('State could not be matched with any computational state')
+        warnings.warn('State could not be matched with any computational state, assuming |00>')
+        return '00'
     return str(bin(max_idx))[2:].zfill(2)
 
 def encode_input_422(registers, include_barriers=True, initial_state=[1.,0.,0.,0.], 
-        circuit_index=1, **kwargs):
+        circuit_index=1, include_swap=False, **kwargs):
     """Encode the input into logical states for the [[4,2,2]] code. This
     assumes that the 0:th and 1:st qubit containts the original state 
     |psi> = a|00> + b|01> + c|10> + d|11>.
@@ -826,11 +826,15 @@ def encode_input_422(registers, include_barriers=True, initial_state=[1.,0.,0.,0
     https://www.researchgate.net/publication/330860914_Fault-tolerant_gates_via_homological_product_codes
     """
 
-    circ_list = []
     qbReg = registers.QubitRegister
-    if circuit_index == 0:
-        circ = QuantumCircuit(qbReg)
+    anReg = registers.AncillaRegister
+    circ = QuantumCircuit(qbReg)
+    if include_swap:
+        circ.add_register(anReg)
 
+    # Encoding of arbitary state
+    if circuit_index == 0:
+        
         circ.h(qbReg[3])
         circ.cx(qbReg[0], qbReg[2])
         circ.cx(qbReg[3], qbReg[1])
@@ -839,19 +843,18 @@ def encode_input_422(registers, include_barriers=True, initial_state=[1.,0.,0.,0
         if include_barriers:
             circ.barrier()
 
-    # Encodes the |00> state
+    # Encoding of the four computational states
     if circuit_index == 1:
-        circ = QuantumCircuit(qbReg)
         circ.h(qbReg[0])
 
         # Prepare any computational state
         state_str = computational_state(initial_state)
         if state_str == '01':
-            circ.x(qbReg[0])
-            circ.x(qbReg[3])
-        elif state_str == '10':
-            circ.x(qbReg[0])
+            circ.x(qbReg[1])
             circ.x(qbReg[2])
+        elif state_str == '10':
+            circ.x(qbReg[1])
+            circ.x(qbReg[3])
         elif state_str == '11':
             circ.x(qbReg[2])
             circ.x(qbReg[3])
@@ -860,6 +863,8 @@ def encode_input_422(registers, include_barriers=True, initial_state=[1.,0.,0.,0
         circ.cx(qbReg[0], qbReg[1])
         circ.cx(qbReg[0], qbReg[2])
         circ.cx(qbReg[0], qbReg[3])
+        if include_swap:
+            circ.swap(anReg[0], qbReg[0])
     return circ
 
 
