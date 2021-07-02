@@ -17,6 +17,7 @@ from qiskit.quantum_info import Statevector
 from qiskit.quantum_info.operators import Operator
 from qiskit.providers.aer.noise import kraus_error
 
+from .stabilizers import get_encoded_state_422
 #%% 
 def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3,
                           theta=0, phi=0, pauliop='Z'):
@@ -56,6 +57,30 @@ def get_idle_encoded_513(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3,
     circ = QuantumCircuit(5)
     initial_state = np.cos(theta/2)*logical_0 + \
         np.exp(1j*phi)*np.sin(theta/2)*logical_1
+    circ.set_density_matrix(initial_state)
+    time_passed = 0
+    for i, time in enumerate(snapshot_times):
+        time_diff = time-time_passed
+        if time_diff > 0:
+            thrm_relax = thermal_relaxation_error(
+                T1, T2, time_diff).to_instruction()
+            for qubit in circ.qubits:
+                circ.append(thrm_relax, [qubit])
+
+        add_snapshot_to_circuit(circ, snapshot_type, i,
+                                circ.qubits, conditional=False, pauliop=pauliop)
+        time_passed = time
+
+    simulator = Aer.get_backend('aer_simulator')
+    simulator.set_option('method', 'density_matrix')
+    results = execute(circ, simulator,
+                      noise_model=None, shots=1).result()
+    return results
+
+def get_idle_encoded_422(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3,
+                         initial_state=[1., 0., 0., 0.], pauliop='ZZZZZ'):
+    circ = QuantumCircuit(4)
+    initial_state = get_encoded_state_422(initial_state, include_ancillas=None)
     circ.set_density_matrix(initial_state)
     time_passed = 0
     for i, time in enumerate(snapshot_times):

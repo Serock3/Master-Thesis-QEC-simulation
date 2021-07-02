@@ -763,7 +763,6 @@ def get_weight_2_basis():
 
 
 def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
-                                    # include_barriers=True,
                                     initial_state=[1., 0., 0., 0.], encoding=True,
                                     simulator_type='density_matrix', **kwargs):
     """Returns the circuit object for a full repeating stabilizer circuit, 
@@ -830,10 +829,7 @@ def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
     return circ
 
 
-def get_repeated_stabilization_422(registers, n_cycles=1,
-                                   # reset=True, #snapshot_type='density_matrix',
-                                   # include_barriers=True,
-                                   **kwargs):
+def get_repeated_stabilization_422(registers, n_cycles=1, **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -925,9 +921,9 @@ def get_encoded_state_422(initial_state, include_ancillas='back'):
 
     # Map the initial state to the encoded equivalent
     if include_ancillas:
-        statevec = np.zeros(2**5)
+        statevec = np.zeros(2**5, dtype=complex)
     else:
-        statevec = np.zeros(2**4)
+        statevec = np.zeros(2**4, dtype=complex)
     for i in range(len(logical)):
         statevec += initial_state[i]*logical[i]
 
@@ -937,7 +933,21 @@ def get_encoded_state_422(initial_state, include_ancillas='back'):
     return statevec
 
 
-def encode_input_422(registers, include_barriers=True, **kwargs):
+def computational_state(state, threshold=1e-2):
+    """Determine whether a statevector represents any of the four computational
+    states of |00>, |01>, |10> or |11> and returns the corresponding key as a
+    string."""
+    comp_states = np.eye(4)
+    fidelities = [state_fidelity(state, comp_states[i,:]) for i in range(4)]
+    #correct_state = np.argmax(np.array(fidelities))
+    max_fid = max(fidelities)
+    max_idx = fidelities.index(max_fid)
+    if max_fid < 1-threshold:
+        warnings.warn('State could not be matched with any computational state')
+    return str(bin(max_idx))[2:].zfill(2)
+
+def encode_input_422(registers, include_barriers=True, initial_state=[1.,0.,0.,0.], 
+        circuit_index=1, **kwargs):
     """Encode the input into logical states for the [[4,2,2]] code. This
     assumes that the 0:th and 1:st qubit containts the original state 
     |psi> = a|00> + b|01> + c|10> + d|11>.
@@ -946,17 +956,40 @@ def encode_input_422(registers, include_barriers=True, **kwargs):
     https://www.researchgate.net/publication/330860914_Fault-tolerant_gates_via_homological_product_codes
     """
 
+    circ_list = []
     qbReg = registers.QubitRegister
-    # circ = get_empty_stabilizer_circuit(registers)
-    circ = QuantumCircuit(qbReg)
+    if circuit_index == 0:
+        circ = QuantumCircuit(qbReg)
 
-    circ.h(qbReg[3])
-    circ.cx(qbReg[0], qbReg[2])
-    circ.cx(qbReg[3], qbReg[1])
-    circ.cx(qbReg[1], qbReg[2])
-    circ.cx(qbReg[3], qbReg[0])
-    if include_barriers:
-        circ.barrier()
+        circ.h(qbReg[3])
+        circ.cx(qbReg[0], qbReg[2])
+        circ.cx(qbReg[3], qbReg[1])
+        circ.cx(qbReg[1], qbReg[2])
+        circ.cx(qbReg[3], qbReg[0])
+        if include_barriers:
+            circ.barrier()
+
+    # Encodes the |00> state
+    if circuit_index == 1:
+        circ = QuantumCircuit(qbReg)
+        circ.h(qbReg[0])
+
+        # Prepare any computational state
+        state_str = computational_state(initial_state)
+        if state_str == '01':
+            circ.x(qbReg[0])
+            circ.x(qbReg[3])
+        elif state_str == '10':
+            circ.x(qbReg[0])
+            circ.x(qbReg[2])
+        elif state_str == '11':
+            circ.x(qbReg[2])
+            circ.x(qbReg[3])
+
+        # Encoding
+        circ.cx(qbReg[0], qbReg[1])
+        circ.cx(qbReg[0], qbReg[2])
+        circ.cx(qbReg[0], qbReg[3])
     return circ
 
 
