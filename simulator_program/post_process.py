@@ -34,7 +34,10 @@ conversion_table = [0, 3, 6, 5, 12, 15, 10, 9, 8, 11, 14, 13, 4, 7, 2, 1]
 def _get_new_syndromes(syndromes):
     """Convert a list of syndromes (from cycles of stabilizer measurements)
     into the corresponding list of syndromes for the errors that were applied at every cycle
-    to cause the total syndrome."""
+    to cause the total syndrome.
+    
+    E.g. [1001,1111] -> [1001,0110]
+    """
     return [([0]+syndromes)[i] ^ syndromes[i]
                              for i in range(0, len(syndromes))]
 
