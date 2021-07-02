@@ -830,4 +830,15 @@ def project_dm_to_logical_subspace_V2(rho, return_P_L=False):
         return rho_L, P_L
     return rho_L
 
+def overlap_with_subspace(rho, basis):
+    """Finds the overlap of rho with a subspace defined by the given basis vectors.
+    This is equivalent to the proability of rho residing in the subspace.
+
+    If basis is a single state, this is equivalent to the state_fidelity of it to rho.
+    """
+    basis = basis if isinstance(basis,list) else [basis]
+    P = 0
+    for basis_vector in basis:
+        P += state_fidelity(rho, basis_vector)
+    return P
 # %%
