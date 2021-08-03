@@ -764,7 +764,8 @@ def get_weight_2_basis():
 
 def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
                                     initial_state=[1., 0., 0., 0.], encoding=True,
-                                    simulator_type='density_matrix', **kwargs):
+                                    simulator_type='density_matrix',
+                                    final_measure=True, **kwargs):
     """Returns the circuit object for a full repeating stabilizer circuit, 
     including (optional) encoding, n_cycles of repeated stabilizers
     and final readout measurement.
@@ -825,11 +826,13 @@ def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
                                                 **kwargs), inplace=True)
 
     # Final readout
-    circ.measure(qbReg, readout)
+    if final_measure:
+        circ.measure(qbReg, readout)
     return circ
 
 
-def get_repeated_stabilization_422(registers, n_cycles=1, **kwargs):
+def get_repeated_stabilization_422(registers, n_cycles=1, extra_snapshots=False,
+                                   **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -849,16 +852,13 @@ def get_repeated_stabilization_422(registers, n_cycles=1, **kwargs):
 
     for current_cycle in range(n_cycles):
         circ.compose(stabilizer_cycle_422(registers,
-                                          # reset=reset,
                                           current_cycle=current_cycle,
-                                          # include_barriers=include_barriers,
+                                          extra_snapshots=extra_snapshots,
                                           **kwargs
                                           ), inplace=True)
-
-        add_snapshot_to_circuit(circ,  # snapshot_type,
-                                qubits=registers.QubitRegister,
-                                # include_barriers=include_barriers,
-                                **kwargs)
+        if not extra_snapshots: # Snapshots are instead in stabilizer_cycle_422
+            add_snapshot_to_circuit(circ, qubits=registers.QubitRegister,
+                                    **kwargs)
 
     return circ
 
