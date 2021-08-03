@@ -12,7 +12,7 @@ from simulator_program import post_process, post_select
 
 # %% Set up circuit
 kwargs = {
-    'n_cycles': 1,
+    'n_cycles': 2,
     'reset': True,
     'recovery': True,
     'encoding': False,
@@ -149,30 +149,40 @@ post_select.get_subsystem_counts_up_to_cycle(
     results.get_counts(), 1, hex_keys=True)
 # %% Look at overlap with each state before first correction
 
+overlap_cycle = 0
+num_keys = len(results.data()[label])
 if kwargs['conditional']:
-    cycle_end = get_cycle_indices()[0]
+    cycle_end = get_cycle_indices()[overlap_cycle]
     label = get_snapshot_label('dm', kwargs['conditional'], cycle_end)
-    overlaps = np.zeros((16,32))
-    for key in  results.data()[label]:
-        print(bin(int(key,16))[2:].zfill(4))
+    overlaps = np.zeros((num_keys,33))
+    for key in results.data()[label]:
+        
         rho = results.data()[label][key]
 
         basis = [logical[0],*weight_1,logical[1],*weight_2]
-        overlap = np.empty(32)
+        overlap = np.empty(33)
         for i in range(32):
             overlap[i] = state_fidelity(basis[i],rho)
+
+        # Calculate the theoretical correction maximum
+        overlap[32] = np.linalg.eigvalsh(rho)[-1]
+
         # plt.bar(range(32),overlap)
         # plt.show()
+        # TODO: crashed here since key is too large? Expand classical register to include all measurements?
         overlaps[int(key,16),:] = overlap
-    threshold = np.zeros(16)
-    for key in range(16):
+    threshold = np.zeros(num_keys)
+    print('Possible theoretical improvements of fidelity over the assigned')
+    for key in range(num_keys):
+        # Print the difference between the assigned correction and the theoretical max
+        print(bin(key)[2:].zfill(4),' -> ',overlaps[key,32]-overlaps[key,key])
         threshold[key] = overlaps[key,key] < 0.5
 
     fig, ax = plt.subplots(1, 1, figsize=(7, 5))
     HM =  ax.imshow(overlaps)
 
     c = 'red'
-    for i in range(16):
+    for i in range(num_keys):
         if threshold[i] == 0:
             continue
         else:
@@ -181,10 +191,10 @@ if kwargs['conditional']:
             ax.plot([i+0.5,i+0.5],[i - 0.5,i + 0.5],c)
             ax.plot([i-0.5,i-0.5],[i - 0.5,i + 0.5],c)
 
-    ax.set_xticks(np.arange(32))
-    ax.set_yticks(np.arange(16))
-    ax.set_xticklabels([bin(key)[2:].zfill(4) for key in range(16)]+[bin(key)[2:].zfill(4) for key in range(16)])
-    ax.set_yticklabels([bin(key)[2:].zfill(4) for key in range(16)])
+    ax.set_xticks(np.arange(33))
+    ax.set_yticks(np.arange(num_keys))
+    ax.set_xticklabels([bin(key)[2:].zfill(4) for key in range(16)]+[bin(key)[2:].zfill(4) for key in range(16)]+['max'])
+    ax.set_yticklabels([bin(key)[2:].zfill(4) for key in range(num_keys)])
     
     plt.setp(ax.get_xticklabels(), rotation=90, ha="right",
          rotation_mode="anchor")
