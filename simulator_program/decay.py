@@ -9,6 +9,7 @@ from qiskit.quantum_info.operators.symplectic.pauli import Pauli
 from qiskit.circuit.quantumregister import QuantumRegister
 from qiskit.circuit.quantumcircuit import QuantumCircuit
 from qiskit.execute_function import execute
+from qiskit.providers.aer.library import save_density_matrix
 from qiskit import Aer
 from simulator_program.stabilizers import add_snapshot_to_circuit, logical_states
 from qiskit.quantum_info.states.measures import state_fidelity

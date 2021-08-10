@@ -23,18 +23,23 @@ from qiskit.quantum_info import state_fidelity
 # Local files
 from simulator_program.custom_noise_models import (thermal_relaxation_model_V2,
                                                    standard_times,
-                                                   standard_times_delay)
+                                                   standard_times_delay,
+                                                   GateTimes)
 from simulator_program.custom_transpiler import (cross_device_properties,
-    shortest_transpile_from_distribution)
+                                                 shortest_transpile_from_distribution)
 from simulator_program.data_analysis_tools import (default_execute,
                                                    overlap_with_subspace)
 from simulator_program.stabilizers import *
-from simulator_program.post_select import get_trivial_post_select_counts_V2
+from simulator_program.post_select import (get_trivial_post_select_counts_V2,
+                                           get_trivial_post_select_counts,
+                                           get_trivial_post_select_den_mat,
+                                           get_trivial_exp_value)
 from simulator_program.post_process import *
-from simulator_program.idle_noise import *
-from simulator_program.decay import *
+from simulator_program.idle_noise import (add_idle_noise_to_circuit,
+                                          get_circuit_time)
+from simulator_program.decay import get_idle_encoded_422
+from simulator_program.logical_gates_422 import *
 
-from simulator_program.data_analysis_tools import project_dm_to_logical_subspace_V2
 #%%
 def fidelity_from_scratch_422(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                           idle_noise=True,
@@ -248,7 +253,7 @@ kwargs = {
 
 #%% Post selection
 n_cycles=20
-n_shots = 1024
+n_shots = 1024*2
 kwargs = {
     'transpile': False,
     'project': True,
@@ -454,9 +459,6 @@ def encoding_fidelity_422(n_shots, gate_times={}, T1=40e3, T2=60e3,
 
     # Circuits
     circ = get_empty_stabilizer_circuit_422(registers)
-
-    # Initial state
-    # TODO: Add a method here if using the general encoding scheme
 
     # Encoding
     circ.compose(encode_input_422(registers, initial_state=initial_state,
@@ -715,3 +717,174 @@ plt.xlabel('Time [μs]')
 plt.ylim((0, counts_at_snapshots[0]))
 plt.xlim((0, time[-1]))
 plt.legend(labels=[r'$|00\rangle_L$', 'Syndrome', 'Incorrect code word'])
+
+#%%=============================================================================
+# TRANSVERSAL GATES
+
+
+
+initial_state = [0.,1.,0.,0.]
+n_cycles = 20
+kwargs = {
+    'snapshot_type': 'dm',
+    'conditional': True,
+    'extra_snapshots': True,
+    'flip_stab_order': True,
+}
+# Define registers, circuits and initialize the logical state
+registers = StabilizerRegisters(qbReg=QuantumRegister(4, 'code_qubit'),
+                                anReg=AncillaRegister(1, 'ancilla_qubit'),
+                                clReg=get_classical_register_422(n_cycles),
+                                readout=ClassicalRegister(4, 'readout'))
+circ = get_empty_stabilizer_circuit_422(registers)
+circ.set_density_matrix(get_encoded_state_422(initial_state))
+
+logical_ops = [logical_X(0,registers.QubitRegister),
+               logical_X(1,registers.QubitRegister),
+               logical_CNOT(1,0,registers.QubitRegister),
+               logical_SWAP(registers.QubitRegister)]
+
+add_snapshot_to_circuit(circ, current_cycle=0, qubits=registers.QubitRegister,
+                        **kwargs)
+for i in range(n_cycles):
+    circ.compose(stabilizer_cycle_422(registers, current_cycle=i, **kwargs), inplace=True)
+    #if kwargs['flip_stab_order']:
+    #    kwargs['flip_stab_order'] = False
+    #else:
+    #    kwargs['flip_stab_order'] = True
+    
+    #if i==1:
+        #circ.barrier()
+        #circ.compose(logical_CZ(registers.QubitRegister), inplace=True)
+        #circ.compose(logical_iSWAP(registers.QubitRegister), inplace=True)
+        #circ.barrier()
+    #circ.compose(logical_ops[i], inplace=True)
+
+    #circ.save_density_matrix(label='test_'+str(i))
+circ.measure(registers.QubitRegister, registers.ReadoutRegister)
+
+# Transpile
+circ = shortest_transpile_from_distribution(circ, print_cost=False,
+                                            optimization_level=3,
+                                            **cross_device_properties)
+#circ.draw(output='mpl')
+#%% Run simulation
+
+results = execute(
+        circ,
+        Aer.get_backend('qasm_simulator'),
+        #Aer.get_backend('unitary_simulator'),
+        #noise_model=None,
+        noise_model=thermal_relaxation_model_V2(gate_times=standard_times),
+        shots=1024*4
+    ).result()
+
+#print(results.get_counts())
+
+#%% Post select
+project=False
+
+# Get the number of remaining shot at each cycle
+select_counts = get_trivial_post_select_counts(results.get_counts(), n_cycles, '00')
+
+# Get the fidelity for each cycle
+fidelities = [] # If project = True, this contains F_L
+P_Ls = []
+trivial = get_encoded_state_422(initial_state, include_ancillas=None)
+
+# TODO: Make this return F_L and P_L seperately and fix the references
+for state in get_trivial_post_select_den_mat(results, n_cycles, '00'):
+    if project:
+        state, P_L = project_dm_to_logical_subspace_422(state, return_P_L=True)
+        P_Ls.append(np.real(P_L))
+        state = get_encoded_state_422(np.diag(state), include_ancillas=None)
+    fidelities.append(state_fidelity(state, trivial))
+
+
+
+# TODO: Transpilera kretsarna, ta fram circuit time
+# TODO: Testa "blenda in" iSWAP i sista stabilizern. Kan transpilern lösa det
+#       automatiskt kanske?
+# TODO: Printa kretsar och skriv rapporten
+
+#%%
+
+initial_state = [0.,0.,0.,1.]
+n_cycles = 20
+kwargs = {
+    'snapshot_type': 'dm',
+    'conditional': False,
+    'extra_snapshots': True,
+    'flip_stab_order': True,
+}
+# Define registers, circuits and initialize the logical state
+qb = QuantumRegister(4,'qubit')
+readout = ClassicalRegister(4,'readout')
+circ = QuantumCircuit(qb, readout)
+#circ.set_density_matrix(get_encoded_state_422(initial_state, None))
+circ.set_statevector(get_encoded_state_422(initial_state, None))
+circ.save_statevector('dm_0')
+circ.s(qb)
+circ.compose(logical_Z(2,qb), inplace=True)
+circ.save_statevector('dm_1')
+#add_snapshot_to_circuit(circ, qubits=qb, **kwargs)
+circ.measure(qb, readout)
+
+# Transpile
+#circ = shortest_transpile_from_distribution(circ, print_cost=False,
+#                                            optimization_level=3,
+#                                            **cross_device_properties)
+circ.draw()
+#% Run simulation
+
+results = execute(
+        circ,
+        Aer.get_backend('qasm_simulator'),
+        #Aer.get_backend('unitary_simulator'),
+        noise_model=None,
+        #noise_model=thermal_relaxation_model_V2(gate_times=standard_times),
+        shots=1024*4
+    ).result()
+
+#%
+
+#results.data()['counts']
+#dm1 = project_dm_to_logical_subspace_422(results.data()['dm_0'])
+np.set_printoptions(precision=2)
+print(results.data()['dm_0'])
+print(results.data()['dm_1'])
+
+#%%
+a = qiskit.quantum_info.random_clifford(1)
+b = a.to_circuit()
+b.draw()
+
+#%% Testing part of diamond-article
+qb = QuantumRegister(4, 'qubit')
+an = AncillaRegister(1, 'ancilla')
+cl = ClassicalRegister(1, 'syndrome')
+readout = ClassicalRegister(4, 'readout')
+
+circ = QuantumCircuit(qb, an, cl, readout)
+
+circ.h(an)
+circ.cx(an, qb[0])
+circ.cx(an, qb[1])
+circ.cx(an, qb[2])
+circ.cx(an, qb[3])
+circ.h(an)
+circ.measure(an,cl)
+circ.barrier()
+circ.save_density_matrix(qb,'test')
+circ.draw()
+
+results = execute(
+        circ,
+        Aer.get_backend('qasm_simulator'),
+        #Aer.get_backend('unitary_simulator'),
+        noise_model=None,
+        #noise_model=thermal_relaxation_model_V2(gate_times=standard_times),
+        shots=1024*4
+    ).result()
+
+results.data()['test'].shape
