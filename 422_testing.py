@@ -8,6 +8,7 @@ import numpy as np
 import scipy
 import itertools
 import warnings
+import matplotlib.pyplot as plt
 
 # Qiskit modules/packages
 from qiskit import *
@@ -30,11 +31,17 @@ from simulator_program.custom_transpiler import (cross_device_properties,
 from simulator_program.data_analysis_tools import (default_execute,
                                                    overlap_with_subspace)
 from simulator_program.stabilizers import *
+#from simulator_program.stabilizers import (get_full_stabilizer_circuit_422,
+#                                           get_repeated_stabilization_422,
+#                                           get_encoded_state_422,
+#                                           logical_states_422,
+#                                           get_classical_register_422,
+#                                           StabilizerRegisters,)
 from simulator_program.post_select import (get_trivial_post_select_counts_V2,
                                            get_trivial_post_select_counts,
                                            get_trivial_post_select_den_mat,
                                            get_trivial_exp_value)
-from simulator_program.post_process import *
+#from simulator_program.post_process import *
 from simulator_program.idle_noise import (add_idle_noise_to_circuit,
                                           get_circuit_time)
 from simulator_program.decay import get_idle_encoded_422
@@ -364,6 +371,17 @@ res_pp = get_idle_encoded_422(snapshot_times, initial_state=[1., 1., 1., 1.])
 
 
 def projected_fidelity(res, trivial, n_datapoints):
+    """Calculate the fidelity of a state after projecting it to the code space.
+    
+    Args:
+        res: Results object from a Qiskit simulation.
+        trivial: The correct pure state. Can be a density matrix or statevector.
+        n_datapoints (int): Number of data points (snapshots) to calculate the
+                            logical fidelity for.
+                            
+    Returns:
+        fid_L (list): Logical fidelities for each snapshot.
+        P_Ls (list): Overlap with the code space for each snapshot."""
     P_Ls = []
     fid_L = []
     for state in [res.data()['dm_'+str(index)] for index in range(n_datapoints)]:
