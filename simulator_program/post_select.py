@@ -55,7 +55,8 @@ def get_subsystem_counts_up_to_cycle(counts, cycle, hex_keys=False):
 
 
 def get_subsystem_counts_up_to_snapshot(counts, snapshot_index, hex_keys=False):
-    """Get counts for the subsystem of registers up to cycle. From the reduced dict
+    """ TODO: Incorrect docstring here?
+    Get counts for the subsystem of registers up to cycle. From the reduced dict
     post selection counts can be extracted. Key is converted to int.
 
     E.g. for cycle = 0
