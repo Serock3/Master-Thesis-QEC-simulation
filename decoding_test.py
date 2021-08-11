@@ -18,7 +18,7 @@ kwargs = {
     'reset': True,
     'recovery': False,
     'encoding': False,
-    'conditional': False,
+    'conditional': True,
     'include_barriers': True,
     'generator_snapshot': True,
     'idle_snapshots': 0,
@@ -29,8 +29,8 @@ kwargs = {
 
 num_stab_gens = 4 +kwargs['include_fifth_stabilizer']
 
-T1=[40e3]*5+[40e3,40e3]
-T2=[60e3]*5+[60e3,60e3]
+T1=[40e3]*5+[1000000000,1000000000]
+T2=[60e3]*5+[1000000000,1000000000]
 # T1 = 40e3
 # T2 = 60e3
 gate_times = standard_times_delay
@@ -44,14 +44,27 @@ circ, times = add_idle_noise_to_circuit(circ, gate_times, T1=T1,T2=T2,return_tim
 
 # %%
 # Run it
-noise_model = thermal_relaxation_model_V2(T1=T1,T2=T1,gate_times=gate_times)
-n_shots = 1024*1
+noise_model = thermal_relaxation_model_V2(T1=T1,T2=T2,gate_times=gate_times)
+n_shots = 1024*4
 results = default_execute(circ, n_shots, gate_times=gate_times, noise_model=noise_model)
 # %%
 logical = logical_states(None)
 weight_1 = get_weight_1_basis()
 weight_2 = get_weight_2_basis()
 
+# Calculate table of how each of the 32 different basis states (labeled by syndrome plus Z_L) map onto eachother from the 16 corrections
+basis = [Statevector(logical[0]),*weight_1,Statevector(logical[1]),*weight_2]
+basis_mapping_table = np.zeros((16,32),dtype=int)
+for basis_index in range(32):
+    overlap = np.empty(16)
+    for correction in range(16):
+        state = basis[basis_index]
+        for syndrome in syndrome_table[correction]:
+            state = state.evolve(syndrome[0](),[syndrome[1]])
+        for i in range(32):
+            if state_fidelity(state,basis[i]):
+                basis_mapping_table[correction,basis_index] = i
+                break
 # %%
 
 
@@ -87,19 +100,24 @@ def get_stab_datapoints(where = True):
 stab_datapoints = get_stab_datapoints()
 
 colors_def = plt.get_cmap("tab10")
+
 def colors(i):
     if i == 1:
         i = 2
     elif i == 2:
         i =1
     return colors_def(i)
+
+# def colors(i):
+#     return get_cmap('Spectral_r')(50*i+20)
+
 time = np.empty(label_counter.value)
 P_0 = np.empty(label_counter.value)
 P_1 = np.empty(label_counter.value)
 P_w1 = np.empty(label_counter.value)
 P_w2 = np.empty(label_counter.value)
 P = np.empty(label_counter.value)
-
+# order = np.empty((32,label_counter.value))
 # TODO: Make work with delay snapshots for key other than '0x0' 
 # (can't accept measurements less often than once per snapshot)
 key = '0x0'
@@ -116,7 +134,8 @@ for i in range(label_counter.value):
     P_w1[i] = overlap_with_subspace(rho, weight_1)
     P_w2[i] = overlap_with_subspace(rho, weight_2)
     P[i] = overlap_with_subspace(rho, logical)
-
+    # for j in range(32):
+    #     order[j,i] = state_fidelity(rho,basis[j])
 
 order = np.array([P_0, P_w1, P_w2, P_1])
 
@@ -125,11 +144,11 @@ if kwargs['conditional']:
 else:
     counts_at_snapshots = np.ones(label_counter.value)
 
-for i in range(4):
+for i in range(len(order)):
     lower = order[:i].sum(axis=0)
     plt.fill_between(time, (order[i]+lower)*counts_at_snapshots, lower*counts_at_snapshots,
                      color=np.array(colors(i))-np.array([0, 0, 0, 0.3]))
-for i in range(4):
+for i in range(len(order)):
     lower = order[:i].sum(axis=0)
     # Picks out the data points belonging to only the generators
     plt.plot(time[stab_datapoints], ((order[i]+lower)*counts_at_snapshots)[stab_datapoints], '.', color=colors(i))
@@ -173,20 +192,6 @@ def extract_syndrome(key,cycle,num_stab_gens=4):
         num_stab_gens ([type]): [description]
     """
     return (key % (2**(num_stab_gens*(cycle))*2**4))//2**(num_stab_gens*cycle)
-
-# %% Calculate table of how each of the 32 different basis states (labeled by syndrome plus Z_L) map onto eachother from the 16 corrections
-basis = [Statevector(logical[0]),*weight_1,Statevector(logical[1]),*weight_2]
-basis_mapping_table = np.zeros((16,32),dtype=int)
-for basis_index in range(32):
-    overlap = np.empty(16)
-    for correction in range(16):
-        state = basis[basis_index]
-        for syndrome in syndrome_table[correction]:
-            state = state.evolve(syndrome[0](),[syndrome[1]])
-        for i in range(32):
-            if state_fidelity(state,basis[i]):
-                basis_mapping_table[correction,basis_index] = i
-                break
 # %% Look at overlap with each state before first correction
 
 overlap_cycle = 0
@@ -263,9 +268,9 @@ if kwargs['conditional']:
          rotation_mode="anchor")
     cbar0 = fig.colorbar(HM, ax=ax, orientation='horizontal',
                      fraction=.06, pad=0.25)
-    fig.suptitle("Fidelity to the 32 basis states conditioned on stabilizer measurements\n red squares show where fid<0.5 (is that meaningful?)")
-    ax.set_xlabel('Basis states, labeled by their eigenvalues to the stabilizers\n'+r"Left: weight $\leq$ 1 from $|0\rangle$. Right: weight $\geq$ 2 from $|0\rangle$")
-    ax.set_ylabel("Simualtion state\n conditioned on stabilizer measurements")
+    fig.suptitle(r"Fidelity to $|0\rangle_L$ state for every correction operation.")
+    ax.set_xlabel('Correction operation applied, labeled by syndrome\n'+r"On the right are the same corrections with an added $Z_L$ before."+"\n'max' indicates the unitary gate that produces the highest possible fidelity")
+    ax.set_ylabel("Simulation state\n conditioned on stabilizer measurements")
     fig.tight_layout()
     plt.show()
 else:
@@ -313,21 +318,21 @@ ax.set_ylabel("Correction operation, ordered by syndrome")
 fig.tight_layout()
 plt.show()
 # %%
-if kwargs['conditional']:
-    def get_av_fidelities(states_and_counts, correct_state, n_shots):
-        av_fidelities = []
-        for cycle in states_and_counts:
-            fid = 0
-            for state, counts in cycle:
-                fid += state_fidelity(state, correct_state)*counts
-            av_fidelities.append(fid/n_shots)
-        return av_fidelities
-    fidelities = get_av_fidelities(post_process.get_states_and_counts(results, kwargs['n_cycles'], post_process=True, reset=False), logical[0], n_shots)
+# if kwargs['conditional']:
+#     def get_av_fidelities(states_and_counts, correct_state, n_shots):
+#         av_fidelities = []
+#         for cycle in states_and_counts:
+#             fid = 0
+#             for state, counts in cycle:
+#                 fid += state_fidelity(state, correct_state)*counts
+#             av_fidelities.append(fid/n_shots)
+#         return av_fidelities
+#     fidelities = get_av_fidelities(post_process.get_states_and_counts(results, kwargs['n_cycles'], post_process=True, reset=False), logical[0], n_shots)
 
 
 #%% Test plotting all keys in second cycle starting with a specific syndrome in the first cycle
 
-first_cycle_key = '0010'
+first_cycle_key = '1000'
 overlap_cycle = 1
 overlap_subspace = 0
 if kwargs['conditional']:
@@ -362,9 +367,9 @@ if kwargs['conditional']:
         fid_best_single_qb = np.max(overlap[:-1])
         fid_best_arbitrary_gate = overlap[32]
 
-        total_fid_lookup += fid_lookup*counts[key_int]
-        total_fid_best_single_qb += fid_best_single_qb*counts[key_int]
-        total_fid_best_unitary += fid_best_arbitrary_gate*counts[key_int]
+        total_fid_lookup += fid_lookup*counts[int(key,16)]
+        total_fid_best_single_qb += fid_best_single_qb*counts[int(key,16)]
+        total_fid_best_unitary += fid_best_arbitrary_gate*counts[int(key,16)]
         
         # Print the difference between the assigned correction and the theoretical max
         # if fid_lookup<fid_best_single_qb:
@@ -406,8 +411,9 @@ if kwargs['conditional']:
                      fraction=.06, pad=0.25)
     fig.suptitle("Fidelity to the 32 basis states conditioned on stabilizer measurements\n red squares show where fid<0.5 (is that meaningful?)")
     ax.set_xlabel('Basis states, labeled by their eigenvalues to the stabilizers\n'+r"Left: weight $\leq$ 1 from $|0\rangle$. Right: weight $\geq$ 2 from $|0\rangle$")
-    ax.set_ylabel("Simualtion state\n conditioned on stabilizer measurements")
+    ax.set_ylabel("Simulation state\n conditioned on stabilizer measurements")
     fig.tight_layout()
     plt.show()
 else:
     print('NO CONDITIONAL!')
+# %%
