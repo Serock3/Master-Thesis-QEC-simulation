@@ -28,9 +28,10 @@ class GateTimes:
     single_qubit_gates = {'x', 'y', 'z', 'h', 'sx',
                           'sz', 'sy', 's', 't', 'ry', 'u1', 'u2', 'u3'}
     two_qubit_gates = {'cx', 'cz', 'swap', 'iswap'}
-    special_ops = {'measure', 'reset', 'unitary'}
-    directives = {'barrier', 'set_density_matrix', 'save_density_matrix',
-                  'save_expval', 'save_expval_var', 'snapshot', 'feedback', 'delay'}
+    special_ops = {'measure', 'reset', 'unitary', 'split'}
+    directives = {'barrier', 'set_density_matrix', 'save_density_matrix', 
+                  'save_expval', 'save_expval_var', 'snapshot', 'feedback',
+                  'delay'}
 
     def __init__(self, single_qubit_default=0, two_qubit_default=0, custom_gate_times={}):
         """Class to contain a dictionary of gate times. 
