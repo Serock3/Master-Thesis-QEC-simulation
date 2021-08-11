@@ -185,8 +185,7 @@ def get_repeated_stabilization(registers, n_cycles=1,
 
     return circ
 
-# Mutable int object to surve as a global counter for the snapshot labels
-
+# Mutable int object to serve as a global counter for the snapshot labels
 
 class Int(object):
     def __init__(self, value):
@@ -209,7 +208,6 @@ label_counter = Int(0)
 # The same 'label_counter' will be used for every call of the function,
 # even if it is modified. This only works for mutable objects so
 # 'int' will not be shared, but 'Int' will.
-
 
 def add_snapshot_to_circuit(circ, snapshot_type, current_cycle=label_counter,
                             qubits=None, conditional=False,
