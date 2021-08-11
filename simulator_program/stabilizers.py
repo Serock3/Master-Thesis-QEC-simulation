@@ -57,6 +57,10 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
     """Returns the circuit for a full repeating stabilizer circuit, including encoding,
     n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
     """
+    
+    include_fifth_stabilizer=False
+    if 'include_fifth_stabilizer' in kwargs:
+        include_fifth_stabilizer = kwargs['include_fifth_stabilizer']
 
     # TODO: Make this compatible with other codes?
     if registers is None:
@@ -64,7 +68,7 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
         anReg = AncillaRegister(2, 'ancilla_qubit')
         if conditional:
             # Advanced list of registers
-            crReg = get_classical_register(n_cycles, reset, recovery, flag)
+            crReg = get_classical_register(n_cycles, reset, recovery, flag, include_fifth_stabilizer)
         else:
             crReg = ClassicalRegister(
                 4, 'syndrome_bit')  # The typical register
@@ -294,7 +298,7 @@ def get_empty_stabilizer_circuit(registers, final_measure=True):
     return circ
 
 
-def get_classical_register(n_cycles, reset=True, recovery=False, flag=True):
+def get_classical_register(n_cycles, reset=True, recovery=False, flag=True, include_fifth_stabilizer = False):
     """Generate lists of classical registers for storing all measurement data.
 
     The function accepts the flag bool to determine whether to create
@@ -344,7 +348,7 @@ def get_classical_register(n_cycles, reset=True, recovery=False, flag=True):
     else:
         # A register of four bits per cycle
         syndrome_register = [
-            [ClassicalRegister(4, 'syndrome_cycle_' + str(i) + '_step_' + str(j))
+            [ClassicalRegister(4 + include_fifth_stabilizer, 'syndrome_cycle_' + str(i) + '_step_' + str(j))
              for j in range(1)] for i in range(n_cycles)]
         return [syndrome_register]
 
@@ -1432,7 +1436,9 @@ def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
 # %% All unflagged stabilizers
 def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
                                current_cycle=0, current_step=0, num_ancillas=None,
-                               include_barriers=True, pipeline=False, snapshot=True, snapshot_type='dm', conditional=False, pauliop='ZZZZZ', **kwargs):
+                               include_barriers=True, pipeline=False, snapshot=True, 
+                               snapshot_type='dm', conditional=False, pauliop='ZZZZZ',
+                               include_fifth_stabilizer=False, **kwargs):
     """Run all four stabilizers without flags, as well as an optional
     recovery. The input current_step is only relevant for flagged cycles, and
     should be set to 0 otherwise.
@@ -1442,24 +1448,34 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
         num_ancillas: Specifies how many ancillas to spread the measurements over
     """
 
+    # Number of stabilizer generators (default four)
+    num_stabilizers = 4 if include_fifth_stabilizer is False else 5
+
     # Use the previous behavior if num_ancillas=None
     if not num_ancillas:
         if registers.AncillaRegister.size == 2:
-            anQb_list = [registers.AncillaRegister[1]]*4
+            anQb_list = [registers.AncillaRegister[1]]*num_stabilizers
         elif registers.AncillaRegister.size >= 4:
             # I don't like this really, we don't use the flagged circuit anymore so it shouldn't get the 0 spot by default
-            anQb_list = [registers.AncillaRegister[n] for n in [1, 2, 3, 4]]
+            anQb_list = [registers.AncillaRegister[n] for n in np.arange(1, num_stabilizers+1)]
         else:
             Warning("Ancilla reg too small (this should never happen)")
     else:
         anQb_list = [registers.AncillaRegister[n % num_ancillas]
-                     for n in range(4)]
+                     for n in range(num_stabilizers)]
 
     if pipeline:
         stabilizer_list = [_pipeline_stabilizer_XZZXI,
                            _pipeline_stabilizer_IXZZX,
                            _pipeline_stabilizer_XIXZZ,
                            _pipeline_stabilizer_ZXIXZ]
+    elif include_fifth_stabilizer:
+        # TODO: Make this work with pipeline?
+        stabilizer_list = [_unflagged_stabilizer_XZZXI,
+                           _unflagged_stabilizer_IXZZX,
+                           _unflagged_stabilizer_XIXZZ,
+                           _unflagged_stabilizer_ZXIXZ,
+                           _unflagged_stabilizer_ZZXIX]
     else:
         stabilizer_list = [_unflagged_stabilizer_XZZXI,
                            _unflagged_stabilizer_IXZZX,
@@ -1469,13 +1485,13 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     # Create list of syndrome bits
     if isinstance(registers.SyndromeRegister, list):
         syn_reg = registers.SyndromeRegister[0][current_cycle][current_step]
-        syn_bit_list = [syn_reg[n] for n in range(4)]
+        syn_bit_list = [syn_reg[n] for n in range(num_stabilizers)]
     else:
-        syn_bit_list = [registers.SyndromeRegister[n] for n in range(4)]
+        syn_bit_list = [registers.SyndromeRegister[n] for n in range(num_stabilizers)]
 
     # Create circuit and run stabilizers
     circ = get_empty_stabilizer_circuit(registers)
-    for i in range(4):
+    for i in range(num_stabilizers):
         circ.compose(stabilizer_list[i](registers, anQb=anQb_list[i],
                                         syn_bit=syn_bit_list[i], reset=reset), inplace=True)
 
@@ -1692,6 +1708,48 @@ def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
 
     return circ
 
+# NOTE: This is the fifth (superfluous) stabilizer generator that is not normally used
+def _unflagged_stabilizer_ZZXIX(registers, anQb=None, syn_bit=None, reset=True):
+    """Gives the circuit for running the regular ZXIXZ stabilizer without flag.
+    The current_step input should be set to zero unless running flagged cycles.
+    """
+    # Create a circuit
+    qbReg = registers.QubitRegister
+    anReg = registers.AncillaRegister
+    circ = get_empty_stabilizer_circuit(registers)
+
+    if not anQb:
+        if anReg.size == 2:
+            anQb = anReg[1]
+        else:
+            anQb = anReg[4]
+
+    # Z
+    circ.h(anQb)
+    circ.cz(anQb, qbReg[0])
+
+    # Z
+    circ.cz(anQb, qbReg[1])
+
+    # X
+    circ.h(qbReg[2])
+    circ.cz(anQb, qbReg[2])
+    circ.h(qbReg[2])
+
+    # X
+    circ.h(qbReg[4])
+    circ.cz(anQb, qbReg[4])
+    circ.h(qbReg[4])
+    circ.h(anQb)
+
+    # Measure
+    circ.measure(anQb, syn_bit)
+
+    # Reset
+    if reset:
+        circ.reset(anQb)
+
+    return circ
 # %%
 
 
