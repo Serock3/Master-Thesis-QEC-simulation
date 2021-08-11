@@ -767,8 +767,10 @@ def get_weight_2_basis():
 
 
 def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
-                                    initial_state=[1., 0., 0., 0.], encoding=True,
-                                    simulator_type='density_matrix', **kwargs):
+                                    initial_state=[1., 0., 0., 0.],
+                                    encoding=True,
+                                    simulator_type='density_matrix',
+                                    final_measure=True, **kwargs):
     """Returns the circuit object for a full repeating stabilizer circuit, 
     including (optional) encoding, n_cycles of repeated stabilizers
     and final readout measurement.
@@ -816,7 +818,7 @@ def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
         else:
             circ.set_density_matrix(get_encoded_state_422(initial_state))
 
-    add_snapshot_to_circuit(circ,  # snapshot_type=snapshot_type,
+    add_snapshot_to_circuit(circ,
                             current_cycle=0,
                             qubits=qbReg,
                             **kwargs)
@@ -829,11 +831,13 @@ def get_full_stabilizer_circuit_422(registers=None, n_cycles=1,
                                                 **kwargs), inplace=True)
 
     # Final readout
-    circ.measure(qbReg, readout)
+    if final_measure:
+        circ.measure(qbReg, readout)
     return circ
 
 
-def get_repeated_stabilization_422(registers, n_cycles=1, **kwargs):
+def get_repeated_stabilization_422(registers, n_cycles=1, extra_snapshots=False,
+                                   **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -853,16 +857,13 @@ def get_repeated_stabilization_422(registers, n_cycles=1, **kwargs):
 
     for current_cycle in range(n_cycles):
         circ.compose(stabilizer_cycle_422(registers,
-                                          # reset=reset,
                                           current_cycle=current_cycle,
-                                          # include_barriers=include_barriers,
+                                          extra_snapshots=extra_snapshots,
                                           **kwargs
                                           ), inplace=True)
-
-        add_snapshot_to_circuit(circ,  # snapshot_type,
-                                qubits=registers.QubitRegister,
-                                # include_barriers=include_barriers,
-                                **kwargs)
+        if not extra_snapshots: # Snapshots are instead in stabilizer_cycle_422
+            add_snapshot_to_circuit(circ, qubits=registers.QubitRegister,
+                                    **kwargs)
 
     return circ
 
@@ -956,7 +957,7 @@ def encode_input_422(registers, include_barriers=True, initial_state=[1.,0.,0.,0
     assumes that the 0:th and 1:st qubit containts the original state 
     |psi> = a|00> + b|01> + c|10> + d|11>.
 
-    Circuit found in 
+    Circuit for circuit_index=0 found in 
     https://www.researchgate.net/publication/330860914_Fault-tolerant_gates_via_homological_product_codes
     """
 
@@ -984,14 +985,18 @@ def encode_input_422(registers, include_barriers=True, initial_state=[1.,0.,0.,0
         # Prepare any computational state
         state_str = computational_state(initial_state)
         if state_str == '01':
-            circ.x(qbReg[1])
+            #circ.x(qbReg[1])
+            #circ.x(qbReg[2])
             circ.x(qbReg[2])
+            circ.x(qbReg[3])
         elif state_str == '10':
             circ.x(qbReg[1])
             circ.x(qbReg[3])
         elif state_str == '11':
+            circ.x(qbReg[1])
             circ.x(qbReg[2])
-            circ.x(qbReg[3])
+            #circ.x(qbReg[2])
+            #circ.x(qbReg[3])
 
         # Encoding
         circ.cx(qbReg[0], qbReg[1])
@@ -1004,12 +1009,14 @@ def encode_input_422(registers, include_barriers=True, initial_state=[1.,0.,0.,0
 
 def stabilizer_cycle_422(registers, reset=True, current_cycle=0,
                          include_barriers=True, extra_snapshots=False,
-                         **kwargs):
+                         flip_stab_order=False, **kwargs):
     """Circuit for performing a full stabilizer cycle of the [[4,2,2]] code."""
 
     # Stabilizers in one cycle
     stabilizer_list = [stabilizer_XXXX,
                        stabilizer_ZZZZ]
+    if flip_stab_order:
+        stabilizer_list.reverse()
 
     # Create list of syndrome bits
     if isinstance(registers.SyndromeRegister, list):
@@ -1156,8 +1163,11 @@ def logical_states_422(include_ancillas='front') -> List[List[float]]:
             logical_10 = np.kron(an0, logical_10)
             logical_11 = np.kron(an0, logical_11)
 
-    return [logical_00, logical_01, logical_10, logical_11]
+    #return [logical_00, logical_01, logical_10, logical_11]
 
+    # Reordered to match some papers
+    # TODO: Rename the variables instead of reordering to avoid confusion
+    return [logical_00, logical_11, logical_01, logical_10]
 
 # %% All flagged stabilizers
 def flagged_stabilizer_cycle(registers, reset=True, recovery=True,
