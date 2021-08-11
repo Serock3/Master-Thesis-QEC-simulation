@@ -129,6 +129,9 @@ def thermal_relaxation_model_V2(T1=40e3, T2=60e3, gate_times=WACQT_gate_times):
         Noise model: thermal relaxation noise model
     """
 
+    if isinstance(T1,list):
+        return thermal_relaxation_model_per_qb(T1,T2,gate_times)
+        
     # Convert from dict object to GateTimes object
     if isinstance(gate_times, dict):
         gate_times = GateTimes(

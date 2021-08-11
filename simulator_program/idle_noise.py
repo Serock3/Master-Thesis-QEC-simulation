@@ -121,14 +121,24 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
 
         latest_time = max([time_passed[gate_arg] for gate_arg in gate_args])
         # Apply idle noise to qargs
-        for qarg in node.qargs:
-            time_diff = latest_time - time_passed[qarg]
-            if time_diff:
-                thrm_relax = thermal_relaxation_error(
-                    T1, T2, time_diff).to_instruction()
-                if rename:
-                    thrm_relax.name = f'Idle {time_diff}ns'
-                new_circ.append(thrm_relax, [qarg])
+        if not isinstance(T1, list):
+            for qarg in node.qargs:
+                time_diff = latest_time - time_passed[qarg]
+                if time_diff:
+                    thrm_relax = thermal_relaxation_error(
+                        T1, T2, time_diff).to_instruction()
+                    if rename:
+                        thrm_relax.name = f'Idle {time_diff}ns'
+                    new_circ.append(thrm_relax, [qarg])
+        else:
+            for qarg in node.qargs:
+                time_diff = latest_time - time_passed[qarg]
+                if time_diff:
+                    thrm_relax = thermal_relaxation_error(
+                        T1[qarg.index], T2[qarg.index], time_diff).to_instruction()
+                    if rename:
+                        thrm_relax.name = f'Idle {time_diff}ns'
+                    new_circ.append(thrm_relax, [qarg])
 
         # Advance the time for the qubits included in the gate
         for gate_arg in gate_args:
