@@ -355,7 +355,7 @@ def get_classical_register(n_cycles, reset=True, recovery=False, flag=True, incl
 
 def add_delay_marker(circ, registers, snapshots=0, snapshot_type='dm', qubits=None, conditional=False, pauliop='ZZZZZ', include_barriers=True):
     """Add a custom gate that does nothing but mark where delay time should be inserted, which is picked up by the noise model.
-    It can also divide this idle time into paritions and put a number of snapshots after each of them.
+    It can also divide this idle time into partitions and put a number of snapshots after each of them.
     """
 
     partitions = max(1, snapshots)  # Zero snapshots still gives one partition
@@ -449,7 +449,7 @@ def encode_input_v2(registers, include_barriers=True):
 
 
 def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
-    """Gives an encoding circuit following the connectiity of a hexagonal
+    """Gives an encoding circuit following the connectivity of a hexagonal
     device, including swapping the ancilla into position afterwards. Note that
     this should be used with caution, as the iswaps are not 'tracked' as when
     using a transpiler, and permutations are not undone at snapshots."""
@@ -965,7 +965,7 @@ def encode_input_422(registers, include_barriers=True, initial_state=[1.,0.,0.,0
     if include_swap:
         circ.add_register(anReg)
 
-    # Encoding of arbitary state
+    # Encoding of arbitrary state
     if circuit_index == 0:
         
         circ.h(qbReg[3])
