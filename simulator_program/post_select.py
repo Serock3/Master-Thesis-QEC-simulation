@@ -29,7 +29,7 @@ TODO:
 
 def get_subsystem_counts_up_to_cycle(counts, cycle, hex_keys=False):
     """Get counts for the subsystem of registers up to cycle. From the reduced dict
-    post selection counts can be extracted. Key is converted to int.
+    post selection counts can be extracted. Key is converted to int unless hex_keys=True.
 
     E.g. for cycle = 0
     {'00000 00111 00011':1, '00000 00101 00000':4, '00000 00000 00000':10} -> {0:14, 3:1}
@@ -55,18 +55,8 @@ def get_subsystem_counts_up_to_cycle(counts, cycle, hex_keys=False):
 
 
 def get_subsystem_counts_up_to_snapshot(counts, snapshot_index, hex_keys=False):
-    """ TODO: Incorrect docstring here?
-    Get counts for the subsystem of registers up to cycle. From the reduced dict
-    post selection counts can be extracted. Key is converted to int.
-
-    E.g. for cycle = 0
-    {'00000 00111 00011':1, '00000 00101 00000':4, '00000 00000 00000':10} -> {0:14, 3:1}
-
-    Args:
-        counts (Dict): Counts dictionary
-        cycle (int): current cycle
-    Returns:
-        Dict: subsystem counts. If post_select_syndrome is set then and int is returned
+    """ Does the same as get_subsystem_counts_up_to_cycle but consideres each bit
+    of the measurements indivilually instead of in groups of one cycle.
     """
 
     subsys_counts = {}
@@ -111,13 +101,15 @@ def get_trivial_post_select_counts_V2(counts, stab_datapoints, num_snapshots):
     Supports up to one snapshot per measurement.
     """
     trivial_counts = np.zeros(num_snapshots)
-    # TODO: Implement support for other trivial keys?
+    # TODO: [0] refers to the trivial key. Implement support for other trivial keys?
     counts_at_stab = np.array([get_subsystem_counts_up_to_snapshot(counts, stab)[0] for stab in range(len(stab_datapoints)+1)])
-    for snap in range(num_snapshots):
-        for j in range(len(stab_datapoints)+1):
-            trivial_counts[snap] = counts_at_stab[j]
-            if snap < ([0]+stab_datapoints)[j]:
-                break
+    
+    current_stab = 0
+    for i in range(num_snapshots):
+        if i in stab_datapoints:
+            current_stab += 1
+        trivial_counts[i] = counts_at_stab[current_stab]
+
     return trivial_counts
 
 
