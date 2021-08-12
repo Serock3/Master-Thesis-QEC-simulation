@@ -49,35 +49,6 @@ def reduce_key(key: str, current_snapshot: int, measurements_per_snapshot=1):
     """
     return hex(int(bin(int(key, 16))[2:][:measurements_per_snapshot*current_snapshot].zfill(1), 2))
 
-def get_stab_datapoints(where = True):
-    snap_indices = np.arange(label_counter.value)
-    snaps_per_cycle =  kwargs['idle_snapshots']+num_stab_gens+1
-    stab_indices_in_cycle = [i+1 for i in range(num_stab_gens)] if kwargs['idle_delay']=='after' else [i+1+kwargs['idle_snapshots'] for i in range(num_stab_gens)]
-    stab_cond = np.logical_or.reduce(np.array([(snap_indices) % (snaps_per_cycle) == i for i in stab_indices_in_cycle ]), dtype=bool)
-    if where == True:
-        return list(np.where(stab_cond)[0])
-    else:
-        return list(stab_cond)
-
-
-
-colors_def = plt.get_cmap("tab10")
-
-def colors(i):
-    if i == 1:
-        i = 2
-    elif i == 2:
-        i =1
-    return colors_def(i)
-
-# def colors(i):
-#     return get_cmap('Spectral_r')(50*i+20)
-
-def get_cycle_indices():
-    """Returns index of the end of each cycle (final stabilizer measurement)."""
-    stab_offset = 0 if kwargs['idle_delay']=='after' else kwargs['idle_snapshots'] 
-    return np.where((np.arange(label_counter.value)) % (kwargs['idle_snapshots']+5+kwargs['include_fifth_stabilizer']) == stab_offset+num_stab_gens)[0]
-
 def extract_syndrome(key,cycle,num_stab_gens=4):
     """Extracts the 4-bit syndrome that would normally be used to perform correction
     out of the key.
@@ -94,16 +65,59 @@ def extract_syndrome(key,cycle,num_stab_gens=4):
     """
     return (key % (2**(num_stab_gens*(cycle))*2**4))//2**(num_stab_gens*cycle)
 
+""" Below are functions for computing which snapshot is which. 
+Formula:
+There is one snap at the start (post encoding)
+One after each cycle
+One after each generator measurement (num_stab_gens in tot) 
+And idle_snapshots before of after the stabilziers
+"""
+
+def get_cycle_indices():
+    """Returns index of the end of each cycle (final stabilizer measurement)."""
+    num_snaps_per_cycle = 1+kwargs['idle_snapshots']+kwargs['generator_snapshot']*num_stab_gens
+    cycle_end_indices = np.array([num_snaps_per_cycle*(cycle+1) for cycle in range(kwargs['n_cycles'])])
+    if kwargs['idle_delay']=='after':
+        cycle_end_indices -= kwargs['idle_snapshots']
+    return cycle_end_indices
+
+def get_stab_datapoints():
+    snaps_per_cycle =  1+kwargs['idle_snapshots']+kwargs['generator_snapshot']*num_stab_gens
+    if kwargs['generator_snapshot']:
+        stab_indices_in_cycle = [i+1 for i in range(num_stab_gens)]
+        # stab_indices_in_cycle = [i+1 for i in range(num_stab_gens)] if kwargs['idle_delay']=='after' else [i+1+kwargs['idle_snapshots'] for i in range(num_stab_gens)]
+    else:
+        stab_indices_in_cycle = [1]
+    if kwargs['idle_delay']=='before':
+        stab_indices_in_cycle =  [value + kwargs['idle_snapshots'] for value in stab_indices_in_cycle]
+
+    for cycle in range(1,kwargs['n_cycles']):
+        stab_indices_in_cycle += [value +snaps_per_cycle*(cycle) for value in stab_indices_in_cycle]
+    return stab_indices_in_cycle
+
+colors_def = plt.get_cmap("tab10")
+
+def colors(i):
+    if i == 1:
+        i = 2
+    elif i == 2:
+        i =1
+    return colors_def(i)
+# def colors(i):
+#     return get_cmap('Spectral_r')(50*i+20)
+
+
+
 # %% Simulation settings
 kwargs = {
-    'n_cycles': 3,
+    'n_cycles': 2,
     'reset': True,
     'recovery': False,
     'encoding': False,
     'conditional': True,
     'include_barriers': True,
     'generator_snapshot': True,
-    'idle_snapshots': 10,
+    'idle_snapshots': 5,
     'final_measure': False,
     'idle_delay': 'before',
     'include_fifth_stabilizer': False}
@@ -128,7 +142,7 @@ circ, times = add_idle_noise_to_circuit(circ, gate_times, T1=T1,T2=T2,return_tim
 # %%
 # Run it
 noise_model = thermal_relaxation_model_V2(T1=T1,T2=T2,gate_times=gate_times)
-n_shots = 1024*1
+n_shots = 1024/2
 results = default_execute(circ, n_shots, gate_times=gate_times, noise_model=noise_model)
 
 # %%
@@ -137,7 +151,7 @@ P_0 = np.empty(label_counter.value)
 P_1 = np.empty(label_counter.value)
 P_w1 = np.empty(label_counter.value)
 P_w2 = np.empty(label_counter.value)
-P = np.empty(label_counter.value)
+# P = np.empty(label_counter.value)
 # order = np.empty((32,label_counter.value))
 # TODO: Make work with delay snapshots for key other than '0x0' 
 # (can't accept measurements less often than once per snapshot)
@@ -154,7 +168,7 @@ for i in range(label_counter.value):
     P_1[i] = overlap_with_subspace(rho, logical[1])
     P_w1[i] = overlap_with_subspace(rho, weight_1)
     P_w2[i] = overlap_with_subspace(rho, weight_2)
-    P[i] = overlap_with_subspace(rho, logical)
+    # P[i] = overlap_with_subspace(rho, logical)
     # for j in range(32):
     #     order[j,i] = state_fidelity(rho,basis[j])
 
@@ -193,7 +207,7 @@ for cycle_num in range(kwargs['n_cycles']):
 
 #%% Test plotting all keys in second cycle starting with a specific syndrome in the first cycle
 
-previuous_keys = []
+previuous_keys = ['0000']
 overlap_cycle = len(previuous_keys)
 overlap_subspace = 0
 if kwargs['conditional']:
