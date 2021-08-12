@@ -10,10 +10,11 @@ from qiskit.providers.aer.library import set_density_matrix, set_statevector
 from qiskit.circuit.instruction import Instruction
 from qiskit.converters import circuit_to_dag
 
-# Local packages/modules
-from stabilizers import add_snapshot_to_circuit
 #%%
 
+# Calling add_snapshot_to_circuit here causes circular imports, so for now this
+# works as a completely separate function, albeit with similar functionality.
+# TODO: Better solution?
 def add_stop_to_circuit(circ, snapshot_type='density_matrix',
                         snap_label='end', qubits=None, conditional=True,
                         **kwargs):
@@ -24,9 +25,10 @@ def add_stop_to_circuit(circ, snapshot_type='density_matrix',
     Adds a 'stop' to a circuit in the form of a snapshot."""
     if qubits is None:
         qubits = circ.qubits
-    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type,
-                            current_cyle=snap_label, conditional=conditional,
-                            **kwargs)
+    
+    circ.barrier()
+    if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
+        circ.save_density_matrix(qubits, label=snap_label, conditional=conditional)
     return circ
 
 def add_start_to_circuit(circ, state, simulator_type='density_matrix'):
