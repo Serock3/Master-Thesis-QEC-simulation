@@ -28,6 +28,8 @@ import warnings
 from qiskit.circuit.library import XGate, ZGate
 from qiskit.quantum_info.states.statevector import Statevector
 
+from .splitting_circuits import add_split_marker
+
 # Disable error which gives false positives in this file
 # pylint: disable=E1101
 # %% General functions
@@ -125,7 +127,8 @@ def get_repeated_stabilization(registers, n_cycles=1,
                                reset=True, recovery=False,
                                flag=False, snapshot_type='density_matrix',
                                include_barriers=True, conditional=True, generator_snapshot=True,
-                               pauliop='ZZZZZ', device=None, idle_delay='after', idle_snapshots=1, **kwargs):
+                               pauliop='ZZZZZ', device=None, idle_delay='after', 
+                               idle_snapshots=1, split_cycles=False,  **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
@@ -177,6 +180,11 @@ def get_repeated_stabilization(registers, n_cycles=1,
         add_snapshot_to_circuit(circ, snapshot_type,
                                 qubits=registers.QubitRegister, conditional=conditional,
                                 pauliop=pauliop, include_barriers=include_barriers)
+
+        # When splitting the circuit, each marker will add an snapshot labeled
+        # 'end'
+        if split_cycles:
+            add_split_marker(circ)
 
         if idle_delay == 'after':
             add_delay_marker(circ, registers, idle_snapshots, snapshot_type,
