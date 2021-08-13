@@ -62,6 +62,11 @@ def add_start_to_circuit(circ, state, simulator_type='density_matrix'):
         warnings.warn('Invalid simulator type, assuming density matrix.')
         new_circ.set_density_matrix(state)
 
+    # Append everything already in the circuit
+    dag = circuit_to_dag(circ)
+    for node in dag.op_nodes():
+        new_circ.append(node.op, node.qargs, node.cargs)
+    
     return new_circ
 
 def split_circuit(circ, add_stop=True, **kwargs):
