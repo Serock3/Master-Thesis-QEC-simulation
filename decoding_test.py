@@ -11,6 +11,7 @@ from simulator_program import post_process, post_select
 from qiskit.quantum_info import Statevector, DensityMatrix
 from simulator_program.stabilizers import syndrome_table
 from simulator_program.custom_noise_models import thermal_relaxation_model_V2, standard_times_delay, GateTimes
+from matplotlib import colors as clrs # TODO: Fix
 # %% Setup
 logical = logical_states(None)
 weight_1 = get_weight_1_basis()
@@ -77,7 +78,6 @@ One after each generator measurement (num_stab_gens in tot)
 And idle_snapshots before of after the stabilziers
 """
 
-
 def get_cycle_indices():
     """Returns index of the end of each cycle (final stabilizer measurement)."""
     num_snaps_per_cycle = 1+kwargs['idle_snapshots'] + \
@@ -117,7 +117,6 @@ def get_stab_datapoints():
 
 colors_def = plt.get_cmap("tab10")
 
-
 def colors(i):
     if i == 1:
         i = 2
@@ -130,11 +129,11 @@ def colors(i):
 
 # %% Simulation settings
 kwargs = {
-    'n_cycles': 3,
+    'n_cycles': 2,
     'reset': True,
-    'recovery': False,
+    'recovery': True,
     'encoding': False,
-    'conditional': True,
+    'conditional': False,
     'include_barriers': True,
     'generator_snapshot': True,
     'idle_snapshots': 2,
@@ -222,23 +221,24 @@ plt.ylim((0, counts_at_snapshots[0]))
 plt.xlim((0, time[-1]))
 plt.legend(labels=[r'$|0\rangle_L$', 'Weight 1', 'Weight 2', r'$|1\rangle_L$'])
 # %% Look at the proportion of states that get projected to |0>_L from w1 and to |1>_L from w2, are they the same?
-for cycle_num in range(kwargs['n_cycles']):
-    print(cycle_num)
-    cycle_index = get_cycle_indices()[cycle_num]
-    print((P_0[cycle_index+1]-P_0[cycle_index])/P_w1[cycle_index])
-    print((P_1[cycle_index+1]-P_1[cycle_index])/P_w2[cycle_index])
-    print('')
-
+if kwargs['recovery'] and not kwargs['conditional']:
+    for cycle_num in range(kwargs['n_cycles']):
+        print('At cycle',cycle_num)
+        cycle_index = get_cycle_indices()[cycle_num]
+        print(r'Fraction of increase in |0>_L to weight 1',(P_0[cycle_index]-P_0[cycle_index-1])/P_w1[cycle_index-1])
+        print(r'Fraction of increase in |1>_L to weight 2',(P_1[cycle_index]-P_1[cycle_index-1])/P_w2[cycle_index-1])
+        print('')
+    print('Given no decoding errors these should be equal')
 # %% Test plotting all keys in second cycle starting with a specific syndrome in the first cycle
 
-previuous_keys = ['1000']  # Post select
+previuous_keys = []  # Post select
 overlap_cycle = len(previuous_keys)
 overlap_subspace = 0
 if kwargs['conditional']:
     counts = post_select.get_subsystem_counts_up_to_cycle(
         results.get_counts(), overlap_cycle+1)
-    cycle_end = get_cycle_indices()[overlap_cycle]-0
-    label = get_snapshot_label('dm', kwargs['conditional'], cycle_end)
+    pre_recovery_index = get_cycle_indices()[overlap_cycle]-1
+    label = get_snapshot_label('dm', kwargs['conditional'], pre_recovery_index)
     num_keys = 2**(num_stab_gens*(1))  # len(results.data()[label])
     overlaps = np.zeros((num_keys, 34))
 
@@ -302,7 +302,8 @@ if kwargs['conditional']:
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
     aspect = 16/num_keys
     HM = ax.imshow(overlaps, aspect=aspect, interpolation='none')
-
+    norm = clrs.Normalize(0, 1)
+    HM.set_norm(norm)
     # threshold = np.zeros(num_keys)
     # for key in range(num_keys):
     #     threshold[key] = overlaps[key,extract_syndrome(key,overlap_cycle,num_stab_gens)] < 0.5
