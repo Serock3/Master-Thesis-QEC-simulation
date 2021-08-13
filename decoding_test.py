@@ -1,18 +1,47 @@
 # %%
-from qiskit.quantum_info.states.measures import state_fidelity
-from simulator_program.idle_noise import add_idle_noise_to_circuit
-from simulator_program.custom_noise_models import standard_times_delay, standard_times
+import pickle
 
-from simulator_program.stabilizers import get_full_stabilizer_circuit, get_weight_1_basis, get_weight_2_basis, label_counter, get_snapshot_label, logical_states
 import numpy as np
+from matplotlib import colors as clrs  # TODO: Fix
 from matplotlib import pyplot as plt
-from simulator_program.data_analysis_tools import default_execute, overlap_with_subspace
+from qiskit.quantum_info import DensityMatrix, Statevector
+from qiskit.quantum_info.states.measures import state_fidelity
+
 from simulator_program import post_process, post_select
-from qiskit.quantum_info import Statevector, DensityMatrix
-from simulator_program.stabilizers import syndrome_table
-from simulator_program.custom_noise_models import thermal_relaxation_model_V2, standard_times_delay, GateTimes
-from matplotlib import colors as clrs # TODO: Fix
+from simulator_program.custom_noise_models import (GateTimes, standard_times,
+                                                   standard_times_delay,
+                                                   thermal_relaxation_model_V2)
+from simulator_program.data_analysis_tools import (default_execute,
+                                                   overlap_with_subspace)
+from simulator_program.idle_noise import add_idle_noise_to_circuit
+from simulator_program.stabilizers import (get_full_stabilizer_circuit,
+                                           get_snapshot_label,
+                                           get_weight_1_basis,
+                                           get_weight_2_basis, label_counter,
+                                           logical_states, syndrome_table)
+
 # %% Setup
+def persist_to_file(file_name, overwrite = False):
+    """Decorator to cache the simulation results
+    """
+    def decorator(original_func):
+        try:
+            cache = pickle.load( open( file_name, "rb" ) )
+        except (IOError, ValueError):
+            cache = {}
+
+        def new_func(kwargs,T1, T2, gate_times):
+            key = (frozenset(kwargs.items()),str(T1),str(T2),frozenset(gate_times.gate_times.items()))
+            if key not in cache or overwrite:
+                cache[key] = original_func(kwargs,T1, T2, gate_times)
+                pickle.dump(cache, open(file_name, "wb" ))
+            else:
+                print('Loading simulation results from file')
+            return cache[key]
+        return new_func
+
+    return decorator
+
 logical = logical_states(None)
 weight_1 = get_weight_1_basis()
 weight_2 = get_weight_2_basis()
@@ -131,9 +160,9 @@ def colors(i):
 kwargs = {
     'n_cycles': 2,
     'reset': True,
-    'recovery': True,
+    'recovery': False,
     'encoding': False,
-    'conditional': False,
+    'conditional': True,
     'include_barriers': True,
     'generator_snapshot': True,
     'idle_snapshots': 2,
@@ -148,36 +177,43 @@ T1 = [40e3]*5+[100000000000, 100000000000]
 T2 = [60e3]*5+[100000000000, 100000000000]
 # T1 = 40e3
 # T2 = 60e3
-gate_times = standard_times_delay
-# gate_times = standard_times
+# gate_times = standard_times_delay
+gate_times = standard_times
 # gate_times = GateTimes(20, 0, {'delay': 5000})
+
+n_shots = 1024*8
+
+# %% Simulate
 # Get the complete circuit
-circ = get_full_stabilizer_circuit(**kwargs)
+overwrite = False # Whether to ignore existing simulation data and overwrite with a new simulation
+@persist_to_file('decoding_data/cache.dat',overwrite)
+def simulate(kwargs, T1, T2, gate_times):
+    print('Simulating new data')
+    # Create circuit
+    circ = get_full_stabilizer_circuit(**kwargs)
+    circ, times = add_idle_noise_to_circuit(
+        circ, gate_times, T1=T1, T2=T2, return_time=True)
+    # display(circ.draw(output='mpl'))
+    # Run it
+    noise_model = thermal_relaxation_model_V2(T1=T1, T2=T2, gate_times=gate_times)
+    results = default_execute(
+        circ, n_shots, gate_times=gate_times, noise_model=noise_model)
+    return results,times
 
-circ, times = add_idle_noise_to_circuit(
-    circ, gate_times, T1=T1, T2=T2, return_time=True)
-# display(circ.draw(output='mpl'))
-
-
-# %%
-# Run it
-noise_model = thermal_relaxation_model_V2(T1=T1, T2=T2, gate_times=gate_times)
-n_shots = 1024*1
-results = default_execute(
-    circ, n_shots, gate_times=gate_times, noise_model=noise_model)
-
-# %%
-time = np.empty(label_counter.value)
-P_0 = np.empty(label_counter.value)
-P_1 = np.empty(label_counter.value)
-P_w1 = np.empty(label_counter.value)
-P_w2 = np.empty(label_counter.value)
-# P = np.empty(label_counter.value)
-# order = np.empty((32,label_counter.value))
+results,times = simulate(kwargs,T1, T2, gate_times)
+num_snapshots = get_cycle_indices()[-1]+1
+# %% Plot fidelity over time
+time = np.empty(num_snapshots)
+P_0 = np.empty(num_snapshots)
+P_1 = np.empty(num_snapshots)
+P_w1 = np.empty(num_snapshots)
+P_w2 = np.empty(num_snapshots)
+# P = np.empty(num_snapshots)
+# order = np.empty((32,num_snapshots))
 # TODO: Make work with delay snapshots for key other than '0x0'
 # (can't accept measurements less often than once per snapshot)
 key = '0x0'
-for i in range(label_counter.value):
+for i in range(num_snapshots):
     label = get_snapshot_label('dm', kwargs['conditional'], i)
     if kwargs['conditional']:
         rho = results.data()[label][reduce_key(key, i)]
@@ -198,9 +234,9 @@ order = np.array([P_0, P_w1, P_w2, P_1])
 stab_datapoints = get_stab_datapoints()
 if kwargs['conditional']:
     counts_at_snapshots = post_select.get_trivial_post_select_counts_V2(
-        results.get_counts(), stab_datapoints, label_counter.value)
+        results.get_counts(), stab_datapoints, num_snapshots)
 else:
-    counts_at_snapshots = np.ones(label_counter.value)
+    counts_at_snapshots = np.ones(num_snapshots)
 
 for i in range(len(order)):
     lower = order[:i].sum(axis=0)
@@ -231,16 +267,17 @@ if kwargs['recovery'] and not kwargs['conditional']:
     print('Given no decoding errors these should be equal')
 # %% Test plotting all keys in second cycle starting with a specific syndrome in the first cycle
 
-previuous_keys = []  # Post select
-overlap_cycle = len(previuous_keys)
-overlap_subspace = 0
+previuous_keys = ['1010']  # Post select
 if kwargs['conditional']:
+    overlap_cycle = len(previuous_keys)
+    overlap_subspace = 0
+
     counts = post_select.get_subsystem_counts_up_to_cycle(
         results.get_counts(), overlap_cycle+1)
     pre_recovery_index = get_cycle_indices()[overlap_cycle]-1
     label = get_snapshot_label('dm', kwargs['conditional'], pre_recovery_index)
     num_keys = 2**(num_stab_gens*(1))  # len(results.data()[label])
-    overlaps = np.zeros((num_keys, 34))
+    overlaps = np.zeros((num_keys, 34))+np.infty
 
     # resulting (average) fidelity if applying the 'normal' lookup table definition
     total_fid_lookup = 0
@@ -261,7 +298,7 @@ if kwargs['conditional']:
                 2**(num_stab_gens*(overlap_cycle))*2**4)
             rho = results.data()[label][key]
 
-            overlap = np.empty(34)
+            overlap = np.zeros(34)
             if overlap_subspace == 0:
                 for i in range(32):
                     overlap[i] = state_fidelity(basis[i], rho)
@@ -289,7 +326,7 @@ if kwargs['conditional']:
             # if fid_lookup<fid_best_single_qb:
             #     print(bin(key_int)[2:].zfill(num_stab_gens),':', fid_lookup,' -> ',fid_best_single_qb,' -> ',fid_best_arbitrary_gate)
 
-    overlaps[:, 33] /= np.sum(overlaps[:, 33])
+    overlaps[:, 33] /= np.sum(overlaps[:, 33][overlaps[:, 33] != np.infty])
     total_fid_lookup /= n_shots
     total_fid_best_single_qb /= n_shots
     total_fid_best_unitary /= n_shots
@@ -336,7 +373,7 @@ if kwargs['conditional']:
 else:
     print('NO CONDITIONAL!')
 # %% Plot how the 32 different basis states (labeled by syndrome plus Z_L) map onto eachother from the 16 corrections
-
+plot_gradient = True # Gives every basis state it's one gradient
 mappings = np.zeros((16, 32))
 for basis_index in range(32):
     overlap = np.empty(16)
@@ -345,12 +382,12 @@ for basis_index in range(32):
             overlap[correction] = 0
         elif basis_mapping_table[correction, basis_index] < 16:
             overlap[correction] = 0.5 + \
-                (basis_mapping_table[correction, basis_index]-1)/30
+                (basis_mapping_table[correction, basis_index]-1)/30*plot_gradient
         elif basis_mapping_table[correction, basis_index] == 16:
             overlap[correction] = 3
         else:
             overlap[correction] = 2.5 - \
-                (basis_mapping_table[correction, basis_index]-17)/30
+                (basis_mapping_table[correction, basis_index]-17)/30*plot_gradient
         if state_fidelity(state, logical[0]):
             overlap[correction] = 0
     mappings[:, basis_index] = overlap
