@@ -3,10 +3,12 @@
 #%% Import modules
 # Standard libraries
 import warnings
+import numpy as np
 
 # Qiskit
 from qiskit import QuantumCircuit
 from qiskit.providers.aer.library import set_density_matrix, set_statevector
+from qiskit.providers.aer.library import SetDensityMatrix
 from qiskit.circuit.instruction import Instruction
 from qiskit.converters import circuit_to_dag
 
@@ -31,43 +33,48 @@ def add_stop_to_circuit(circ, snapshot_type='density_matrix',
         circ.save_density_matrix(qubits, label=snap_label, conditional=conditional)
     return circ
 
-def add_start_to_circuit(circ, state, simulator_type='density_matrix'):
+def add_start_to_circuit(circ, state):
     """Adds a start to the circuit in the form of a set_density_matrix
     (or set_statevector) instruction.
     
     Args:
         circ: QuantumCircuit object to add the initialization to.
-        state: Density matrix or statevector to initialize.
-        simulator_type: Type of simulation to be carried out for the circuit.
-                        Can be either 'density_matrix' ('dm') or 
-                        'statevector' ('sv'), defaults to 'density_matrix'.
-                        
+        state: Density matrix or statevector to initialize.                 
     Returns:
         new_circ: QuantumCircuit object identical to the circ input, with the
                   exception of an set_density_matrix (or set_statevector) at
                   the start.
     """
-
+    
     # Create a new circuit with the same registers
-    new_circ = QuantumCircuit()
-    for reg in circ.qregs + circ.cregs:
-        new_circ.add_register(reg)
+    # new_circ = QuantumCircuit()
+    # for reg in circ.qregs + circ.cregs:
+    #     new_circ.add_register(reg)
     
-    # Initialize the circuit
-    if simulator_type == 'statevector' or simulator_type == 'sv':
-        new_circ.set_statevector(state)
-    elif simulator_type == 'density_matrix' or simulator_type == 'dm':
-        new_circ.set_density_matrix(state)
-    else:
-        warnings.warn('Invalid simulator type, assuming density matrix.')
-        new_circ.set_density_matrix(state)
+    # TODO: Update usage of ancilla qubits (dynamic size of ancilla reg?)
+    an = np.zeros(2**2)
+    an[0] = 1.0
+    return circ.compose( SetDensityMatrix(np.kron(state,an)), qubits = circ.qubits)
+    
+    
+    # new_circ = circ.compose(SetDensityMatrix(np.kron(np.zeros(2**5), state)))
 
-    # Append everything already in the circuit
-    dag = circuit_to_dag(circ)
-    for node in dag.op_nodes():
-        new_circ.append(node.op, node.qargs, node.cargs)
+    # # Initialize the circuit
+    # if simulator_type == 'statevector' or simulator_type == 'sv':
+    #     new_circ.set_statevector(state)
+    # elif simulator_type == 'density_matrix' or simulator_type == 'dm':
+    #     new_circ.set_density_matrix(state)
+    # else:
+    #     warnings.warn('Invalid simulator type, assuming density matrix.')
+    #     new_circ.set_density_matrix(state)
+
+    # # Append everything already in the circuit
+    # new_circ.append(circ, inplace=True)
+    # #dag = circuit_to_dag(circ)
+    # #for node in dag.op_nodes():
+    # #    new_circ.append(node.op, node.qargs, node.cargs)
     
-    return new_circ
+    # return new_circ
 
 def split_circuit(circ, add_stop=True, **kwargs):
     """Splits up a single circuit into several. The splitting points must be

@@ -48,6 +48,22 @@ class StabilizerRegisters:
         self.SyndromeRegister = clReg
         self.ReadoutRegister = readout
 
+def get_registers(conditional = False, final_measure = False, n_cycles = 0, reset = True, recovery = True, flag = False, include_fifth_stabilizer = False):
+    qbReg = QuantumRegister(5, 'code_qubit')
+    anReg = AncillaRegister(2, 'ancilla_qubit')
+
+    if conditional:
+        # Advanced list of registers
+        crReg = get_classical_register(n_cycles, reset, recovery, flag, include_fifth_stabilizer)
+    else:
+        crReg = ClassicalRegister(
+            4, 'syndrome_bit')  # The typical register
+    if final_measure:
+        readout = ClassicalRegister(5, 'readout')
+        registers = StabilizerRegisters(qbReg, anReg, crReg, readout)
+    else:
+        registers = StabilizerRegisters(qbReg, anReg, crReg, None)
+    return registers
 
 def get_full_stabilizer_circuit(registers=None, n_cycles=1,
                                 reset=True, recovery=False, flag=False,
@@ -66,26 +82,9 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
 
     # TODO: Make this compatible with other codes?
     if registers is None:
-        qbReg = QuantumRegister(5, 'code_qubit')
-        anReg = AncillaRegister(2, 'ancilla_qubit')
-        if conditional:
-            # Advanced list of registers
-            crReg = get_classical_register(n_cycles, reset, recovery, flag, include_fifth_stabilizer)
-        else:
-            crReg = ClassicalRegister(
-                4, 'syndrome_bit')  # The typical register
-        if final_measure:
-            readout = ClassicalRegister(5, 'readout')
-            registers = StabilizerRegisters(qbReg, anReg, crReg, readout)
-        else:
-            registers = StabilizerRegisters(qbReg, anReg, crReg, None)
-    else:
-        qbReg = registers.QubitRegister
-        anReg = registers.AncillaRegister
-        if final_measure:
-            readout = registers.ReadoutRegister
+        registers = get_registers(conditional, final_measure, n_cycles, reset, recovery, flag, include_fifth_stabilizer)
 
-    if not anReg.size == 2 and not anReg.size == 5:
+    if not registers.AncillaRegister.size == 2 and not registers.AncillaRegister.size == 5:
         raise Exception('Ancilla register must be of size 2 or 5')
 
     # Define the circuit
@@ -94,8 +93,8 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
     if encoding:
         # TODO: Using rx and rz messes with the transpiler. Make a better fix
         if initial_state != 0:
-            circ.rx(theta, qbReg[0])
-            circ.rz(phi, qbReg[0])
+            circ.rx(theta, registers.QubitRegister[0])
+            circ.rz(phi, registers.QubitRegister[0])
         circ.compose(encode_input_v2(registers), inplace=True)
     else:
         if simulator_type == 'statevector':
@@ -103,7 +102,7 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
         else:
             circ.set_density_matrix(get_encoded_state(theta=theta, phi=phi))
 
-    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=qbReg,
+    add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=0, qubits=registers.QubitRegister,
                             conditional=conditional, pauliop=pauliop,
                             include_barriers=include_barriers)
 
@@ -119,7 +118,7 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
 
     # Final readout
     if final_measure:
-        circ.measure(qbReg, readout)
+        circ.measure(registers.QubitRegister, registers.ReadoutRegister)
     return circ
 
 
