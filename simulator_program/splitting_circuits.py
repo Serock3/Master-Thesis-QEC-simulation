@@ -7,6 +7,7 @@ import numpy as np
 
 # Qiskit
 from qiskit import QuantumCircuit
+from qiskit.quantum_info import DensityMatrix
 from qiskit.providers.aer.library import set_density_matrix, set_statevector
 from qiskit.providers.aer.library import SetDensityMatrix
 from qiskit.circuit.instruction import Instruction
@@ -52,9 +53,8 @@ def add_start_to_circuit(circ, state):
     #     new_circ.add_register(reg)
     
     # TODO: Update usage of ancilla qubits (dynamic size of ancilla reg?)
-    an = np.zeros(2**2)
-    an[0] = 1.0
-    return circ.compose( SetDensityMatrix(np.kron(state,an)), qubits = circ.qubits)
+    return circ.compose( SetDensityMatrix(DensityMatrix(state).expand(np.array([1.,0.,0.,0.]))), qubits=circ.qubits, front=True)
+    #return circ.compose( SetDensityMatrix(DensityMatrix(np.array([1.,0.,0.,0.])).expand(state)), qubits=circ.qubits, front=True)
     
     
     # new_circ = circ.compose(SetDensityMatrix(np.kron(np.zeros(2**5), state)))

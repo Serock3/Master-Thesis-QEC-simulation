@@ -10,6 +10,8 @@
 # Standard packages
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy
+import pickle
 
 # Qiskit
 from qiskit import *
@@ -31,47 +33,21 @@ from simulator_program.stabilizers import (get_full_stabilizer_circuit,
                                            _unflagged_stabilizer_ZXIXZ,
                                            _unflagged_stabilizer_ZZXIX,
                                            get_empty_stabilizer_circuit,
-                                           StabilizerRegisters)
+                                           StabilizerRegisters,
+                                           label_counter)
 from simulator_program.splitting_circuits import (split_circuit, 
                                                   add_start_to_circuit,
                                                   add_stop_to_circuit)
 from simulator_program.data_analysis_tools import default_execute
 from simulator_program.custom_noise_models import (thermal_relaxation_model_V2, 
                                                    standard_times,
+                                                   standard_times_delay,
+                                                   WACQT_target_times,
                                                    GateTimes)
 from simulator_program.idle_noise import add_idle_noise_to_circuit
 from simulator_program.post_process import (apply_unitary_to_den_mat,
                                             get_unitary_matrix_for_correction,
                                             post_process_den_mat)
-#%% Build a circuit
-T1=40e3
-T2=60e3
-n_cycles = 7
-kwargs = {
-
-    'reset': True,
-    'recovery': False, # No recovery since we wanna split instead
-    'flag': False,
-    'encoding': False,
-    'snapshot_type': 'density_matrix',
-    'conditional': True,
-    'idle_delay': 'before',
-    'split_cycles': True
-}
-
-circ = get_full_stabilizer_circuit(n_cycles=n_cycles, **kwargs)
-#circ.draw()
-#%%
-# Split circuit
-circ_list = split_circuit(circ)
-for i in range(len(circ_list)):
-    circ_list[i], time = add_idle_noise_to_circuit(circ_list[i],
-                                                   standard_times,
-                                                   T1=T1, T2=T2,
-                                                   return_time=True)
-    # Assume every regular cycle takes equal time
-    if i ==0:
-        cycle_time = time['end']
 #%% Correction strategies
 def standard_QEC(rho, syndrome, T1=40e3,T2=60e3, feedback_time=350):
     """Evolves a 7-qb density matrix in a way which corresponds to standard QEC,
@@ -131,7 +107,7 @@ def get_partial_stab_cycle(registers=None, stabilizers=[]):
         circ.barrier()
     return circ
 
-def get_reduced_recovery(registers):
+def get_reduced_recovery(registers, sydromes_to_remove = ['0100','1000','1100']):
     """Return the normal recovery operation but where the special syndromes are ignored."""
     qbReg = registers.QubitRegister
     clReg = registers.SyndromeRegister
@@ -146,17 +122,20 @@ def get_reduced_recovery(registers):
     circ.x(qbReg[1]).c_if(syndrome_reg, 1)
     circ.z(qbReg[4]).c_if(syndrome_reg, 2)
     circ.x(qbReg[2]).c_if(syndrome_reg, 3)
-    #circ.z(qbReg[2]).c_if(syndrome_reg, 4)
+    if not '0100' in sydromes_to_remove:
+        circ.z(qbReg[2]).c_if(syndrome_reg, 4)
     circ.z(qbReg[0]).c_if(syndrome_reg, 5)
     circ.x(qbReg[3]).c_if(syndrome_reg, 6)
     circ.x(qbReg[2]).c_if(syndrome_reg, 7)
     circ.z(qbReg[2]).c_if(syndrome_reg, 7)
-    #circ.x(qbReg[0]).c_if(syndrome_reg, 8)
+    if not '1000' in sydromes_to_remove:
+        circ.x(qbReg[0]).c_if(syndrome_reg, 8)
     circ.z(qbReg[3]).c_if(syndrome_reg, 9)
     circ.z(qbReg[1]).c_if(syndrome_reg, 10)
     circ.x(qbReg[1]).c_if(syndrome_reg, 11)
     circ.z(qbReg[1]).c_if(syndrome_reg, 11)
-    #circ.x(qbReg[4]).c_if(syndrome_reg, 12)
+    if not '1100' in sydromes_to_remove:
+        circ.x(qbReg[4]).c_if(syndrome_reg, 12)
     circ.x(qbReg[0]).c_if(syndrome_reg, 13)
     circ.z(qbReg[0]).c_if(syndrome_reg, 13)
     circ.x(qbReg[4]).c_if(syndrome_reg, 14)
@@ -175,7 +154,7 @@ def get_partial_recovery(registers, syndrome):
 
     # Unpack registers
     if isinstance(clReg, list):
-        syndrome_reg = clReg[0][current_cycle][current_step]
+        syndrome_reg = clReg[0][0][0]
     else:
         syndrome_reg = clReg
 
@@ -273,7 +252,7 @@ def rerun_stabilizers(rho, syndrome, shots, gate_times={}, T1=40e3, T2=60e3):
             # Assume 3rd + 4th stabilizer would give 11
             full_syndrome = hex(12+int(new_syndrome[2:],16)) + syndrome[2]
 
-        # Perfor the correction 
+        # Perform the correction 
         counts = res.data()['counts'][new_syndrome]
         rho = res.data()['end'][new_syndrome]
         rho_new = standard_QEC(rho, full_syndrome[:3], T1,T2, 
@@ -281,68 +260,64 @@ def rerun_stabilizers(rho, syndrome, shots, gate_times={}, T1=40e3, T2=60e3):
         rho_full += (counts/shots)*rho_new
 
     return rho_full, time['end'] + full_gate_times['feedback']
-# %% "Full program"
-trivial = get_encoded_state(0,0)
-noise_model = thermal_relaxation_model_V2(T1=T1,T2=T2,gate_times=standard_times)
-n_shots = 1024*6
 
-fid = [1.0] # Fidelity at start
-data_times = [0]  # Time passed at start
-total_time = 0
-for i in range(n_cycles):
+#%% Iteration function
 
-    # Simulate the subcircuit
-    results = default_execute(circ_list[i], n_shots, 
-                              gate_times=standard_times, 
-                              noise_model=noise_model)
-    total_time += cycle_time + standard_times['feedback']
 
-    # For each syndrome, perform QEC
-    rho_full = np.zeros([128,128], dtype=complex)
-    times_dic = {}
-    rho_new_dic = {}
-    for syndrome in results.data()['end'].keys():
+def not_good_with_names(big_dict, rho, cycle, n_cycles, start_time, special_recoveries):
+    """Recursive function to iterate through a simulate a full syndrome tree."""
 
-        # Get the count for this syndrome
-        counts = results.data()['counts'][syndrome]
-        rho = results.data()['end'][syndrome]
+    # Simulate stabilizer cycle
+    circ = add_start_to_circuit(circ_std_cycle, rho) # TODO: add T1 T2 and gate_times
+    res = default_execute(circ, shots=big_dict['counts'], gate_times=gate_times, T1=T1, T2=T2)
+    #return circ, res # TODO: REMOVE THIS!!!
 
-        # Apply normal error correction (including feedback time)
-        if syndrome[:3] == '0x4' or syndrome[:3] == '0x8' or syndrome[:3] == '0xc':
-            # Evolve 350ns forward as "feedback time"
-            rho = evolve_dm_in_time(rho, standard_times['feedback'], T1, T2)
-            rho_new, time = rerun_stabilizers(rho, syndrome, n_shots,
-                                              standard_times, T1, T2)
-            times_dic[syndrome] = time
+    # Iterate over syndromes
+    for syndrome in res.data()['end']:
+        # TODO: Add '0xe' and '0x6' to run first stabilizer again
+        #if syndrome == '0x4': # 0100
+        #    sub_res = default_execute(add_start_to_circuit(circ_stab_0100, res.data()['end'][syndrome]),
+        #                              gate_times=gate_times, T1=T1, T2=T2, 
+        #                              shots=res.data()['counts'][syndrome])
+        #    end_time = start_time + times_std_cycle['end']  + times_stab_0100['end']
+        #    rho = sub_res.data()['end']
+        #elif syndrome == '0x8': # 1000
+        #    sub_res = default_execute(add_start_to_circuit(circ_stab_1000, res.data()['end'][syndrome]), 
+        #                              gate_times=gate_times, T1=T1, T2=T2, 
+        #                              shots=res.data()['counts'][syndrome])
+        #    end_time = start_time + times_std_cycle['end']  +  times_stab_1000['end']
+        #    rho = sub_res.data()['end']
+        #elif syndrome == '0xc': # 1100
+        #    sub_res = default_execute(add_start_to_circuit(circ_stab_1100, res.data()['end'][syndrome]), 
+        #                              gate_times=gate_times, T1=T1, T2=T2, 
+        #                              shots=res.data()['counts'][syndrome])
+        #    end_time = start_time + times_std_cycle['end']  +  times_stab_1100['end']
+        #    rho = sub_res.data()['end']
+        if syndrome in special_recoveries:
+            sub_res = default_execute(add_start_to_circuit(special_recoveries[syndrome][0], 
+                                                           res.data()['end'][syndrome]),
+                                      gate_times=gate_times, T1=T1, T2=T2, 
+                                      shots=res.data()['counts'][syndrome])
+            end_time = start_time + times_std_cycle['end']  + special_recoveries[syndrome][1]
+            rho = sub_res.data()['end']
+            
         else:
-            rho_new = standard_QEC(rho, syndrome, T1,T2, standard_times['feedback'])
-            times_dic[syndrome] = 0
+            rho = res.data()['end'][syndrome] 
+            end_time = start_time + times_std_cycle['end']   
 
-        rho_new_dic[syndrome] = rho_new
-        
+        # Store some data in (dict?)
+        big_dict[syndrome] = {} # Big dict energy
+        big_dict[syndrome]['counts'] = res.data()['counts'][syndrome]
+        big_dict[syndrome]['time'] = end_time
+        big_dict[syndrome]['fid'] = state_fidelity(initial_state, rho)
 
-    # Sync the runs and combine them into a single density matrix
-    max_time = max(times_dic.values())
-    total_time += max_time
-    for syndrome in results.data()['end'].keys():
-        time_diff = max_time - times_dic[syndrome]
-        rho = evolve_dm_in_time(rho_new_dic[syndrome], time_diff, T1, T2)
-
-        # Reconstruct density matrix for ALL runs
-        rho_full += (results.data()['counts'][syndrome]/n_shots)*rho
-
-
-    # Set the initial state for next cycle
-    if i+1 < n_cycles:
-        circ_list[i+1] = add_start_to_circuit(circ_list[i+1], rho_full)
-    fid.append(state_fidelity(trivial, rho_full))
-    data_times.append(total_time)
-    print(state_fidelity(trivial, rho_full))
-print('Done :)')
-
-
+        # Run next cycle
+        if cycle+1 < n_cycles:
+            not_good_with_names(big_dict[syndrome], rho, cycle+1, n_cycles, end_time, special_recoveries)
+    return
+    
 #%% ============== Iterate through all branches===============================
-n_cycles = 1
+n_cycles = 9
 kwargs = {
     'reset': True,
     'recovery': False, # No recovery since we wanna split instead
@@ -356,21 +331,17 @@ kwargs = {
 }
 T1 = [40e3]*5+[100000000000, 100000000000]
 T2 = [60e3]*5+[100000000000, 100000000000]
-# T1 = 40e3
-# T2 = 60e3
-# gate_times = standard_times_delay
+# T1 = 1000000000000000 #40e3
+# T2 = 1000000000000000 #60e3
+#gate_times = standard_times_delay
+#gate_times = WACQT_target_times
 gate_times = standard_times
-# gate_times = GateTimes(20, 0, {'delay': 5000})
+#gate_times = GateTimes(0, 0, {'feedback': 0, 'delay': 2000})
 
 
-# Circuits
 registers = get_registers()
-circ_std_cycle = get_repeated_stabilization(registers,1,**kwargs)
-circ_std_cycle.compose(get_reduced_recovery(registers),qubits=circ_std_cycle.qubits,clbits=circ_std_cycle.clbits, inplace=True)
-circ_std_cycle.save_density_matrix(
-                        qubits=registers.QubitRegister, label='end', conditional=kwargs['conditional'])
-circ_std_cycle, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle, gate_times,T1,T2, return_time=True)
 
+# Define the extra stabilizer circuits
 circ_stab_1000 = get_partial_stab_cycle(registers, [0,1,2])
 circ_stab_1000.compose(get_partial_recovery(registers, '0x8'),qubits=circ_stab_1000.qubits,clbits=circ_stab_1000.clbits, inplace=True)
 circ_stab_1000.save_density_matrix(qubits=registers.QubitRegister, label='end', 
@@ -390,151 +361,191 @@ circ_stab_1100.save_density_matrix(qubits=registers.QubitRegister, label='end',
                                   conditional=False)
 circ_stab_1100, times_stab_1100 = add_idle_noise_to_circuit(circ_stab_1100, gate_times=gate_times, T1=T1, T2=T2, return_time=True)
 
-inital_state = logical_states(include_ancillas=None)[0]
+# Different recovery schemes
+special_recoveries = {'0x4': (circ_stab_0100,times_stab_0100['end']),
+                      '0x8': (circ_stab_1000,times_stab_1000['end']),
+                      '0xc': (circ_stab_1100,times_stab_1100['end'])}
+standard_recoveries = {}
 
-big_dict = {'counts': 10}
-not_good_with_names(big_dict, inital_state, 0, n_cycles, 0)
-#%% Iteration function
+# Circuits
+label_counter.value = 0
 
-def not_good_with_names(big_dict, rho, cycle, n_cycles, time_passed):
-    """Recursive function to iterate through a simulate a full syndrome tree."""
+circ_std_cycle = get_repeated_stabilization(registers,1,**kwargs, generator_snapshot=False, idle_snapshots=False)
+circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key,16))[2:].zfill(4) for key in special_recoveries]),
+                       qubits=circ_std_cycle.qubits,
+                       clbits=circ_std_cycle.clbits, inplace=True)
+circ_std_cycle.save_density_matrix(
+                        qubits=registers.QubitRegister, label='end', conditional=kwargs['conditional'])
+circ_std_cycle, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle, 
+                                                            gate_times,T1,T2,
+                                                            return_time=True)
+                                                            
 
-    # Simulate stabilizer cycle
-    circ = add_start_to_circuit(circ_std_cycle, rho) # TODO: add T1 T2 and gate_times
-    res = default_execute(circ, shots=big_dict['counts'])
-    time_passed += times_std_cycle['end'] 
+#%% Running simulations
 
-    # Iterate over syndromes
-    for syndrome in res.data()['end']:
-    
-        if syndrome == '0x4': # 0100
-            sub_res = default_execute(add_start_to_circuit(circ_stab_0100, res.data()['end'][syndrome]), 
-                                  shots=res.get_counts()[syndrome])
-            time_passed += times_stab_0100
-        elif syndrome == '0x8': # 1000
-            sub_res = default_execute(add_start_to_circuit(circ_stab_1000, res.data()['end'][syndrome]), 
-                                  shots=res.get_counts()[syndrome])
-            time_passed += times_stab_1000
-        elif syndrome == '0xc': # 1100
-            sub_res = default_execute(add_start_to_circuit(circ_stab_1100, res.data()['end'][syndrome]), 
-                                  shots=res.get_counts()[syndrome])
-            time_passed += times_stab_1100
-
-        rho = sub_res.data()['end']        
-        # Store some data in (dict?)
-        big_dict[syndrome] = {}
-        big_dict[syndrome]['counts'] = res.data()['counts'][syndrome]
-        big_dict[syndrome]['time'] = time_passed
-        big_dict[syndrome]['fid'] = state_fidelity(trivial, rho_new)
-
-        # Run next cycle
-        if cycle < n_cycles:
-            not_good_with_names(big_dict[syndrome], rho, cycle+1, n_cycles, time_passed)
-    return
-
-# %% Post selecting a specific error and comparing =======================
-trouble_syndromes = ['0x8', '0x4', '0xc']
-trivial = get_encoded_state(0,0)
-noise_model = thermal_relaxation_model_V2(T1=T1,T2=T2,gate_times=standard_times)
 n_shots = 1024*4
+initial_state = logical_states(include_ancillas=None)[0]
+standard_res_dict = {'counts': n_shots, 'time': 0, 'fid': 1}
+not_good_with_names(standard_res_dict, initial_state, 0, n_cycles, 0, standard_recoveries)
+print('Halfway there')
+special_res_dict = {'counts': n_shots, 'time': 0, 'fid': 1}
+not_good_with_names(special_res_dict, initial_state, 0, n_cycles, 0, special_recoveries)
+print('(Living on a prayer)')
 
-fid = [1.0] # Fidelity at start
-data_times = [0]  # Time passed at start
-total_time = 0
+#%% Plot scatter
+fig, ax = plt.subplots(1,1, figsize=(7, 5))
 
-syn_fid_pre_QEC = {}
-syn_fid_standard_QEC = {}
-syn_fid_extra_stab = {}
-circ_list_1 = [circ_list[0]]
-circ_list_2 = [circ_list[0]]
-fid_1 = []
-fid_2 = []
-for syndrome in trouble_syndromes:
-    syn_fid_pre_QEC[syndrome] = []
-    syn_fid_standard_QEC[syndrome] = []
-    syn_fid_extra_stab[syndrome] = []
+def scatter_plot(ax,big_dict, c='b'):
+    ax.scatter(big_dict['time'],big_dict['fid'], s=big_dict['counts'], c=c, marker='o')
+    
+    for key in big_dict:
+        if key == 'counts' or key == 'time' or key == 'fid':
+            continue
+        scatter_plot(ax,big_dict[key])
+        # ax.scatter(big_dict[key]['time'],big_dict[key]['fid'], s=big_dict[key]['counts'], c='b', marker='o')
 
-for i in range(n_cycles):
+    
+scatter_plot(ax,test_dict)
+ax.set_ylim([0.0,1.0])
+ax.set_xlim([0.0,n_cycles*6000.0])
 
-    # Simulate the subcircuit
-    if i == 0:
-        results = default_execute(circ_list[i], n_shots, 
-                                  gate_times=standard_times, 
-                                  noise_model=noise_model)
+
+
+#%% Reform dict into arrays of each branch
+times = []
+fids = []
+counts = []
+cycles = []
+
+def reform_dict(big_dict, current_cycle):
+    times.append(big_dict['time'])
+    fids.append(big_dict['fid'])
+    counts.append(big_dict['counts'])
+    cycles.append(current_cycle)
+    for key in big_dict:
+        if key == 'counts' or key == 'time' or key == 'fid':
+            continue
+        reform_dict(big_dict[key], current_cycle+1)
+reform_dict(test_dict, 0)
+
+times = np.array(times)
+fids = np.array(fids)
+counts = np.array(counts, dtype=float)
+cycles = np.array(cycles)
+
+#%% Append every shot into array
+
+def append_shots(big_dict, current_cycle,times_full, fids_full, cycles_full):
+    global index
+    times_full[index:index+big_dict['counts']] = big_dict['time']
+    fids_full[index:index+big_dict['counts']] = big_dict['fid']
+    cycles_full[index:index+big_dict['counts']] = current_cycle
+    index += big_dict['counts']
+    for key in big_dict:
+        if key == 'counts' or key == 'time' or key == 'fid':
+            continue
+        append_shots(big_dict[key], current_cycle+1, times_full, fids_full, cycles_full)
+            
+index = 0
+n_points = (n_cycles+1)*n_shots
+times_full_standard = np.zeros(n_points)
+fids_full_standard = np.zeros(n_points)
+cycles_full_standard = np.zeros(n_points)
+append_shots(standard_res_dict, 0,times_full_standard,fids_full_standard,cycles_full_standard)
+     
+index = 0
+n_points = (n_cycles+1)*n_shots
+times_full_special = np.zeros(n_points)
+fids_full_special = np.zeros(n_points)
+cycles_full_special = np.zeros(n_points)
+append_shots(special_res_dict, 0,times_full_special,fids_full_special,cycles_full_special)
+
+#%% Plotting functions
+
+# Plot by bins
+def plot_by_bins(ax, bins, fids_full, times_full, cycles_full,c='b'):
+    time_bins = np.linspace(0,max(times_full),bins+1)
+    for i in range(bins):
+        ax.scatter((time_bins[i]+time_bins[i+1])/2,
+                   np.mean(fids_full[np.logical_and(time_bins[i]<times_full, times_full<time_bins[i+1])]),
+                   c=c, marker='o')
+
+# bins = n_cycles+2
+# time_bins = np.linspace(0,max(times),bins+1)
+# for i in range(bins):
+#     ax.scatter((time_bins[i]+time_bins[i+1])/2,
+#                np.mean(fids_full[np.logical_and(time_bins[i]<times_full, times_full<time_bins[i+1])]),
+#                c='b', marker='o')
+
+# Plot curve fitting
+def plot_curvefit(ax, fids_full, times_full, cycles_full, color='C1'):
+    def monoExp(t, T, c, A):
+        return (A-c) * np.exp(-t/T) + c
+    p0 = (40e3, 0, 0.9) # start with values near those we expect
+    pars_full, cov_full = scipy.optimize.curve_fit(monoExp, times_full, fids_full, p0)
+    x = np.linspace(0,max(times_full),200)
+    ax.plot(x, monoExp(x, *pars_full), '-', color=color,zorder=15,
+            label=rf'Curve fit, $T_L ={pars_full[0]/1000:.1f}$ μs')
+    return pars_full, cov_full
+
+# Plot by cycle
+def plot_by_cycle(ax, fids_full, times_full, cycles_full, color='C0'):
+    cycles = int(max(cycles_full)+1)
+    fid_cycle = np.zeros(cycles) 
+    times_cycle = np.zeros(cycles)   
+    for i in range(cycles):    
+        fid_cycle[i] += np.mean(fids_full[cycles_full==i])
+        times_cycle[i] += np.mean(times_full[cycles_full==i])
+    ax.plot(times_cycle,fid_cycle, '-o', color=color, label='Grouped by cycle')
+
+
+
+
+
+#%% Testing plots
+fig, ax = plt.subplots(1,1, figsize=(7, 5))
+bins = n_cycles+2
+
+plot_by_bins(ax, bins, fids_full_standard, times_full_standard, cycles_full_standard,c='b')
+pars_standard, cov_standard = plot_curvefit(ax, fids_full_standard, times_full_standard, cycles_full_standard, color='C1')
+plot_by_cycle(ax, fids_full_standard, times_full_standard, cycles_full_standard, color='C0')
+
+plot_by_bins(ax, bins, fids_full_special, times_full_special, cycles_full_special,c='C4')
+pars_special, cov_special = plot_curvefit(ax, fids_full_special, times_full_special, cycles_full_special, color='C2')
+plot_by_cycle(ax, fids_full_special, times_full_special, cycles_full_special, color='C3')
+
+# Plot settings
+ax.legend()
+ax.set_ylim([0.0,1.0])
+ax.set_xlim([0.0,max(times_full_special)])
+#%% Plot Many lines
+
+def lines_plot(ax,big_dict, times, fids, current_cycle):
+    times_new_branch = times
+    times_new_branch[current_cycle] = big_dict['time']
+    fids_new_branch = fids
+    fids_new_branch[current_cycle] = big_dict['fid']
+    # counts_new_branch = counts
+    # counts_new_branch[current_cycle] = big_dict['counts']
+    if current_cycle == n_cycles-1:
+        ax.plot(times,fids, color = 'b', alpha = np.sqrt(big_dict['counts'])/50, linewidth=np.sqrt(big_dict['counts']))
     else:
-        results = default_execute(circ_list_1[i], n_shots, 
-                                  gate_times=standard_times, 
-                                  noise_model=noise_model)
-        #results_2 = default_execute(circ_list_2[i], n_shots, 
-        #                          gate_times=standard_times, 
-        #                          noise_model=noise_model)                  
+        for key in big_dict:
+            if not(key == 'counts' or key == 'time' or key == 'fid'):
+                lines_plot(ax,big_dict[key], times_new_branch, fids_new_branch, current_cycle + 1)
 
-    # For each syndrome, perform QEC
-    rho_full_1 = np.zeros([128,128], dtype=complex)
-    rho_full_2 = np.zeros([128,128], dtype=complex)
+times = [0]*n_cycles
+fids = [0]*n_cycles
+# counts = [0]*n_cycles
 
-    for syndrome in results.data()['end'].keys():
-        #if syndrome[:3] != ps_syndrome:
-        #    continue
+fig, ax = plt.subplots(1,1, figsize=(7, 5))
+lines_plot(ax,big_dict, times, fids, 0)
 
-        # Get the count for this syndrome
-        counts = results.data()['counts'][syndrome]
-        rho = results.data()['end'][syndrome]
 
-        # Method 1: Standard error correction
-        rho_1 = standard_QEC(rho, syndrome, T1,T2, standard_times['feedback'])
+#%% Save
+pickle.dump(standard_res_dict, open('split_data/standard_res_dict.dat', "wb" ))
+pickle.dump(special_res_dict, open('split_data/special_res_dict.dat', "wb" ))
+#%% load 
+standard_res_dict = pickle.load( open( 'split_data/standard_res_dict.dat', "rb" ) )
+special_res_dict = pickle.load( open( 'split_data/special_res_dict.dat', "rb" ) )
 
-        # Method 2: Repeat some stabilizers
-        if syndrome[:3] in trouble_syndromes:
-            rho_2 = evolve_dm_in_time(rho, standard_times['feedback'], T1, T2)
-            rho_2, time = rerun_stabilizers(rho_2, syndrome, n_shots,
-                                            standard_times, T1, T2)
-            # Append the difference in fidelities
-            syn_fid_pre_QEC[syndrome[:3]].append(state_fidelity(rho, trivial))
-            syn_fid_standard_QEC[syndrome[:3]].append(state_fidelity(rho_1, trivial))
-            syn_fid_extra_stab[syndrome[:3]].append(state_fidelity(rho_2, trivial))
-        else:
-            rho_2 = standard_QEC(rho, syndrome, T1,T2, standard_times['feedback'])
-
-        # Reconstruct density matrix
-        rho_full_1 += (counts/n_shots)*rho_1
-        rho_full_2 += (counts/n_shots)*rho_2
-
-    # Append results
-    fid_1.append(state_fidelity(rho_full_1, trivial))
-    fid_2.append(state_fidelity(rho_full_2, trivial))
-
-    # Set the initial state for next cycle
-    if i+1 < n_cycles:
-        circ_list_1.append(add_start_to_circuit(circ_list[i+1], rho_full_1))
-        circ_list_2.append(add_start_to_circuit(circ_list[i+1], rho_full_2))
-
-print('Done :)')
-
-#%%
-
-qb1 = QuantumRegister(1)
-qb2 = QuantumRegister(2)
-
-an0 = np.zeros(2**2)
-an0[0] = 1.0
-circ1 = QuantumCircuit(qb1, qb2)
-circ2 = circ1.compose( SetDensityMatrix(np.kron(an0, np.array([1,0]))), qubits = circ1.qubits)
-#circ1.set_density_matrix(np.array([1,0,0,0]))
-circ2.x(qb1)
-circ2.draw()
-#%%
-circ2 = QuantumCircuit(qb1, qb2)
-circ2.cz(qb1[0], qb2[0])
-circ2.compose(circ1, inplace=True, front=True)
-circ2.draw()
-
-#res = default_execute(circ2)
-#%%
-def add_key(test, key, thresh=2):
-    test[str(key)] = {}
-    if key < thresh:
-        add_key(test[str(key)], key+1)
-    return
-test = {}
-add_key(test,0)
