@@ -49,29 +49,6 @@ from simulator_program.post_process import (apply_unitary_to_den_mat,
                                             get_unitary_matrix_for_correction,
                                             post_process_den_mat)
 #%% Correction strategies
-def standard_QEC(rho, syndrome, T1=40e3,T2=60e3, feedback_time=350):
-    """Evolves a 7-qb density matrix in a way which corresponds to standard QEC,
-    using a lookup-table and a feedback time to process results."""
-
-    thrm_relax = thermal_relaxation_error(T1, T2, feedback_time).to_instruction()
-
-    # Define circuit and idle for feedback time
-    circ_correct = QuantumCircuit(7)
-    circ_correct.set_density_matrix(rho)
-    for qubit in circ_correct.qubits:
-        circ_correct.append(thrm_relax, [qubit])
-
-    # Apply correction
-    for correction in syndrome_table[int(syndrome[:3], 16)]:
-        circ_correct.append(correction[0](), [correction[1]])
-    circ_correct.save_density_matrix(circ_correct.qubits, label='tmp')
-
-    # Run the error correction
-    # Note: "Noise free" since the noise is interpreted to be part of feedback time
-    results_tmp = execute(circ_correct, Aer.get_backend('qasm_simulator'),
-                          shots=1).result()
-    return results_tmp.data()['tmp']
-
 
 def get_partial_stab_cycle(registers=None, stabilizers=[]):
     """Circuit for rerunning a set of stabilizers
@@ -107,7 +84,7 @@ def get_partial_stab_cycle(registers=None, stabilizers=[]):
         circ.barrier()
     return circ
 
-def get_reduced_recovery(registers, sydromes_to_remove = ['0100','1000','1100']):
+def get_reduced_recovery(registers, syndromes_to_remove = ['0100','1000','1100']):
     """Return the normal recovery operation but where the special syndromes are ignored."""
     qbReg = registers.QubitRegister
     clReg = registers.SyndromeRegister
@@ -120,26 +97,30 @@ def get_reduced_recovery(registers, sydromes_to_remove = ['0100','1000','1100'])
         syndrome_reg = clReg
 
     circ.x(qbReg[1]).c_if(syndrome_reg, 1)
-    circ.z(qbReg[4]).c_if(syndrome_reg, 2)
+    if not '0010' in syndromes_to_remove:
+        circ.z(qbReg[4]).c_if(syndrome_reg, 2)
     circ.x(qbReg[2]).c_if(syndrome_reg, 3)
-    if not '0100' in sydromes_to_remove:
+    if not '0100' in syndromes_to_remove:
         circ.z(qbReg[2]).c_if(syndrome_reg, 4)
     circ.z(qbReg[0]).c_if(syndrome_reg, 5)
-    circ.x(qbReg[3]).c_if(syndrome_reg, 6)
+    if not '0110' in syndromes_to_remove:
+        circ.x(qbReg[3]).c_if(syndrome_reg, 6)
     circ.x(qbReg[2]).c_if(syndrome_reg, 7)
     circ.z(qbReg[2]).c_if(syndrome_reg, 7)
-    if not '1000' in sydromes_to_remove:
+    if not '1000' in syndromes_to_remove:
         circ.x(qbReg[0]).c_if(syndrome_reg, 8)
     circ.z(qbReg[3]).c_if(syndrome_reg, 9)
-    circ.z(qbReg[1]).c_if(syndrome_reg, 10)
+    if not '1010' in syndromes_to_remove:
+        circ.z(qbReg[1]).c_if(syndrome_reg, 10)
     circ.x(qbReg[1]).c_if(syndrome_reg, 11)
     circ.z(qbReg[1]).c_if(syndrome_reg, 11)
-    if not '1100' in sydromes_to_remove:
+    if not '1100' in syndromes_to_remove:
         circ.x(qbReg[4]).c_if(syndrome_reg, 12)
     circ.x(qbReg[0]).c_if(syndrome_reg, 13)
     circ.z(qbReg[0]).c_if(syndrome_reg, 13)
-    circ.x(qbReg[4]).c_if(syndrome_reg, 14)
-    circ.z(qbReg[4]).c_if(syndrome_reg, 14)
+    if not '1110' in syndromes_to_remove:
+        circ.x(qbReg[4]).c_if(syndrome_reg, 14)
+        circ.z(qbReg[4]).c_if(syndrome_reg, 14)
     circ.x(qbReg[3]).c_if(syndrome_reg, 15)
     circ.z(qbReg[3]).c_if(syndrome_reg, 15)
     
@@ -159,12 +140,19 @@ def get_partial_recovery(registers, syndrome):
         syndrome_reg = clReg
 
     # If the ancilla is reset to |0> between measurements
-    if syndrome == '0x4': # 0100 0101 0110 0111
+    if syndrome == '0x2': # 0010
+        circ.z(qbReg[4]).c_if(syndrome_reg, 2-2)
+        circ.x(qbReg[2]).c_if(syndrome_reg, 3-2)
+    elif syndrome == '0x4': # 0100
         circ.z(qbReg[2]).c_if(syndrome_reg, 4-4)
         circ.z(qbReg[0]).c_if(syndrome_reg, 5-4)
         circ.x(qbReg[3]).c_if(syndrome_reg, 6-4)
         circ.x(qbReg[2]).c_if(syndrome_reg, 7-4)
         circ.z(qbReg[2]).c_if(syndrome_reg, 7-4)
+    elif syndrome == '0x6': # 0110
+        circ.x(qbReg[3]).c_if(syndrome_reg, 6-6)
+        circ.x(qbReg[2]).c_if(syndrome_reg, 7-6)
+        circ.z(qbReg[2]).c_if(syndrome_reg, 7-6)
     elif syndrome == '0x8': # 1000
         circ.x(qbReg[0]).c_if(syndrome_reg, 8-8)
         circ.z(qbReg[3]).c_if(syndrome_reg, 9-8)
@@ -178,6 +166,10 @@ def get_partial_recovery(registers, syndrome):
         circ.z(qbReg[4]).c_if(syndrome_reg, 14-8)
         circ.x(qbReg[3]).c_if(syndrome_reg, 15-8)
         circ.z(qbReg[3]).c_if(syndrome_reg, 15-8)
+    elif syndrome == '0xa': # 1010
+        circ.z(qbReg[1]).c_if(syndrome_reg, 10-10)
+        circ.x(qbReg[1]).c_if(syndrome_reg, 11-10)
+        circ.z(qbReg[1]).c_if(syndrome_reg, 11-10)
     elif syndrome == '0xc': # 1100
         circ.x(qbReg[4]).c_if(syndrome_reg, 12-12)
         circ.x(qbReg[0]).c_if(syndrome_reg, 13-12)
@@ -186,7 +178,11 @@ def get_partial_recovery(registers, syndrome):
         circ.z(qbReg[4]).c_if(syndrome_reg, 14-12)
         circ.x(qbReg[3]).c_if(syndrome_reg, 15-12)
         circ.z(qbReg[3]).c_if(syndrome_reg, 15-12)
-    
+    elif syndrome == '0xe': # 1110
+        circ.x(qbReg[4]).c_if(syndrome_reg, 14-14)
+        circ.z(qbReg[4]).c_if(syndrome_reg, 14-14)
+        circ.x(qbReg[3]).c_if(syndrome_reg, 15-14)
+        circ.z(qbReg[3]).c_if(syndrome_reg, 15-14)
     return circ
 
 def evolve_dm_in_time(rho, time, T1=40e3, T2=60e3):
@@ -204,95 +200,21 @@ def evolve_dm_in_time(rho, time, T1=40e3, T2=60e3):
                           shots=1).result()
     return results_tmp.data()['tmp']
 
-def rerun_stabilizers(rho, syndrome, shots, gate_times={}, T1=40e3, T2=60e3):
-    """Runs and processes a set of extra stabilizers."""
-
-    # Get gate times missing from input
-    if isinstance(gate_times, dict):
-        full_gate_times = standard_times.get_gate_times(
-            custom_gate_times=gate_times)
-    elif isinstance(gate_times, GateTimes):
-        full_gate_times = gate_times
-    else:
-        warnings.warn('Invalid gate times, assuming standard_times')
-        full_gate_times = standard_times
-
-    # Interpret syndrome
-    # TODO: Make into separate function?
-    syn_int = int(syndrome[:3], 16)
-    if syn_int == 8: # 1000
-        stabilizers = [0,1,2]
-    elif syn_int == 4 or syn_int == 12: # 0100 or 1100
-        stabilizers = [0,1]
-    else:
-        # TODO: "else" should maybe be no new stabilizers, just the correction?
-        stabilizers = [0,1,2,3]
-
-    # Get the circuit
-    circ = get_partial_stab_cycle(stabilizers)
-    circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times, 
-                                           T1=T1, T2=T2, return_time=True)
-    circ = add_start_to_circuit(circ, rho)
-    add_stop_to_circuit(circ)
-
-    # Run it
-    noise_model = thermal_relaxation_model_V2(T1, T2, full_gate_times)
-    res = default_execute(circ, shots=shots, noise_model=noise_model)
-
-    # Construct full syndrome
-    rho_full = np.zeros([128,128], dtype=complex)
-    for new_syndrome in res.data()['end']:
-        if syn_int == 8:
-            # Assume 4th stabilizer would give 1
-            full_syndrome = hex(8+int(new_syndrome[2:],16)) + syndrome[2]
-        elif syn_int == 4:
-            # Assume 3rd + 4th stabilizer would give 01
-            full_syndrome = hex(4+int(new_syndrome[2:],16)) + syndrome[2]
-        elif syn_int == 12:
-            # Assume 3rd + 4th stabilizer would give 11
-            full_syndrome = hex(12+int(new_syndrome[2:],16)) + syndrome[2]
-
-        # Perform the correction 
-        counts = res.data()['counts'][new_syndrome]
-        rho = res.data()['end'][new_syndrome]
-        rho_new = standard_QEC(rho, full_syndrome[:3], T1,T2, 
-                               full_gate_times['feedback'])
-        rho_full += (counts/shots)*rho_new
-
-    return rho_full, time['end'] + full_gate_times['feedback']
 
 #%% Iteration function
 
 
-def not_good_with_names(big_dict, rho, cycle, n_cycles, start_time, special_recoveries):
-    """Recursive function to iterate through a simulate a full syndrome tree."""
+def not_good_with_names(big_dict, rho, cycle, n_cycles, start_time, circ_std_cycle, special_recoveries):
+    """Recursive function to iterate through and simulate a full syndrome tree.
+    """
 
     # Simulate stabilizer cycle
     circ = add_start_to_circuit(circ_std_cycle, rho) # TODO: add T1 T2 and gate_times
     res = default_execute(circ, shots=big_dict['counts'], gate_times=gate_times, T1=T1, T2=T2)
-    #return circ, res # TODO: REMOVE THIS!!!
 
     # Iterate over syndromes
     for syndrome in res.data()['end']:
         # TODO: Add '0xe' and '0x6' to run first stabilizer again
-        #if syndrome == '0x4': # 0100
-        #    sub_res = default_execute(add_start_to_circuit(circ_stab_0100, res.data()['end'][syndrome]),
-        #                              gate_times=gate_times, T1=T1, T2=T2, 
-        #                              shots=res.data()['counts'][syndrome])
-        #    end_time = start_time + times_std_cycle['end']  + times_stab_0100['end']
-        #    rho = sub_res.data()['end']
-        #elif syndrome == '0x8': # 1000
-        #    sub_res = default_execute(add_start_to_circuit(circ_stab_1000, res.data()['end'][syndrome]), 
-        #                              gate_times=gate_times, T1=T1, T2=T2, 
-        #                              shots=res.data()['counts'][syndrome])
-        #    end_time = start_time + times_std_cycle['end']  +  times_stab_1000['end']
-        #    rho = sub_res.data()['end']
-        #elif syndrome == '0xc': # 1100
-        #    sub_res = default_execute(add_start_to_circuit(circ_stab_1100, res.data()['end'][syndrome]), 
-        #                              gate_times=gate_times, T1=T1, T2=T2, 
-        #                              shots=res.data()['counts'][syndrome])
-        #    end_time = start_time + times_std_cycle['end']  +  times_stab_1100['end']
-        #    rho = sub_res.data()['end']
         if syndrome in special_recoveries:
             sub_res = default_execute(add_start_to_circuit(special_recoveries[syndrome][0], 
                                                            res.data()['end'][syndrome]),
@@ -313,11 +235,12 @@ def not_good_with_names(big_dict, rho, cycle, n_cycles, start_time, special_reco
 
         # Run next cycle
         if cycle+1 < n_cycles:
-            not_good_with_names(big_dict[syndrome], rho, cycle+1, n_cycles, end_time, special_recoveries)
+            not_good_with_names(big_dict[syndrome], rho, cycle+1, n_cycles, end_time, 
+                                circ_std_cycle, special_recoveries)
     return
     
 #%% ============== Iterate through all branches===============================
-n_cycles = 9
+n_cycles = 1
 kwargs = {
     'reset': True,
     'recovery': False, # No recovery since we wanna split instead
@@ -343,42 +266,127 @@ registers = get_registers()
 
 # Define the extra stabilizer circuits
 circ_stab_1000 = get_partial_stab_cycle(registers, [0,1,2])
-circ_stab_1000.compose(get_partial_recovery(registers, '0x8'),qubits=circ_stab_1000.qubits,clbits=circ_stab_1000.clbits, inplace=True)
+circ_stab_1000.compose(get_partial_recovery(registers, '0x8'),qubits=circ_stab_1000.qubits,
+                       clbits=circ_stab_1000.clbits, inplace=True)
 circ_stab_1000.save_density_matrix(qubits=registers.QubitRegister, label='end', 
                                    conditional=False)
-circ_stab_1000, times_stab_1000 = add_idle_noise_to_circuit(circ_stab_1000, gate_times=gate_times, T1=T1, T2=T2, return_time=True)
+circ_stab_1000, times_stab_1000 = add_idle_noise_to_circuit(circ_stab_1000, gate_times=gate_times, 
+                                                            T1=T1, T2=T2, return_time=True)
 
 
+# 0100 
 circ_stab_0100 = get_partial_stab_cycle(registers, [0,1])
-circ_stab_0100.compose(get_partial_recovery(registers, '0x4'),qubits=circ_stab_0100.qubits,clbits=circ_stab_0100.clbits, inplace=True)
+circ_stab_0100.compose(get_partial_recovery(registers, '0x4'),qubits=circ_stab_0100.qubits,
+                       clbits=circ_stab_0100.clbits, inplace=True)
 circ_stab_0100.save_density_matrix(qubits=registers.QubitRegister, label='end', 
                                   conditional=False)
-circ_stab_0100, times_stab_0100 = add_idle_noise_to_circuit(circ_stab_0100, gate_times=gate_times, T1=T1, T2=T2, return_time=True)
+circ_stab_0100, times_stab_0100 = add_idle_noise_to_circuit(circ_stab_0100, gate_times=gate_times,
+                                                            T1=T1, T2=T2, return_time=True)
 
+# 1100
 circ_stab_1100 = get_partial_stab_cycle(registers, [0,1])
-circ_stab_1100.compose(get_partial_recovery(registers, '0xc'),qubits=circ_stab_1100.qubits,clbits=circ_stab_1100.clbits, inplace=True)
+circ_stab_1100.compose(get_partial_recovery(registers, '0xc'),qubits=circ_stab_1100.qubits,
+                       clbits=circ_stab_1100.clbits, inplace=True)
 circ_stab_1100.save_density_matrix(qubits=registers.QubitRegister, label='end', 
                                   conditional=False)
-circ_stab_1100, times_stab_1100 = add_idle_noise_to_circuit(circ_stab_1100, gate_times=gate_times, T1=T1, T2=T2, return_time=True)
+circ_stab_1100, times_stab_1100 = add_idle_noise_to_circuit(circ_stab_1100, gate_times=gate_times,
+                                                            T1=T1, T2=T2, return_time=True)
 
-# Different recovery schemes
-special_recoveries = {'0x4': (circ_stab_0100,times_stab_0100['end']),
-                      '0x8': (circ_stab_1000,times_stab_1000['end']),
-                      '0xc': (circ_stab_1100,times_stab_1100['end'])}
+# 0110 
+circ_stab_0110 = get_partial_stab_cycle(registers, [0])
+circ_stab_0110.compose(get_partial_recovery(registers, '0x6'), qubits=circ_stab_0110.qubits, 
+                       clbits=circ_stab_0110.clbits, inplace=True)
+circ_stab_0110.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+                                   conditional=False)
+circ_stab_0110, times_stab_0110 = add_idle_noise_to_circuit(circ_stab_0110, gate_times=gate_times, 
+                                                            T1=T1, T2=T2, return_time=True)
+
+# 1110 
+circ_stab_1110 = get_partial_stab_cycle(registers, [0])
+circ_stab_1110.compose(get_partial_recovery(registers, '0xe'), qubits=circ_stab_1110.qubits, 
+                       clbits=circ_stab_1110.clbits, inplace=True)
+circ_stab_1110.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+                                   conditional=False)
+circ_stab_1110, times_stab_1110 = add_idle_noise_to_circuit(circ_stab_1110, gate_times=gate_times, 
+                                                            T1=T1, T2=T2, return_time=True)
+
+# 0010 
+circ_stab_0010 = get_partial_stab_cycle(registers, [0])
+circ_stab_0010.compose(get_partial_recovery(registers, '0x2'),qubits=circ_stab_0010.qubits,
+                       clbits=circ_stab_0010.clbits, inplace=True)
+circ_stab_0010.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+                                  conditional=False)
+circ_stab_0010, times_stab_0010 = add_idle_noise_to_circuit(circ_stab_0010, gate_times=gate_times,
+                                                            T1=T1, T2=T2, return_time=True)
+# 1010 
+circ_stab_1010 = get_partial_stab_cycle(registers, [0])
+circ_stab_1010.compose(get_partial_recovery(registers, '0xa'),qubits=circ_stab_1010.qubits,
+                       clbits=circ_stab_1010.clbits, inplace=True)
+circ_stab_1010.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+                                  conditional=False)
+circ_stab_1010, times_stab_1010 = add_idle_noise_to_circuit(circ_stab_1010, gate_times=gate_times,
+                                                            T1=T1, T2=T2, return_time=True)
+
+
+
+# Different recovery schemes, named as follows:
+# - full: Every non-trivial syndrome starting with a 0 reruns up until first 1
+# - partial: Only those which are likely to map to weight 2 are rerun
+# - subpar: Only those starting with 2+ zeroes are rerun (0100, 1000, 1100)
+special_recoveries_full = {'0x2': (circ_stab_0010,times_stab_0010['end']),
+                           '0x4': (circ_stab_0100,times_stab_0100['end']),
+                           '0x6': (circ_stab_0110,times_stab_0110['end']),
+                           '0x8': (circ_stab_1000,times_stab_1000['end']),
+                           '0xa': (circ_stab_1010,times_stab_1010['end']),
+                           '0xc': (circ_stab_1100,times_stab_1100['end']),
+                           '0xe': (circ_stab_1110,times_stab_1110['end'])}
+special_recoveries_partial = {'0x4': (circ_stab_0100,times_stab_0100['end']),
+                              '0x6': (circ_stab_0110,times_stab_0110['end']),
+                              '0x8': (circ_stab_1000,times_stab_1000['end']),
+                              '0xc': (circ_stab_1100,times_stab_1100['end']),
+                              '0xe': (circ_stab_1110,times_stab_1110['end'])}
+special_recoveries_subpar = {'0x4': (circ_stab_0100,times_stab_0100['end']),
+                             '0x8': (circ_stab_1000,times_stab_1000['end']),
+                             '0xc': (circ_stab_1100,times_stab_1100['end'])}
 standard_recoveries = {}
 
 # Circuits
 label_counter.value = 0
 
 circ_std_cycle = get_repeated_stabilization(registers,1,**kwargs, generator_snapshot=False, idle_snapshots=False)
-circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key,16))[2:].zfill(4) for key in special_recoveries]),
-                       qubits=circ_std_cycle.qubits,
-                       clbits=circ_std_cycle.clbits, inplace=True)
-circ_std_cycle.save_density_matrix(
-                        qubits=registers.QubitRegister, label='end', conditional=kwargs['conditional'])
-circ_std_cycle, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle, 
-                                                            gate_times,T1,T2,
-                                                            return_time=True)
+
+circ_std_cycle_full = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key,16))[2:].zfill(4) for key in special_recoveries_full]),
+                                             qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
+circ_std_cycle_partial = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key,16))[2:].zfill(4) for key in special_recoveries_partial]),
+                                             qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
+circ_std_cycle_subpar = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key,16))[2:].zfill(4) for key in special_recoveries_subpar]),
+                                                qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
+circ_std_cycle_standard = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key,16))[2:].zfill(4) for key in standard_recoveries]),
+                                                 qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits) 
+
+circ_std_cycle_full.save_density_matrix(qubits=registers.QubitRegister, label='end',
+                                        conditional=kwargs['conditional'])
+circ_std_cycle_partial.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+                                           conditional=kwargs['conditional'])
+circ_std_cycle_subpar.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+                                          conditional=kwargs['conditional'])
+circ_std_cycle_standard.save_density_matrix(qubits=registers.QubitRegister, label='end',
+                                            conditional=kwargs['conditional'])
+
+circ_std_cycle_full, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_full, gate_times,
+                                                                 T1,T2, return_time=True)
+circ_std_cycle_partial, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_partial, gate_times,
+                                                                    T1,T2, return_time=True)
+circ_std_cycle_subpar, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_subpar, gate_times,
+                                                                    T1,T2, return_time=True)
+circ_std_cycle_standard, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_standard, gate_times,
+                                                                     T1,T2, return_time=True)
+
+# Group the circuit and strategy
+strategy_full_special = (circ_std_cycle_full, special_recoveries_full)
+strategy_partial_special = (circ_std_cycle_partial, special_recoveries_partial)
+strategy_subpar_special = (circ_std_cycle_subpar, special_recoveries_subpar)
+strategy_standard = (circ_std_cycle_standard, standard_recoveries)
                                                             
 
 #%% Running simulations
@@ -386,11 +394,19 @@ circ_std_cycle, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle,
 n_shots = 1024*4
 initial_state = logical_states(include_ancillas=None)[0]
 standard_res_dict = {'counts': n_shots, 'time': 0, 'fid': 1}
-not_good_with_names(standard_res_dict, initial_state, 0, n_cycles, 0, standard_recoveries)
+not_good_with_names(standard_res_dict, initial_state, 0, n_cycles, 0, circ_std_cycle_standard, standard_recoveries)
 print('Halfway there')
 special_res_dict = {'counts': n_shots, 'time': 0, 'fid': 1}
-not_good_with_names(special_res_dict, initial_state, 0, n_cycles, 0, special_recoveries)
+not_good_with_names(special_res_dict, initial_state, 0, n_cycles, 0, circ_std_cycle_partial, special_recoveries_partial)
 print('(Living on a prayer)')
+
+
+#%% Small test simulation
+n_shots = 1024
+initial_state = logical_states(include_ancillas=None)[0]
+test_dict = {'counts': n_shots, 'time': 0, 'fid': 1}
+not_good_with_names(test_dict, initial_state, 0, n_cycles, 0, *strategy_full_special)
+print('Halfway there')
 
 #%% Plot scatter
 fig, ax = plt.subplots(1,1, figsize=(7, 5))
@@ -476,13 +492,14 @@ def plot_by_bins(ax, bins, fids_full, times_full, cycles_full,c='b'):
 #     ax.scatter((time_bins[i]+time_bins[i+1])/2,
 #                np.mean(fids_full[np.logical_and(time_bins[i]<times_full, times_full<time_bins[i+1])]),
 #                c='b', marker='o')
-
+def monoExp(t, T, c, A):
+    return (A-c) * np.exp(-t/T) + c
 # Plot curve fitting
 def plot_curvefit(ax, fids_full, times_full, cycles_full, color='C1'):
-    def monoExp(t, T, c, A):
-        return (A-c) * np.exp(-t/T) + c
+    
     p0 = (40e3, 0, 0.9) # start with values near those we expect
-    pars_full, cov_full = scipy.optimize.curve_fit(monoExp, times_full, fids_full, p0)
+    pars_full, cov_full = scipy.optimize.curve_fit(monoExp, times_full[times_full!=0],
+                                                   fids_full[times_full!=0], p0)
     x = np.linspace(0,max(times_full),200)
     ax.plot(x, monoExp(x, *pars_full), '-', color=color,zorder=15,
             label=rf'Curve fit, $T_L ={pars_full[0]/1000:.1f}$ μs')
@@ -506,18 +523,34 @@ def plot_by_cycle(ax, fids_full, times_full, cycles_full, color='C0'):
 fig, ax = plt.subplots(1,1, figsize=(7, 5))
 bins = n_cycles+2
 
-plot_by_bins(ax, bins, fids_full_standard, times_full_standard, cycles_full_standard,c='b')
+# Standard QEC
+#plot_by_bins(ax, bins, fids_full_standard, times_full_standard, cycles_full_standard,c='b')
 pars_standard, cov_standard = plot_curvefit(ax, fids_full_standard, times_full_standard, cycles_full_standard, color='C1')
 plot_by_cycle(ax, fids_full_standard, times_full_standard, cycles_full_standard, color='C0')
 
-plot_by_bins(ax, bins, fids_full_special, times_full_special, cycles_full_special,c='C4')
+# Special QEC
+#plot_by_bins(ax, bins, fids_full_special, times_full_special, cycles_full_special,c='C4')
 pars_special, cov_special = plot_curvefit(ax, fids_full_special, times_full_special, cycles_full_special, color='C2')
 plot_by_cycle(ax, fids_full_special, times_full_special, cycles_full_special, color='C3')
+
+# Old no-splitting results
+t = np.linspace(0, max(times_full_special),100)
+ax.plot(t_hex[:n_data], fid_hex, 's', color='C5',
+        label=rf'Hexagonal, $T_L ={pars_hex[0]/1000:.1f}$ μs')
+ax.plot(t_hex_d[:9], fid_hex_d[:9], 'D', color='C6',
+        label=rf'Hexagonal, 5 μs delay, $T_L ={pars_hex_d[0]/1000:.1f}$ μs')
+ax.plot(t, monoExp(t, *pars_hex), ':', color='C5') # This one has P_L included in pars
+ax.plot(t, monoExp(t, *pars_hex_d)*np.mean(P_L_hex_d[1:]), ':', color='C6',zorder=-5) # This one doesnt
 
 # Plot settings
 ax.legend()
 ax.set_ylim([0.0,1.0])
 ax.set_xlim([0.0,max(times_full_special)])
+
+
+
+
+
 #%% Plot Many lines
 
 def lines_plot(ax,big_dict, times, fids, current_cycle):
@@ -549,3 +582,51 @@ pickle.dump(special_res_dict, open('split_data/special_res_dict.dat', "wb" ))
 standard_res_dict = pickle.load( open( 'split_data/standard_res_dict.dat', "rb" ) )
 special_res_dict = pickle.load( open( 'split_data/special_res_dict.dat', "rb" ) )
 
+
+#%% Run some "old" simulations
+
+# QEC, no delay, hexagonal layout
+fid_L_hex, P_L_hex, time_hex = fidelity_from_scratch(n_cycles, n_shots, 
+    gate_times=standard_times, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
+    transpile=False, project=True, generator_snapshot=False)
+
+# QEC, with delay, hexagonal layout
+fid_L_hex_d, P_L_hex_d, time_hex_d = fidelity_from_scratch(n_cycles, n_shots, 
+    gate_times={'delay': 4000}, reset=True, data_process_type='recovery',
+    idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
+    transpile=False, project=True, generator_snapshot=False)
+
+#%%
+with open('data/QEC_hexagonal_standard_times.npy', 'rb') as f:
+        n_cycles = np.load(f)
+        n_shots = np.load(f)
+        fid_L_hex = np.load(f)
+        P_L_hex = np.load(f)
+        t_hex = np.load(f)
+        pars_hex = np.load(f)
+        cov_hex = np.load(f)
+
+with open('data/QEC_hexagonal_4mus_delay.npy', 'rb') as f:
+        n_cycles = np.load(f)
+        n_shots = np.load(f)
+        fid_L_hex_d = np.load(f)
+        P_L_hex_d = np.load(f)
+        t_hex_d = np.load(f)
+        pars_hex_d = np.load(f)
+        cov_hex_d = np.load(f)
+#%%
+n_data = n_cycles+1
+fid_hex = np.ones(n_data)
+fid_hex_d = np.ones(n_data)
+fid_hex[1:n_data] = fid_L_hex[1:n_data]*np.mean(P_L_hex[1:n_data])
+fid_hex_d[1:n_data] = fid_L_hex_d[1:n_data]*np.mean(P_L_hex_d[1:n_data])
+
+
+#%%
+def testfunc(a,b):
+    print(a+b)
+    return
+
+test = (1,2)
+testfunc(*test)
