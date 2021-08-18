@@ -45,6 +45,7 @@ from simulator_program.stabilizers import (_unflagged_stabilizer_IXZZX,
 
 # %% Correction strategies
 
+
 def get_partial_stab_cycle(registers=None, stabilizers=[]):
     """Circuit for rerunning a set of stabilizers
 
@@ -138,20 +139,20 @@ def get_partial_recovery(registers, syndrome):
         syndrome_reg = clReg
 
     # If the ancilla is reset to |0> between measurements
-    if syndrome == '0x2': # 0010
+    if syndrome == '0x2':  # 0010
         circ.z(qbReg[4]).c_if(syndrome_reg, 2-2)
         circ.x(qbReg[2]).c_if(syndrome_reg, 3-2)
-    elif syndrome == '0x4': # 0100
+    elif syndrome == '0x4':  # 0100
         circ.z(qbReg[2]).c_if(syndrome_reg, 4-4)
         circ.z(qbReg[0]).c_if(syndrome_reg, 5-4)
         circ.x(qbReg[3]).c_if(syndrome_reg, 6-4)
         circ.x(qbReg[2]).c_if(syndrome_reg, 7-4)
         circ.z(qbReg[2]).c_if(syndrome_reg, 7-4)
-    elif syndrome == '0x6': # 0110
+    elif syndrome == '0x6':  # 0110
         circ.x(qbReg[3]).c_if(syndrome_reg, 6-6)
         circ.x(qbReg[2]).c_if(syndrome_reg, 7-6)
         circ.z(qbReg[2]).c_if(syndrome_reg, 7-6)
-    elif syndrome == '0x8': # 1000
+    elif syndrome == '0x8':  # 1000
         circ.x(qbReg[0]).c_if(syndrome_reg, 8-8)
         circ.z(qbReg[3]).c_if(syndrome_reg, 9-8)
         circ.z(qbReg[1]).c_if(syndrome_reg, 10-8)
@@ -164,11 +165,11 @@ def get_partial_recovery(registers, syndrome):
         circ.z(qbReg[4]).c_if(syndrome_reg, 14-8)
         circ.x(qbReg[3]).c_if(syndrome_reg, 15-8)
         circ.z(qbReg[3]).c_if(syndrome_reg, 15-8)
-    elif syndrome == '0xa': # 1010
+    elif syndrome == '0xa':  # 1010
         circ.z(qbReg[1]).c_if(syndrome_reg, 10-10)
         circ.x(qbReg[1]).c_if(syndrome_reg, 11-10)
         circ.z(qbReg[1]).c_if(syndrome_reg, 11-10)
-    elif syndrome == '0xc': # 1100
+    elif syndrome == '0xc':  # 1100
         circ.x(qbReg[4]).c_if(syndrome_reg, 12-12)
         circ.x(qbReg[0]).c_if(syndrome_reg, 13-12)
         circ.z(qbReg[0]).c_if(syndrome_reg, 13-12)
@@ -176,7 +177,7 @@ def get_partial_recovery(registers, syndrome):
         circ.z(qbReg[4]).c_if(syndrome_reg, 14-12)
         circ.x(qbReg[3]).c_if(syndrome_reg, 15-12)
         circ.z(qbReg[3]).c_if(syndrome_reg, 15-12)
-    elif syndrome == '0xe': # 1110
+    elif syndrome == '0xe':  # 1110
         circ.x(qbReg[4]).c_if(syndrome_reg, 14-14)
         circ.z(qbReg[4]).c_if(syndrome_reg, 14-14)
         circ.x(qbReg[3]).c_if(syndrome_reg, 15-14)
@@ -219,17 +220,19 @@ def branching_simulation(big_dict, rho, cycle, n_cycles, start_time, circ_std_cy
 
         # Store some data in (dict?)
         big_dict[syndrome] = {}  # Big dict energy
-        big_dict[syndrome]['counts'] = res.data()['counts'][syndrome]
+        big_dict[syndrome]['counts'] = int(res.data()['counts'][syndrome])
         big_dict[syndrome]['time'] = end_time
-        big_dict[syndrome]['fid'] = np.array([state_fidelity(basis_vec, rho) for basis_vec in basis])
+        big_dict[syndrome]['fid'] = np.array(
+            [state_fidelity(basis_vec, rho) for basis_vec in basis])
 
         # Run next cycle
         if cycle+1 < n_cycles:
-            branching_simulation(big_dict[syndrome], rho, cycle+1, n_cycles, end_time, 
-                                circ_std_cycle, special_recoveries)
+            branching_simulation(big_dict[syndrome], rho, cycle+1, n_cycles, end_time,
+                                 circ_std_cycle, special_recoveries)
     return
-    
-#%% ============== Iterate through all branches===============================
+
+
+# %% ============== Iterate through all branches===============================
 kwargs = {
     'reset': True,
     'recovery': False,  # No recovery since we wanna split instead
@@ -254,148 +257,148 @@ gate_times = standard_times
 registers = get_registers()
 
 # Define the extra stabilizer circuits
-circ_stab_1000 = get_partial_stab_cycle(registers, [0,1,2])
-circ_stab_1000.compose(get_partial_recovery(registers, '0x8'),qubits=circ_stab_1000.qubits,
+circ_stab_1000 = get_partial_stab_cycle(registers, [0, 1, 2])
+circ_stab_1000.compose(get_partial_recovery(registers, '0x8'), qubits=circ_stab_1000.qubits,
                        clbits=circ_stab_1000.clbits, inplace=True)
-circ_stab_1000.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+circ_stab_1000.save_density_matrix(qubits=registers.QubitRegister, label='end',
                                    conditional=False)
-circ_stab_1000, times_stab_1000 = add_idle_noise_to_circuit(circ_stab_1000, gate_times=gate_times, 
+circ_stab_1000, times_stab_1000 = add_idle_noise_to_circuit(circ_stab_1000, gate_times=gate_times,
                                                             T1=T1, T2=T2, return_time=True)
 
 
-# 0100 
-circ_stab_0100 = get_partial_stab_cycle(registers, [0,1])
-circ_stab_0100.compose(get_partial_recovery(registers, '0x4'),qubits=circ_stab_0100.qubits,
+# 0100
+circ_stab_0100 = get_partial_stab_cycle(registers, [0, 1])
+circ_stab_0100.compose(get_partial_recovery(registers, '0x4'), qubits=circ_stab_0100.qubits,
                        clbits=circ_stab_0100.clbits, inplace=True)
-circ_stab_0100.save_density_matrix(qubits=registers.QubitRegister, label='end', 
-                                  conditional=False)
+circ_stab_0100.save_density_matrix(qubits=registers.QubitRegister, label='end',
+                                   conditional=False)
 circ_stab_0100, times_stab_0100 = add_idle_noise_to_circuit(circ_stab_0100, gate_times=gate_times,
                                                             T1=T1, T2=T2, return_time=True)
 
 # 1100
-circ_stab_1100 = get_partial_stab_cycle(registers, [0,1])
-circ_stab_1100.compose(get_partial_recovery(registers, '0xc'),qubits=circ_stab_1100.qubits,
+circ_stab_1100 = get_partial_stab_cycle(registers, [0, 1])
+circ_stab_1100.compose(get_partial_recovery(registers, '0xc'), qubits=circ_stab_1100.qubits,
                        clbits=circ_stab_1100.clbits, inplace=True)
-circ_stab_1100.save_density_matrix(qubits=registers.QubitRegister, label='end', 
-                                  conditional=False)
+circ_stab_1100.save_density_matrix(qubits=registers.QubitRegister, label='end',
+                                   conditional=False)
 circ_stab_1100, times_stab_1100 = add_idle_noise_to_circuit(circ_stab_1100, gate_times=gate_times,
                                                             T1=T1, T2=T2, return_time=True)
 
-# 0110 
+# 0110
 circ_stab_0110 = get_partial_stab_cycle(registers, [0])
-circ_stab_0110.compose(get_partial_recovery(registers, '0x6'), qubits=circ_stab_0110.qubits, 
+circ_stab_0110.compose(get_partial_recovery(registers, '0x6'), qubits=circ_stab_0110.qubits,
                        clbits=circ_stab_0110.clbits, inplace=True)
-circ_stab_0110.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+circ_stab_0110.save_density_matrix(qubits=registers.QubitRegister, label='end',
                                    conditional=False)
-circ_stab_0110, times_stab_0110 = add_idle_noise_to_circuit(circ_stab_0110, gate_times=gate_times, 
+circ_stab_0110, times_stab_0110 = add_idle_noise_to_circuit(circ_stab_0110, gate_times=gate_times,
                                                             T1=T1, T2=T2, return_time=True)
 
-# 1110 
+# 1110
 circ_stab_1110 = get_partial_stab_cycle(registers, [0])
-circ_stab_1110.compose(get_partial_recovery(registers, '0xe'), qubits=circ_stab_1110.qubits, 
+circ_stab_1110.compose(get_partial_recovery(registers, '0xe'), qubits=circ_stab_1110.qubits,
                        clbits=circ_stab_1110.clbits, inplace=True)
-circ_stab_1110.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+circ_stab_1110.save_density_matrix(qubits=registers.QubitRegister, label='end',
                                    conditional=False)
-circ_stab_1110, times_stab_1110 = add_idle_noise_to_circuit(circ_stab_1110, gate_times=gate_times, 
+circ_stab_1110, times_stab_1110 = add_idle_noise_to_circuit(circ_stab_1110, gate_times=gate_times,
                                                             T1=T1, T2=T2, return_time=True)
 
-# 0010 
+# 0010
 circ_stab_0010 = get_partial_stab_cycle(registers, [0])
-circ_stab_0010.compose(get_partial_recovery(registers, '0x2'),qubits=circ_stab_0010.qubits,
+circ_stab_0010.compose(get_partial_recovery(registers, '0x2'), qubits=circ_stab_0010.qubits,
                        clbits=circ_stab_0010.clbits, inplace=True)
-circ_stab_0010.save_density_matrix(qubits=registers.QubitRegister, label='end', 
-                                  conditional=False)
+circ_stab_0010.save_density_matrix(qubits=registers.QubitRegister, label='end',
+                                   conditional=False)
 circ_stab_0010, times_stab_0010 = add_idle_noise_to_circuit(circ_stab_0010, gate_times=gate_times,
                                                             T1=T1, T2=T2, return_time=True)
-# 1010 
+# 1010
 circ_stab_1010 = get_partial_stab_cycle(registers, [0])
-circ_stab_1010.compose(get_partial_recovery(registers, '0xa'),qubits=circ_stab_1010.qubits,
+circ_stab_1010.compose(get_partial_recovery(registers, '0xa'), qubits=circ_stab_1010.qubits,
                        clbits=circ_stab_1010.clbits, inplace=True)
-circ_stab_1010.save_density_matrix(qubits=registers.QubitRegister, label='end', 
-                                  conditional=False)
+circ_stab_1010.save_density_matrix(qubits=registers.QubitRegister, label='end',
+                                   conditional=False)
 circ_stab_1010, times_stab_1010 = add_idle_noise_to_circuit(circ_stab_1010, gate_times=gate_times,
                                                             T1=T1, T2=T2, return_time=True)
-
 
 
 # Different recovery schemes, named as follows:
 # - full: Every non-trivial syndrome starting with a 0 reruns up until first 1
 # - partial: Only those which are likely to map to weight 2 are rerun
 # - subpar: Only those starting with 2+ zeroes are rerun (0100, 1000, 1100)
-special_recoveries_full = {'0x2': (circ_stab_0010,times_stab_0010['end']),
-                           '0x4': (circ_stab_0100,times_stab_0100['end']),
-                           '0x6': (circ_stab_0110,times_stab_0110['end']),
-                           '0x8': (circ_stab_1000,times_stab_1000['end']),
-                           '0xa': (circ_stab_1010,times_stab_1010['end']),
-                           '0xc': (circ_stab_1100,times_stab_1100['end']),
-                           '0xe': (circ_stab_1110,times_stab_1110['end'])}
-special_recoveries_partial = {'0x4': (circ_stab_0100,times_stab_0100['end']),
-                              '0x6': (circ_stab_0110,times_stab_0110['end']),
-                              '0x8': (circ_stab_1000,times_stab_1000['end']),
-                              '0xc': (circ_stab_1100,times_stab_1100['end']),
-                              '0xe': (circ_stab_1110,times_stab_1110['end'])}
-special_recoveries_subpar = {'0x4': (circ_stab_0100,times_stab_0100['end']),
-                             '0x8': (circ_stab_1000,times_stab_1000['end']),
-                             '0xc': (circ_stab_1100,times_stab_1100['end'])}
+special_recoveries_full = {'0x2': (circ_stab_0010, times_stab_0010['end']),
+                           '0x4': (circ_stab_0100, times_stab_0100['end']),
+                           '0x6': (circ_stab_0110, times_stab_0110['end']),
+                           '0x8': (circ_stab_1000, times_stab_1000['end']),
+                           '0xa': (circ_stab_1010, times_stab_1010['end']),
+                           '0xc': (circ_stab_1100, times_stab_1100['end']),
+                           '0xe': (circ_stab_1110, times_stab_1110['end'])}
+special_recoveries_partial = {'0x4': (circ_stab_0100, times_stab_0100['end']),
+                              '0x6': (circ_stab_0110, times_stab_0110['end']),
+                              '0x8': (circ_stab_1000, times_stab_1000['end']),
+                              '0xc': (circ_stab_1100, times_stab_1100['end']),
+                              '0xe': (circ_stab_1110, times_stab_1110['end'])}
+special_recoveries_subpar = {'0x4': (circ_stab_0100, times_stab_0100['end']),
+                             '0x8': (circ_stab_1000, times_stab_1000['end']),
+                             '0xc': (circ_stab_1100, times_stab_1100['end'])}
 standard_recoveries = {}
 
 # Circuits
 label_counter.value = 0
 
-circ_std_cycle = get_repeated_stabilization(registers,1,**kwargs, generator_snapshot=False, idle_snapshots=False)
+circ_std_cycle = get_repeated_stabilization(
+    registers, 1, **kwargs, generator_snapshot=False, idle_snapshots=False)
 
-circ_std_cycle_full = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key,16))[2:].zfill(4) for key in special_recoveries_full]),
+circ_std_cycle_full = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key, 16))[2:].zfill(4) for key in special_recoveries_full]),
                                              qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
-circ_std_cycle_partial = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key,16))[2:].zfill(4) for key in special_recoveries_partial]),
-                                             qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
-circ_std_cycle_subpar = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key,16))[2:].zfill(4) for key in special_recoveries_subpar]),
+circ_std_cycle_partial = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key, 16))[2:].zfill(4) for key in special_recoveries_partial]),
                                                 qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
-circ_std_cycle_standard = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key,16))[2:].zfill(4) for key in standard_recoveries]),
-                                                 qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits) 
+circ_std_cycle_subpar = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key, 16))[2:].zfill(4) for key in special_recoveries_subpar]),
+                                               qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
+circ_std_cycle_standard = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key, 16))[2:].zfill(4) for key in standard_recoveries]),
+                                                 qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
 
 circ_std_cycle_full.save_density_matrix(qubits=registers.QubitRegister, label='end',
                                         conditional=kwargs['conditional'])
-circ_std_cycle_partial.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+circ_std_cycle_partial.save_density_matrix(qubits=registers.QubitRegister, label='end',
                                            conditional=kwargs['conditional'])
-circ_std_cycle_subpar.save_density_matrix(qubits=registers.QubitRegister, label='end', 
+circ_std_cycle_subpar.save_density_matrix(qubits=registers.QubitRegister, label='end',
                                           conditional=kwargs['conditional'])
 circ_std_cycle_standard.save_density_matrix(qubits=registers.QubitRegister, label='end',
                                             conditional=kwargs['conditional'])
 
 circ_std_cycle_full, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_full, gate_times,
-                                                                 T1,T2, return_time=True)
+                                                                 T1, T2, return_time=True)
 circ_std_cycle_partial, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_partial, gate_times,
-                                                                    T1,T2, return_time=True)
+                                                                    T1, T2, return_time=True)
 circ_std_cycle_subpar, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_subpar, gate_times,
-                                                                    T1,T2, return_time=True)
+                                                                   T1, T2, return_time=True)
 circ_std_cycle_standard, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_standard, gate_times,
-                                                                     T1,T2, return_time=True)
+                                                                     T1, T2, return_time=True)
 
 # Group the circuit and strategy
 strategy_full_special = (circ_std_cycle_full, special_recoveries_full)
 strategy_partial_special = (circ_std_cycle_partial, special_recoveries_partial)
 strategy_subpar_special = (circ_std_cycle_subpar, special_recoveries_subpar)
 strategy_standard = (circ_std_cycle_standard, standard_recoveries)
-                                                            
 
-#%% Running simulations
 
-initial_fid= np.zeros(32)
+# %% Running simulations
+
+initial_fid = np.zeros(32)
 initial_fid[0] = 1
 # %% Running simulations
 n_cycles = 5
-n_shots = 1024/2
+n_shots = int(1024/8)
 initial_state = logical_states(include_ancillas=None)[0]
 standard_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
 branching_simulation(standard_res_dict, initial_state,
-                    0, n_cycles, 0, *strategy_standard)
+                     0, n_cycles, 0, *strategy_standard)
 print('Halfway there')
 special_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
 branching_simulation(special_res_dict, initial_state,
-                    0, n_cycles, 0, *strategy_subpar_special)
+                     0, n_cycles, 0, *strategy_subpar_special)
 print('(Living on a prayer)')
 
-runs_to_print_together= [standard_res_dict, special_res_dict]
+runs_to_print_together = [standard_res_dict, special_res_dict]
 
 
 # %% Append every shot into array
@@ -403,55 +406,61 @@ runs_to_print_together= [standard_res_dict, special_res_dict]
 def flatten_data(big_dict):
     # TODO: fix this to not use nonlocal variables?
     n_points = (n_cycles+1)*n_shots
-    times_full = np.zeros(n_points, dtype=int)
-    fids_full = np.zeros((n_points,32), dtype=float)
-    cycles_full = np.zeros(n_points, dtype=int)
+    times_full = np.zeros(int(n_points), dtype=int)
+    fids_full = np.zeros((int(n_points), 32), dtype=float)
+    cycles_full = np.zeros(int(n_points), dtype=int)
     index = 0
+
     def append_shots(big_dict, current_cycle):
         nonlocal index
         times_full[index:index+big_dict['counts']] = big_dict['time']
-        fids_full[index:index+big_dict['counts'],:] = big_dict['fid']
+        fids_full[index:index+big_dict['counts'], :] = big_dict['fid']
         cycles_full[index:index+big_dict['counts']] = current_cycle
         index += big_dict['counts']
         for key in big_dict:
             if key == 'counts' or key == 'time' or key == 'fid':
                 continue
             append_shots(big_dict[key], current_cycle+1)
-    append_shots(big_dict,0)
+    append_shots(big_dict, 0)
     return times_full, fids_full, cycles_full
 
 
-flattened_data = [flatten_data(res_dict) for res_dict in runs_to_print_together]
+flattened_data = [flatten_data(res_dict)
+                  for res_dict in runs_to_print_together]
 
 # %% Plotting functions
+
 
 def plot_by_bins(ax, bins, times_full, fids_full, cycles_full, c='b'):
     time_bins = np.linspace(0, max(times_full), bins+1)
     for i in range(bins):
         ax.scatter((time_bins[i]+time_bins[i+1])/2,
                    np.mean(fids_full[np.logical_and(
-                       time_bins[i] < times_full, times_full < time_bins[i+1]),0]),
+                       time_bins[i] < times_full, times_full < time_bins[i+1]), 0]),
                    c=c, marker='o')
 
+
 def plot_curvefit(ax, times_full, fids_full, cycles_full, color='C1'):
-    def idealExp(t,T):
+    def idealExp(t, T):
         return 0.5 * np.exp(-t/T) + 0.5
     p0 = 40e3  # start with values near those we expect
-    
+
     # Set up variabled defined outiside t = 0
-    T = times_full[cycles_full!=0]
-    F = fids_full[cycles_full!=0,0]
-    P_L = (fids_full[cycles_full!=0,0]+fids_full[cycles_full!=0,16])
-    F_L =F/P_L
-    
-    time_after_first_cycle = np.mean(times_full[cycles_full==1]) # TODO: better solution
+    T = times_full[cycles_full != 0]
+    F = fids_full[cycles_full != 0, 0]
+    P_L = (fids_full[cycles_full != 0, 0]+fids_full[cycles_full != 0, 16])
+    F_L = F/P_L
+
+    time_after_first_cycle = np.mean(
+        times_full[cycles_full == 1])  # TODO: better solution
     pars_full, cov_full = scipy.optimize.curve_fit(
         idealExp, T-time_after_first_cycle, F_L, p0)
-    print('P_L =',np.mean(P_L),'+-',np.std(P_L))
+    print('P_L =', np.mean(P_L), '+-', np.std(P_L))
     x = np.linspace(time_after_first_cycle, max(times_full), 200)
     ax.plot(x, idealExp(x-time_after_first_cycle, *pars_full)*np.mean(P_L), '-', color=color, zorder=15,
             label=rf'Curve fit, $T_L ={pars_full[0]/1000:.1f}$ μs')
     return pars_full, cov_full
+
 
 def plot_by_cycle(ax, times_full, fids_full, cycles_full, color='C0'):
     cycles = int(max(cycles_full)+1)
@@ -461,7 +470,7 @@ def plot_by_cycle(ax, times_full, fids_full, cycles_full, color='C0'):
         # # F_L
         # fid_cycle[i] += np.mean(fids_full[cycles_full == i,0]/(fids_full[cycles_full == i,0]+fids_full[cycles_full == i,16]))
         # F
-        fid_cycle[i] += np.mean(fids_full[cycles_full == i,0])
+        fid_cycle[i] += np.mean(fids_full[cycles_full == i, 0])
         times_cycle[i] += np.mean(times_full[cycles_full == i])
     ax.plot(times_cycle, fid_cycle, '-o',
             color=color, label='Grouped by cycle')
@@ -473,20 +482,20 @@ def plot_by_cycle(ax, times_full, fids_full, cycles_full, color='C0'):
 fig, ax = plt.subplots(1, 1, figsize=(7, 5))
 bins = n_cycles
 
-for i,run in enumerate(flattened_data):
+for i, run in enumerate(flattened_data):
     # plot_by_bins(ax, bins, *run, c='C'+str(i))
     pars_standard, cov_standard = plot_curvefit(
         ax, *run, color='C1')
-    plot_by_cycle(ax, *run, color='C'+str(i)) 
+    plot_by_cycle(ax, *run, color='C'+str(i))
 
 # Old no-splitting results
-t = np.linspace(0, max(times_full_special),100)
-ax.plot(t_hex[:n_data], fid_hex, 's', color='C5',
-        label=rf'Hexagonal, $T_L ={pars_hex[0]/1000:.1f}$ μs')
-ax.plot(t_hex_d[:9], fid_hex_d[:9], 'D', color='C6',
-        label=rf'Hexagonal, 5 μs delay, $T_L ={pars_hex_d[0]/1000:.1f}$ μs')
-ax.plot(t, monoExp(t, *pars_hex), ':', color='C5') # This one has P_L included in pars
-ax.plot(t, monoExp(t, *pars_hex_d)*np.mean(P_L_hex_d[1:]), ':', color='C6',zorder=-5) # This one doesnt
+# t = np.linspace(0, max(times_full_special),100)
+# ax.plot(t_hex[:n_data], fid_hex, 's', color='C5',
+#         label=rf'Hexagonal, $T_L ={pars_hex[0]/1000:.1f}$ μs')
+# ax.plot(t_hex_d[:9], fid_hex_d[:9], 'D', color='C6',
+#         label=rf'Hexagonal, 5 μs delay, $T_L ={pars_hex_d[0]/1000:.1f}$ μs')
+# ax.plot(t, monoExp(t, *pars_hex), ':', color='C5') # This one has P_L included in pars
+# ax.plot(t, monoExp(t, *pars_hex_d)*np.mean(P_L_hex_d[1:]), ':', color='C6',zorder=-5) # This one doesnt
 
 # Plot settings
 ax.legend()
@@ -574,6 +583,7 @@ fids = np.array(fids)
 counts = np.array(counts, dtype=float)
 cycles = np.array(cycles)
 
+
 def standard_QEC(rho, syndrome, T1=40e3, T2=60e3, feedback_time=350):
     """Evolves a 7-qb density matrix in a way which corresponds to standard QEC,
     using a lookup-table and a feedback time to process results."""
@@ -598,39 +608,40 @@ def standard_QEC(rho, syndrome, T1=40e3, T2=60e3, feedback_time=350):
                           shots=1).result()
     return results_tmp.data()['tmp']
 
-#%% Run some "old" simulations
+# %% Run some "old" simulations
+
 
 # QEC, no delay, hexagonal layout
-fid_L_hex, P_L_hex, time_hex = fidelity_from_scratch(n_cycles, n_shots, 
-    gate_times=standard_times, reset=True, data_process_type='recovery',
-    idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
-    transpile=False, project=True, generator_snapshot=False)
+fid_L_hex, P_L_hex, time_hex = fidelity_from_scratch(n_cycles, n_shots,
+                                                     gate_times=standard_times, reset=True, data_process_type='recovery',
+                                                     idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
+                                                     transpile=False, project=True, generator_snapshot=False)
 
 # QEC, with delay, hexagonal layout
-fid_L_hex_d, P_L_hex_d, time_hex_d = fidelity_from_scratch(n_cycles, n_shots, 
-    gate_times={'delay': 4000}, reset=True, data_process_type='recovery',
-    idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
-    transpile=False, project=True, generator_snapshot=False)
+fid_L_hex_d, P_L_hex_d, time_hex_d = fidelity_from_scratch(n_cycles, n_shots,
+                                                           gate_times={'delay': 4000}, reset=True, data_process_type='recovery',
+                                                           idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
+                                                           transpile=False, project=True, generator_snapshot=False)
 
-#%%
+# %%
 with open('data/QEC_hexagonal_standard_times.npy', 'rb') as f:
-        n_cycles = np.load(f)
-        n_shots = np.load(f)
-        fid_L_hex = np.load(f)
-        P_L_hex = np.load(f)
-        t_hex = np.load(f)
-        pars_hex = np.load(f)
-        cov_hex = np.load(f)
+    n_cycles = np.load(f)
+    n_shots = np.load(f)
+    fid_L_hex = np.load(f)
+    P_L_hex = np.load(f)
+    t_hex = np.load(f)
+    pars_hex = np.load(f)
+    cov_hex = np.load(f)
 
 with open('data/QEC_hexagonal_4mus_delay.npy', 'rb') as f:
-        n_cycles = np.load(f)
-        n_shots = np.load(f)
-        fid_L_hex_d = np.load(f)
-        P_L_hex_d = np.load(f)
-        t_hex_d = np.load(f)
-        pars_hex_d = np.load(f)
-        cov_hex_d = np.load(f)
-#%%
+    n_cycles = np.load(f)
+    n_shots = np.load(f)
+    fid_L_hex_d = np.load(f)
+    P_L_hex_d = np.load(f)
+    t_hex_d = np.load(f)
+    pars_hex_d = np.load(f)
+    cov_hex_d = np.load(f)
+# %%
 n_data = n_cycles+1
 fid_hex = np.ones(n_data)
 fid_hex_d = np.ones(n_data)
@@ -638,10 +649,11 @@ fid_hex[1:n_data] = fid_L_hex[1:n_data]*np.mean(P_L_hex[1:n_data])
 fid_hex_d[1:n_data] = fid_L_hex_d[1:n_data]*np.mean(P_L_hex_d[1:n_data])
 
 
-#%%
-def testfunc(a,b):
+# %%
+def testfunc(a, b):
     print(a+b)
     return
 
-test = (1,2)
+
+test = (1, 2)
 testfunc(*test)
