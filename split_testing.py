@@ -392,14 +392,22 @@ initial_state = logical_states(include_ancillas=None)[0]
 standard_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
 branching_simulation(standard_res_dict, initial_state,
                      0, n_cycles, 0, *strategy_standard)
-print('Halfway there')
-special_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
-branching_simulation(special_res_dict, initial_state,
+print('1')
+subpar_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
+branching_simulation(subpar_res_dict, initial_state,
                      0, n_cycles, 0, *strategy_subpar_special)
-print('(Living on a prayer)')
+print('2')
+partial_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
+branching_simulation(partial_res_dict, initial_state,
+                     0, n_cycles, 0, *strategy_subpar_special)
+print('3')
+full_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
+branching_simulation(full_res_dict, initial_state,
+                     0, n_cycles, 0, *strategy_subpar_special)
+print('4')
 
-runs_to_print_together = [standard_res_dict, special_res_dict]
-
+runs_to_print_together = [standard_res_dict, subpar_res_dict,partial_res_dict,full_res_dict]
+names = ['Standard','Redo 0100 1000 1100 ','Redo 0100 0110 1000 1100 1110',  'Redo 0010 0100 0110 1000 1010 1100 1110']
 
 # %% Append every shot into array
 
@@ -457,12 +465,12 @@ def plot_curvefit(ax, times_full, fids_full, cycles_full, color='C1'):
         idealExp, T-time_after_first_cycle, F_L, p0)
     print('P_L =', np.mean(P_L), '+-', np.std(P_L))
     x = np.linspace(time_after_first_cycle, max(times_full), 200)
-    ax.plot(x, idealExp(x-time_after_first_cycle, *pars_full)*np.mean(P_L), '-', color=color, zorder=15,
+    ax.plot(x, idealExp(x-time_after_first_cycle, *pars_full)*np.mean(P_L), ':', color=color, zorder=15,
             label=rf'Curve fit, $T_L ={pars_full[0]/1000:.1f}$ μs')
     return pars_full, cov_full
 
 
-def plot_by_cycle(ax, times_full, fids_full, cycles_full, color='C0'):
+def plot_by_cycle(ax, times_full, fids_full, cycles_full, label='Grouped by cycle', color='C0'):
     cycles = int(max(cycles_full)+1)
     fid_cycle = np.zeros(cycles)
     times_cycle = np.zeros(cycles)
@@ -472,8 +480,8 @@ def plot_by_cycle(ax, times_full, fids_full, cycles_full, color='C0'):
         # F
         fid_cycle[i] += np.mean(fids_full[cycles_full == i, 0])
         times_cycle[i] += np.mean(times_full[cycles_full == i])
-    ax.plot(times_cycle, fid_cycle, '-o',
-            color=color, label='Grouped by cycle')
+    ax.plot(times_cycle, fid_cycle, 'o',
+            color=color, label=label)
 
 
 # %% Testing plots
@@ -485,8 +493,8 @@ bins = n_cycles
 for i, run in enumerate(flattened_data):
     # plot_by_bins(ax, bins, *run, c='C'+str(i))
     pars_standard, cov_standard = plot_curvefit(
-        ax, *run, color='C1')
-    plot_by_cycle(ax, *run, color='C'+str(i))
+        ax, *run, color='C'+str(i))
+    plot_by_cycle(ax, *run, label = names[i], color='C'+str(i))
 
 # Old no-splitting results
 # t = np.linspace(0, max(times_full_special),100)
