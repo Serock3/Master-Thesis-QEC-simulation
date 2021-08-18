@@ -42,6 +42,10 @@ def persist_to_file(file_name, overwrite = False):
 
     return decorator
 
+def check_if_saved(kwargs, T1, T2, gate_times, file_name = 'decoding_data/cache.dat'):
+    key = (frozenset(kwargs.items()),str(T1),str(T2),frozenset(gate_times.gate_times.items()))
+    return key in pickle.load( open( file_name, "rb" ) )
+
 logical = logical_states(None)
 weight_1 = get_weight_1_basis()
 weight_2 = get_weight_2_basis()
@@ -155,7 +159,12 @@ def colors(i):
 # def colors(i):
 #     return get_cmap('Spectral_r')(50*i+20)
 
-
+# %% Print what simulations have been saved
+for key in pickle.load( open( 'decoding_data/cache.dat', "rb" ) ):
+    print(key[0])
+    print(key[1])
+    print(key[3],'\n')
+# kwargs = {k:v for k,v in {('idle_delay', 'before'), ('include_barriers', True), ('include_fifth_stabilizer', False), ('n_cycles', 3), ('generator_snapshot', True), ('encoding', False), ('reset', True), ('idle_snapshots', 2), ('conditional', False), ('recovery', True), ('final_measure', False)}}
 # %% Simulation settings
 kwargs = {
     'n_cycles': 2,
@@ -178,11 +187,12 @@ T2 = [60e3]*5+[100000000000, 100000000000]
 # T1 = 40e3
 # T2 = 60e3
 # gate_times = standard_times_delay
-gate_times = standard_times
+gate_times = standard_times #.get_gate_times({'feedback':0})
 # gate_times = GateTimes(20, 0, {'delay': 5000})
 
-n_shots = 1024*8
+n_shots = 1024*1
 
+print('Is a run with these settings saved?', check_if_saved(kwargs, T1, T2, gate_times, file_name = 'decoding_data/cache.dat'))
 # %% Simulate
 # Get the complete circuit
 overwrite = False # Whether to ignore existing simulation data and overwrite with a new simulation
@@ -256,6 +266,7 @@ plt.xlabel('Time [μs]')
 plt.ylim((0, counts_at_snapshots[0]))
 plt.xlim((0, time[-1]))
 plt.legend(labels=[r'$|0\rangle_L$', 'Weight 1', 'Weight 2', r'$|1\rangle_L$'])
+plt.show()
 # %% Look at the proportion of states that get projected to |0>_L from w1 and to |1>_L from w2, are they the same?
 if kwargs['recovery'] and not kwargs['conditional']:
     for cycle_num in range(kwargs['n_cycles']):
@@ -267,14 +278,17 @@ if kwargs['recovery'] and not kwargs['conditional']:
     print('Given no decoding errors these should be equal')
 # %% Test plotting all keys in second cycle starting with a specific syndrome in the first cycle
 
-previuous_keys = ['1010']  # Post select
+previuous_keys = []  # Post select
+backtrack_measurement = 0
 if kwargs['conditional']:
     overlap_cycle = len(previuous_keys)
-    overlap_subspace = 0
+    # If this is enabled, check the overlap to the distance <= 1 subspace instead of just |0_L>
+    check_overlap_to_distance_1 = False
 
-    counts = post_select.get_subsystem_counts_up_to_cycle(
-        results.get_counts(), overlap_cycle+1)
-    pre_recovery_index = get_cycle_indices()[overlap_cycle]-1
+    pre_recovery_index = get_cycle_indices()[overlap_cycle]-1 - backtrack_measurement
+    # counts = post_select.get_subsystem_counts_up_to_cycle(
+    #     results.get_counts(), overlap_cycle+1)
+    counts = post_select.get_subsystem_counts_up_to_snapshot(results.get_counts(),num_stab_gens*(overlap_cycle+1)-backtrack_measurement)
     label = get_snapshot_label('dm', kwargs['conditional'], pre_recovery_index)
     num_keys = 2**(num_stab_gens*(1))  # len(results.data()[label])
     overlaps = np.zeros((num_keys, 34))+np.infty
@@ -294,16 +308,18 @@ if kwargs['conditional']:
             # Int version of the part of the key corresponding to the overlap_cycle
             key_int = extract_syndrome(
                 int(key, 16), overlap_cycle, num_stab_gens)
+            # Int version of the full key up to the current cycle
+            # TODO: Should be unecceray to cut of end? 
             key_up_to_cycle = int(key, 16) % (
                 2**(num_stab_gens*(overlap_cycle))*2**4)
             rho = results.data()[label][key]
 
             overlap = np.zeros(34)
-            if overlap_subspace == 0:
+            if check_overlap_to_distance_1 == False:
                 for i in range(32):
                     overlap[i] = state_fidelity(basis[i], rho)
                 overlap[32] = np.linalg.eigvalsh(rho)[-1]
-            elif overlap_subspace == 1:
+            elif check_overlap_to_distance_1 == True:
                 for i in range(32):
                     overlap[i] = overlap_with_subspace(
                         rho, [basis[j] for j in basis_mapping_table[:16, i]])
@@ -311,8 +327,9 @@ if kwargs['conditional']:
             overlap[33] = counts[key_up_to_cycle]
             overlaps[key_int, :] = overlap
 
-            fid_lookup = overlap[extract_syndrome(
-                key_int, overlap_cycle, num_stab_gens)]
+            # fid_lookup = overlap[extract_syndrome(
+            #     key_int, overlap_cycle, num_stab_gens)]
+            fid_lookup = overlap[key_int]
             fid_best_single_qb = np.max(overlap[:32])
             fid_best_arbitrary_gate = overlap[32]
 
@@ -326,11 +343,13 @@ if kwargs['conditional']:
             # if fid_lookup<fid_best_single_qb:
             #     print(bin(key_int)[2:].zfill(num_stab_gens),':', fid_lookup,' -> ',fid_best_single_qb,' -> ',fid_best_arbitrary_gate)
 
-    overlaps[:, 33] /= np.sum(overlaps[:, 33][overlaps[:, 33] != np.infty])
-    total_fid_lookup /= n_shots
-    total_fid_best_single_qb /= n_shots
-    total_fid_best_unitary /= n_shots
+    total_counts = np.sum(overlaps[:, 33][overlaps[:, 33] != np.infty])
+    overlaps[:, 33] /= total_counts
+    total_fid_lookup /= total_counts
+    total_fid_best_single_qb /= total_counts
+    total_fid_best_unitary /= total_counts
 
+    # TODO: these don't seem to give quite the right result when conditioning
     print('Fidelity if using standard lookup table', total_fid_lookup)
     print('Fidelity if using optimal single qubit correction',
           total_fid_best_single_qb)
@@ -373,7 +392,7 @@ if kwargs['conditional']:
 else:
     print('NO CONDITIONAL!')
 # %% Plot how the 32 different basis states (labeled by syndrome plus Z_L) map onto eachother from the 16 corrections
-plot_gradient = True # Gives every basis state it's one gradient
+plot_gradient = False # Gives every basis state it's one gradient
 mappings = np.zeros((16, 32))
 for basis_index in range(32):
     overlap = np.empty(16)
