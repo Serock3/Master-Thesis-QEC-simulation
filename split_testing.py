@@ -251,9 +251,7 @@ T2 = [60e3]*5+[100000000000, 100000000000]
 #gate_times = standard_times_delay
 #gate_times = WACQT_target_times
 gate_times = standard_times
-#gate_times = GateTimes(0, 0, {'feedback': 0, 'delay': 2000})
-
-
+#gate_times = GateTimes(0, 0, {'feedback': 0, 'delay': 3310})
 registers = get_registers()
 
 # Define the extra stabilizer circuits
@@ -355,6 +353,8 @@ circ_std_cycle_subpar = circ_std_cycle.compose(get_reduced_recovery(registers, [
                                                qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
 circ_std_cycle_standard = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key, 16))[2:].zfill(4) for key in standard_recoveries]),
                                                  qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
+circ_std_cycle_perf = circ_std_cycle.compose(get_reduced_recovery(registers, [bin(int(key, 16))[2:].zfill(4) for key in standard_recoveries]),
+                                             qubits=circ_std_cycle.qubits, clbits=circ_std_cycle.clbits)
 
 circ_std_cycle_full.save_density_matrix(qubits=registers.QubitRegister, label='end',
                                         conditional=kwargs['conditional'])
@@ -364,6 +364,8 @@ circ_std_cycle_subpar.save_density_matrix(qubits=registers.QubitRegister, label=
                                           conditional=kwargs['conditional'])
 circ_std_cycle_standard.save_density_matrix(qubits=registers.QubitRegister, label='end',
                                             conditional=kwargs['conditional'])
+circ_std_cycle_perf.save_density_matrix(qubits=registers.QubitRegister, label='end',
+                                        conditional=kwargs['conditional'])
 
 circ_std_cycle_full, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_full, gate_times,
                                                                  T1, T2, return_time=True)
@@ -373,22 +375,26 @@ circ_std_cycle_subpar, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycl
                                                                    T1, T2, return_time=True)
 circ_std_cycle_standard, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_standard, gate_times,
                                                                      T1, T2, return_time=True)
+circ_std_cycle_perf, times_std_cycle = add_idle_noise_to_circuit(circ_std_cycle_perf, GateTimes(0, 0, {'feedback': 0, 'delay': 3310}),
+                                                                 T1, T2, return_time=True)
 
 # Group the circuit and strategy
 strategy_full_special = (circ_std_cycle_full, special_recoveries_full)
 strategy_partial_special = (circ_std_cycle_partial, special_recoveries_partial)
 strategy_subpar_special = (circ_std_cycle_subpar, special_recoveries_subpar)
 strategy_standard = (circ_std_cycle_standard, standard_recoveries)
+strategy_perf = (circ_std_cycle_perf, standard_recoveries)
 
 
 # %% Running simulations
 
 initial_fid = np.zeros(32)
 initial_fid[0] = 1
-# %% Running simulations
-n_cycles = 5
-n_shots = int(1024/8)
 initial_state = logical_states(include_ancillas=None)[0]
+# %% Running simulations
+n_cycles = 10
+n_shots = int(1024/4)
+
 standard_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
 branching_simulation(standard_res_dict, initial_state,
                      0, n_cycles, 0, *strategy_standard)
@@ -405,11 +411,17 @@ full_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
 branching_simulation(full_res_dict, initial_state,
                      0, n_cycles, 0, *strategy_subpar_special)
 print('4')
-
-runs_to_print_together = [standard_res_dict, subpar_res_dict,partial_res_dict,full_res_dict]
-names = ['Standard','Redo 0100 1000 1100 ','Redo 0100 0110 1000 1100 1110',  'Redo 0010 0100 0110 1000 1010 1100 1110']
+perf_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
+branching_simulation(perf_res_dict, initial_state,
+                     0, n_cycles, 0, *strategy_perf)
+print('5')
+runs_to_print_together = [standard_res_dict,
+                          subpar_res_dict, partial_res_dict, full_res_dict, perf_res_dict]
+names = ['Standard', 'Redo 0100 1000 1100 ', 'Redo 0100 0110 1000 1100 1110',
+         'Redo 0010 0100 0110 1000 1010 1100 1110', 'Upper limit']
 
 # %% Append every shot into array
+
 
 def flatten_data(big_dict):
     # TODO: fix this to not use nonlocal variables?
@@ -439,13 +451,13 @@ flattened_data = [flatten_data(res_dict)
 # %% Plotting functions
 
 
-def plot_by_bins(ax, bins, times_full, fids_full, cycles_full, c='b'):
+def plot_by_bins(ax, bins, times_full, fids_full, cycles_full, label='grouped by bins', color='b'):
     time_bins = np.linspace(0, max(times_full), bins+1)
     for i in range(bins):
-        ax.scatter((time_bins[i]+time_bins[i+1])/2,
-                   np.mean(fids_full[np.logical_and(
-                       time_bins[i] < times_full, times_full < time_bins[i+1]), 0]),
-                   c=c, marker='o')
+        ax.plot((time_bins[i]+time_bins[i+1])/(2*1000),
+                np.mean(fids_full[np.logical_and(
+                    time_bins[i] < times_full, times_full < time_bins[i+1]), 0]), 'o',
+                color=color, label=label)
 
 
 def plot_curvefit(ax, times_full, fids_full, cycles_full, color='C1'):
@@ -465,12 +477,30 @@ def plot_curvefit(ax, times_full, fids_full, cycles_full, color='C1'):
         idealExp, T-time_after_first_cycle, F_L, p0)
     print('P_L =', np.mean(P_L), '+-', np.std(P_L))
     x = np.linspace(time_after_first_cycle, max(times_full), 200)
-    ax.plot(x, idealExp(x-time_after_first_cycle, *pars_full)*np.mean(P_L), ':', color=color, zorder=15,
-            label=rf'Curve fit, $T_L ={pars_full[0]/1000:.1f}$ μs')
+    ax.plot(x/1000, idealExp(x-time_after_first_cycle, *pars_full)*np.mean(P_L), ':', color=color, zorder=15)
+            #label=rf'Curve fit, $T_L ={pars_full[0]/1000:.1f}$ μs')
     return pars_full, cov_full
 
 
-def plot_by_cycle(ax, times_full, fids_full, cycles_full, label='Grouped by cycle', color='C0'):
+def plot_by_cycle_errorbar(ax, times_full, fids_full, cycles_full, label='Grouped by cycle', color='C0'):
+    cycles = int(max(cycles_full)+1)
+    median_fid = np.zeros(cycles)
+    yerr = np.zeros((2, cycles))
+    xerr = np.zeros((2, cycles))
+    times_cycle = np.zeros(cycles)
+    for i in range(cycles):
+        median_fid[i] = np.quantile(fids_full[cycles_full == i, 0], 0.5)
+        yerr[:, i] = np.abs(np.quantile(
+            fids_full[cycles_full == i, 0], [0.25, 0.75])-median_fid[i])
+        times_cycle[i] = np.mean(times_full[cycles_full == i])/1000
+        xerr[:, i] = np.abs(np.quantile(times_full[cycles_full == i], [
+                            0.25, 0.75])/1000-times_cycle[i])
+
+    ax.errorbar(times_cycle, median_fid, yerr, xerr, 'o',
+                color=color, label=label)
+
+
+def plot_by_cycle_mean(ax, times_full, fids_full, cycles_full, label='Grouped by cycle', color='C0'):
     cycles = int(max(cycles_full)+1)
     fid_cycle = np.zeros(cycles)
     times_cycle = np.zeros(cycles)
@@ -480,7 +510,8 @@ def plot_by_cycle(ax, times_full, fids_full, cycles_full, label='Grouped by cycl
         # F
         fid_cycle[i] += np.mean(fids_full[cycles_full == i, 0])
         times_cycle[i] += np.mean(times_full[cycles_full == i])
-    ax.plot(times_cycle, fid_cycle, 'o',
+
+    ax.plot(times_cycle/1000, fid_cycle, 'o',
             color=color, label=label)
 
 
@@ -491,24 +522,32 @@ fig, ax = plt.subplots(1, 1, figsize=(7, 5))
 bins = n_cycles
 
 for i, run in enumerate(flattened_data):
-    # plot_by_bins(ax, bins, *run, c='C'+str(i))
-    pars_standard, cov_standard = plot_curvefit(
+    # plot_by_bins(ax, bins, *run, label=names[i], color='C'+str(i))
+    pars, cov = plot_curvefit(
         ax, *run, color='C'+str(i))
-    plot_by_cycle(ax, *run, label = names[i], color='C'+str(i))
+    plot_by_cycle_errorbar(ax, *run, label=names[i]+rf' $T_L ={pars[0]/1000:.1f}$', color='C'+str(i))
+    # plot_by_cycle_mean(ax, *run, label=names[i], color='C'+str(i))
 
-# Old no-splitting results
-# t = np.linspace(0, max(times_full_special),100)
-# ax.plot(t_hex[:n_data], fid_hex, 's', color='C5',
+# # Old no-splitting results
+
+
+def monoExp(t, T, c, A):
+    return (A-c) * np.exp(-t/T) + c
+# t = np.linspace(0, max([np.max(run[0]) for run in flattened_data]),100)
+# ax.plot(t_hex/1000, fid_hex, 's', color='C5',
 #         label=rf'Hexagonal, $T_L ={pars_hex[0]/1000:.1f}$ μs')
-# ax.plot(t_hex_d[:9], fid_hex_d[:9], 'D', color='C6',
+# ax.plot(t_hex_d/1000, fid_hex_d, 'D', color='C6',
 #         label=rf'Hexagonal, 5 μs delay, $T_L ={pars_hex_d[0]/1000:.1f}$ μs')
-# ax.plot(t, monoExp(t, *pars_hex), ':', color='C5') # This one has P_L included in pars
-# ax.plot(t, monoExp(t, *pars_hex_d)*np.mean(P_L_hex_d[1:]), ':', color='C6',zorder=-5) # This one doesnt
+# ax.plot(t/1000, monoExp(t, *pars_hex), ':', color='C5') # This one has P_L included in pars
+# ax.plot(t/1000, monoExp(t, *pars_hex_d)*np.mean(P_L_hex_d[1:]), ':', color='C6',zorder=-5) # This one doesnt
+
 
 # Plot settings
 ax.legend()
-ax.set_ylim([0.0, 1.0])
-ax.set_xlim([0.0, max([np.max(run[0]) for run in flattened_data])])
+ax.set_ylim([0.0, 1.05])
+ax.set_xlim([0.0, max([np.max(run[0]) for run in flattened_data])/1000])
+ax.set_xlabel('Time [μs]')
+ax.set_ylabel(r'Probability of remaining in initial state $F$')
 plt.show()
 # %% Plot Many lines
 
@@ -539,57 +578,66 @@ lines_plot(ax, standard_res_dict, times, fids, 0)
 
 
 # %% Save
-pickle.dump(standard_res_dict, open('split_data/standard_res_dict.dat', "wb"))
-pickle.dump(special_res_dict, open('split_data/special_res_dict.dat', "wb"))
+pickle.dump(runs_to_print_together, open(
+    'split_data/runs_to_print_together.dat', "wb"))
 # %% load
-standard_res_dict = pickle.load(open('split_data/standard_res_dict.dat', "rb"))
-special_res_dict = pickle.load(open('split_data/special_res_dict.dat', "rb"))
+runs_to_print_together = pickle.load(
+    open('split_data/runs_to_print_together.dat', "rb"))
 
 # %% Plot scatter
 fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+ax.set_ylim([0.0, 1.05])
+ax.set_xlim([0.0, max([np.max(run[0]) for run in flattened_data])/1000])
+ax.set_xlabel('Time [μs]')
+ax.set_ylabel(r'Probability of remaining in initial state $F$')
 
 
-def scatter_plot(ax, big_dict, c='b'):
-    ax.scatter(big_dict['time'], big_dict['fid'],
-               s=big_dict['counts'], c=c, marker='o')
+def reform_dict(big_dict):
+    # TODO: fix this to not use nonlocal variables?
+    times = []
+    cycles = []
+    fids = []
+    counts = []
 
-    for key in big_dict:
-        if key == 'counts' or key == 'time' or key == 'fid':
-            continue
-        scatter_plot(ax, big_dict[key])
-        # ax.scatter(big_dict[key]['time'],big_dict[key]['fid'], s=big_dict[key]['counts'], c='b', marker='o')
+    def append_shots(big_dict, current_cycle):
+        times.append(big_dict['time'])
+        fids.append(big_dict['fid'])
+        counts.append(big_dict['counts'])
+        cycles.append(current_cycle)
+        for key in big_dict:
+            if key == 'counts' or key == 'time' or key == 'fid':
+                continue
+            append_shots(big_dict[key], current_cycle+1)
+    append_shots(big_dict, 0)
+    return times, fids, cycles, counts
 
+from matplotlib.colors import to_rgb
+def scatter_plot(ax, times, fids, cycles, counts, label, c='b', marker='o', alpha=0.5):
+    r, g, b = to_rgb(c)
+    c = [(r, g, b, alpha) for alpha in np.sqrt(np.array(counts)/n_shots)]
+    ax.scatter(np.array(times)/1000, np.array(fids) 
+               [:, 0], label=label, s=counts, c=c, marker=marker)
+            #    [:, 0], label=label, s=np.sqrt(counts)*10, c=c, marker=marker,alpha=alpha)
 
-scatter_plot(ax, standard_res_dict)
-scatter_plot(ax, special_res_dict, c='r')
-ax.set_ylim([0.0, 1.0])
-ax.set_xlim([0.0, n_cycles*6000.0])
+for i in range(len(runs_to_print_together)):
+    pars, cov = plot_curvefit(ax, *flattened_data[i], color='C'+str(i))
+    scatter_plot(ax, *reform_dict(runs_to_print_together[i]), label = names[i]+rf' $T_L ={pars[0]/1000:.1f}$', c='C'+str(
+        i), marker=['o', '*', 'v', '>', '<'][i])
+    # plot_by_cycle_errorbar(ax, *flattened_data[i], label=names[i]+rf' $T_L ={pars[0]/1000:.1f}$', color='C'+str(i))
+
+ax.legend()
 plt.show()
 # %% Old code
 # Reform dict into arrays of each branch
-times = []
-cycles = []
-fids = []
-counts = []
 
 
-def reform_dict(big_dict, current_cycle):
-    times.append(big_dict['time'])
-    fids.append(big_dict['fid'])
-    counts.append(big_dict['counts'])
-    cycles.append(current_cycle)
+def scatter_plot_v2(ax, big_dict, c='b', marker='o'):
+    ax.scatter(big_dict['time']/1000, big_dict['fid'][0],
+               s=big_dict['counts'], c=c, marker=marker, alpha=0.7)
     for key in big_dict:
-        if key == 'counts' or key == 'time' or key == 'fid':
-            continue
-        reform_dict(big_dict[key], current_cycle+1)
-
-
-reform_dict(test_dict, 0)
-
-times = np.array(times)
-fids = np.array(fids)
-counts = np.array(counts, dtype=float)
-cycles = np.array(cycles)
+        if not(key == 'counts' or key == 'time' or key == 'fid'):
+            scatter_plot(ax, big_dict[key], c)
+        # ax.scatter(big_dict[key]['time'],big_dict[key]['fid'], s=big_dict[key]['counts'], c='b', marker='o')
 
 
 def standard_QEC(rho, syndrome, T1=40e3, T2=60e3, feedback_time=350):
@@ -616,25 +664,11 @@ def standard_QEC(rho, syndrome, T1=40e3, T2=60e3, feedback_time=350):
                           shots=1).result()
     return results_tmp.data()['tmp']
 
-# %% Run some "old" simulations
-
-
-# QEC, no delay, hexagonal layout
-fid_L_hex, P_L_hex, time_hex = fidelity_from_scratch(n_cycles, n_shots,
-                                                     gate_times=standard_times, reset=True, data_process_type='recovery',
-                                                     idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
-                                                     transpile=False, project=True, generator_snapshot=False)
-
-# QEC, with delay, hexagonal layout
-fid_L_hex_d, P_L_hex_d, time_hex_d = fidelity_from_scratch(n_cycles, n_shots,
-                                                           gate_times={'delay': 4000}, reset=True, data_process_type='recovery',
-                                                           idle_noise=True, snapshot_type='dm', encoding=False, theta=0, phi=0,
-                                                           transpile=False, project=True, generator_snapshot=False)
 
 # %%
 with open('data/QEC_hexagonal_standard_times.npy', 'rb') as f:
-    n_cycles = np.load(f)
-    n_shots = np.load(f)
+    _ = np.load(f)
+    _ = np.load(f)
     fid_L_hex = np.load(f)
     P_L_hex = np.load(f)
     t_hex = np.load(f)
@@ -642,22 +676,22 @@ with open('data/QEC_hexagonal_standard_times.npy', 'rb') as f:
     cov_hex = np.load(f)
 
 with open('data/QEC_hexagonal_4mus_delay.npy', 'rb') as f:
-    n_cycles = np.load(f)
-    n_shots = np.load(f)
+    _ = np.load(f)
+    _ = np.load(f)
     fid_L_hex_d = np.load(f)
     P_L_hex_d = np.load(f)
     t_hex_d = np.load(f)
     pars_hex_d = np.load(f)
     cov_hex_d = np.load(f)
-# %%
-n_data = n_cycles+1
-fid_hex = np.ones(n_data)
-fid_hex_d = np.ones(n_data)
-fid_hex[1:n_data] = fid_L_hex[1:n_data]*np.mean(P_L_hex[1:n_data])
-fid_hex_d[1:n_data] = fid_L_hex_d[1:n_data]*np.mean(P_L_hex_d[1:n_data])
 
+fid_hex = np.ones(fid_L_hex.shape)
+fid_hex_d = np.ones(fid_L_hex_d.shape)
+fid_hex[1:] = fid_L_hex[1:]*np.mean(P_L_hex[1:])
+fid_hex_d[1:] = fid_L_hex_d[1:]*np.mean(P_L_hex_d[1:])
 
 # %%
+
+
 def testfunc(a, b):
     print(a+b)
     return
