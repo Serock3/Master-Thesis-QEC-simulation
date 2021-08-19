@@ -278,7 +278,7 @@ if kwargs['recovery'] and not kwargs['conditional']:
     print('Given no decoding errors these should be equal')
 # %% Test plotting all keys in second cycle starting with a specific syndrome in the first cycle
 
-previuous_keys = []  # Post select
+previuous_keys = ['1000']  # Post select
 backtrack_measurement = 0
 if kwargs['conditional']:
     overlap_cycle = len(previuous_keys)
@@ -353,7 +353,7 @@ if kwargs['conditional']:
     print('Fidelity if using standard lookup table', total_fid_lookup)
     print('Fidelity if using optimal single qubit correction',
           total_fid_best_single_qb)
-    print('Fidelity if using optimal arbitrary unitary', total_fid_best_single_qb)
+    print('Fidelity if using optimal arbitrary unitary', total_fid_best_unitary)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
     aspect = 16/num_keys
