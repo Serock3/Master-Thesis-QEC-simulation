@@ -394,7 +394,9 @@ initial_state = logical_states(include_ancillas=None)[0]
 # %% Running simulations
 n_cycles = 10
 n_shots = int(1024/4)
-
+names = ['Standard', 'Redo 0100 1000 1100 ', 'Redo 0100 0110 1000 1100 1110',
+         'Redo 0010 0100 0110 1000 1010 1100 1110', 'Upper limit']
+# %%
 standard_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
 branching_simulation(standard_res_dict, initial_state,
                      0, n_cycles, 0, *strategy_standard)
@@ -417,8 +419,13 @@ branching_simulation(perf_res_dict, initial_state,
 print('5')
 runs_to_print_together = [standard_res_dict,
                           subpar_res_dict, partial_res_dict, full_res_dict, perf_res_dict]
-names = ['Standard', 'Redo 0100 1000 1100 ', 'Redo 0100 0110 1000 1100 1110',
-         'Redo 0010 0100 0110 1000 1010 1100 1110', 'Upper limit']
+
+# %% Save
+pickle.dump(runs_to_print_together, open(
+    'split_data/runs_to_print_together.dat', "wb"))
+# %% load
+runs_to_print_together = pickle.load(
+    open('split_data/runs_to_print_together.dat', "rb"))
 
 # %% Append every shot into array
 
@@ -525,8 +532,8 @@ for i, run in enumerate(flattened_data):
     # plot_by_bins(ax, bins, *run, label=names[i], color='C'+str(i))
     pars, cov = plot_curvefit(
         ax, *run, color='C'+str(i))
-    plot_by_cycle_errorbar(ax, *run, label=names[i]+rf' $T_L ={pars[0]/1000:.1f}$', color='C'+str(i))
-    # plot_by_cycle_mean(ax, *run, label=names[i], color='C'+str(i))
+    # plot_by_cycle_errorbar(ax, *run, label=names[i]+rf' $T_L ={pars[0]/1000:.1f}$', color='C'+str(i))
+    plot_by_cycle_mean(ax, *run, label=names[i], color='C'+str(i))
 
 # # Old no-splitting results
 
@@ -549,40 +556,6 @@ ax.set_xlim([0.0, max([np.max(run[0]) for run in flattened_data])/1000])
 ax.set_xlabel('Time [μs]')
 ax.set_ylabel(r'Probability of remaining in initial state $F$')
 plt.show()
-# %% Plot Many lines
-
-
-def lines_plot(ax, big_dict, times, fids, current_cycle):
-    times_new_branch = times
-    times_new_branch[current_cycle] = big_dict['time']
-    fids_new_branch = fids
-    fids_new_branch[current_cycle] = big_dict['fid']
-    # counts_new_branch = counts
-    # counts_new_branch[current_cycle] = big_dict['counts']
-    if current_cycle == n_cycles-1:
-        ax.plot(times, fids, color='b', alpha=np.sqrt(
-            big_dict['counts'])/50, linewidth=np.sqrt(big_dict['counts']))
-    else:
-        for key in big_dict:
-            if not(key == 'counts' or key == 'time' or key == 'fid'):
-                lines_plot(ax, big_dict[key], times_new_branch,
-                           fids_new_branch, current_cycle + 1)
-
-
-times = [0]*n_cycles
-fids = [0]*n_cycles
-# counts = [0]*n_cycles
-
-fig, ax = plt.subplots(1, 1, figsize=(7, 5))
-lines_plot(ax, standard_res_dict, times, fids, 0)
-
-
-# %% Save
-pickle.dump(runs_to_print_together, open(
-    'split_data/runs_to_print_together.dat', "wb"))
-# %% load
-runs_to_print_together = pickle.load(
-    open('split_data/runs_to_print_together.dat', "rb"))
 
 # %% Plot scatter
 fig, ax = plt.subplots(1, 1, figsize=(7, 5))
@@ -612,6 +585,7 @@ def reform_dict(big_dict):
     return times, fids, cycles, counts
 
 from matplotlib.colors import to_rgb
+
 def scatter_plot(ax, times, fids, cycles, counts, label, c='b', marker='o', alpha=0.5):
     r, g, b = to_rgb(c)
     c = [(r, g, b, alpha) for alpha in np.sqrt(np.array(counts)/n_shots)]
@@ -627,9 +601,40 @@ for i in range(len(runs_to_print_together)):
 
 ax.legend()
 plt.show()
+#%% Plot histograms
+dataset = 0
+plt.hist(flattened_data[dataset][1][flattened_data[dataset][2]==10,0], bins= 10)
+plt.show()
 # %% Old code
-# Reform dict into arrays of each branch
 
+# Plot Many lines
+def lines_plot(ax, big_dict, times, fids, current_cycle):
+    times_new_branch = times
+    times_new_branch[current_cycle] = big_dict['time']
+    fids_new_branch = fids
+    fids_new_branch[current_cycle] = np.argmax(big_dict['fid'])
+    # fids_new_branch[current_cycle] = big_dict['fid'][0]
+    # counts_new_branch = counts
+    # counts_new_branch[current_cycle] = big_dict['counts']
+    if current_cycle == n_cycles-1:
+        ax.plot(times, fids, color='b', alpha=
+            np.sqrt(big_dict['counts']/n_shots),
+            linewidth=np.sqrt(big_dict['counts']))
+    else:
+        for key in big_dict:
+            if not(key == 'counts' or key == 'time' or key == 'fid'):
+                lines_plot(ax, big_dict[key], times_new_branch,
+                           fids_new_branch, current_cycle + 1)
+
+
+times = [0]*n_cycles
+fids = [0]*n_cycles
+# counts = [0]*n_cycles
+
+dataset = 3
+fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+lines_plot(ax, runs_to_print_together[dataset], times, fids, 0)
+plt.show()
 
 def scatter_plot_v2(ax, big_dict, c='b', marker='o'):
     ax.scatter(big_dict['time']/1000, big_dict['fid'][0],
