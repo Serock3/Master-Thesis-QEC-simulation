@@ -24,7 +24,7 @@ from simulator_program.custom_noise_models import (GateTimes,
                                                    standard_times,
                                                    standard_times_delay,
                                                    thermal_relaxation_model_V2)
-from simulator_program.data_analysis_tools import default_execute
+from simulator_program.data_analysis_tools import default_execute, overlap_with_subspace
 from simulator_program.idle_noise import add_idle_noise_to_circuit
 from simulator_program.splitting_circuits import (add_start_to_circuit,
                                                   add_stop_to_circuit,
@@ -191,7 +191,17 @@ weight_1 = get_weight_1_basis()
 weight_2 = get_weight_2_basis()
 basis = [Statevector(logical[0]), *weight_1,
          Statevector(logical[1]), *weight_2]
-
+basis_mapping_table = np.zeros((16, 32), dtype=int)
+for basis_index in range(32):
+    overlap = np.empty(16)
+    for correction in range(16):
+        state = basis[basis_index]
+        for syndrome in syndrome_table[correction]:
+            state = state.evolve(syndrome[0](), [syndrome[1]])
+        for i in range(32):
+            if state_fidelity(state, basis[i]):
+                basis_mapping_table[correction, basis_index] = i
+                break
 
 def branching_simulation(big_dict, rho, cycle, n_cycles, start_time, circ_std_cycle, special_recoveries):
     """Recursive function to iterate through and simulate a full syndrome tree.
@@ -626,12 +636,11 @@ def lines_plot(ax, big_dict, times, fids, current_cycle):
                 lines_plot(ax, big_dict[key], times_new_branch,
                            fids_new_branch, current_cycle + 1)
 
-
 times = [0]*n_cycles
 fids = [0]*n_cycles
 # counts = [0]*n_cycles
 
-dataset = 3
+dataset = 0
 fig, ax = plt.subplots(1, 1, figsize=(7, 5))
 lines_plot(ax, runs_to_print_together[dataset], times, fids, 0)
 plt.show()
@@ -695,12 +704,72 @@ fid_hex[1:] = fid_L_hex[1:]*np.mean(P_L_hex[1:])
 fid_hex_d[1:] = fid_L_hex_d[1:]*np.mean(P_L_hex_d[1:])
 
 # %%
+from matplotlib import colors as clrs  # TODO: Fix
+dataset = 3
+previuous_keys = []  # Post select
+state_dict = runs_to_print_together[dataset]['0x0']['0x2']
+backtrack_measurement = 0
 
+overlaps = np.zeros((16, 33))+np.infty
 
-def testfunc(a, b):
-    print(a+b)
-    return
+# resulting (average) fidelity if applying the 'normal' lookup table definition
+total_fid_lookup = 0
+# resulting (average) fidelity if applying the best single qubit correction
+total_fid_best_single_qb = 0
 
+for key in state_dict:
+    if not(key == 'counts' or key == 'time' or key == 'fid'):
+        # Int version of the part of the key corresponding to the overlap_cycle
+        key_int = int(key, 16)
+        # Int version of the full key up to the current cycle
+        # TODO: Should be unecceray to cut of end? 
+        key_up_to_cycle = int(key, 16)
 
-test = (1, 2)
-testfunc(*test)
+        overlap = np.zeros(33)
+        overlap[:32] = state_dict[key]['fid']
+        overlap[32] = state_dict[key]['counts']
+        overlaps[key_int, :] = overlap
+
+        fid_lookup = overlap[key_int]
+        fid_best_single_qb = np.max(overlap[:32])
+
+        total_fid_lookup += fid_lookup*state_dict[key]['counts']
+        total_fid_best_single_qb += fid_best_single_qb * \
+            state_dict[key]['counts']
+
+        # Print the difference between the assigned correction and the theoretical max
+        # if fid_lookup<fid_best_single_qb:
+        #     print(bin(key_int)[2:].zfill(num_stab_gens),':', fid_lookup,' -> ',fid_best_single_qb,' -> ',fid_best_arbitrary_gate)
+
+total_counts = np.sum(overlaps[:, 32][overlaps[:, 32] != np.infty])
+overlaps[:, 32] /= total_counts
+total_fid_lookup /= total_counts
+total_fid_best_single_qb /= total_counts
+
+# TODO: these don't seem to give quite the right result when conditioning
+print('Fidelity if using standard lookup table', total_fid_lookup)
+print('Fidelity if using optimal single qubit correction',
+        total_fid_best_single_qb)
+
+fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+HM = ax.imshow(overlaps, interpolation='none')
+norm = clrs.Normalize(0, 1)
+HM.set_norm(norm)
+ax.set_xticks(np.arange(33))
+ax.set_xticklabels([bin(key)[2:].zfill(4) for key in range(
+    16)]+[bin(key)[2:].zfill(4) for key in range(16)]+['occup.'])
+y_ticks = np.arange(0, 16)
+ax.set_yticks(y_ticks)
+ax.set_yticklabels([bin(key)[2:].zfill(4) for key in y_ticks])
+
+plt.setp(ax.get_xticklabels(), rotation=90, ha="right",
+            rotation_mode="anchor")
+cbar0 = fig.colorbar(HM, ax=ax, orientation='horizontal',
+                        fraction=.06, pad=0.25)
+fig.suptitle(
+    "Fidelity to the 32 basis states conditioned on stabilizer measurements\n red squares show where fid<0.5 (is that meaningful?)")
+ax.set_xlabel('Basis states, labeled by their eigenvalues to the stabilizers\n' +
+                r"Left: distance $\leq$ 1 from $|0\rangle$. Right: distance $\geq$ 2 from $|0\rangle$")
+ax.set_ylabel("Simulation state\n conditioned on stabilizer measurements")
+fig.tight_layout()
+plt.show()
