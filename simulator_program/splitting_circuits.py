@@ -46,35 +46,9 @@ def add_start_to_circuit(circ, state):
                   exception of an set_density_matrix (or set_statevector) at
                   the start.
     """
-    
-    # Create a new circuit with the same registers
-    # new_circ = QuantumCircuit()
-    # for reg in circ.qregs + circ.cregs:
-    #     new_circ.add_register(reg)
-    
     # TODO: Update usage of ancilla qubits (dynamic size of ancilla reg?)
     return circ.compose( SetDensityMatrix(DensityMatrix(state).expand(np.array([1.,0.,0.,0.]))), qubits=circ.qubits, front=True)
-    #return circ.compose( SetDensityMatrix(DensityMatrix(np.array([1.,0.,0.,0.])).expand(state)), qubits=circ.qubits, front=True)
-    
-    
-    # new_circ = circ.compose(SetDensityMatrix(np.kron(np.zeros(2**5), state)))
 
-    # # Initialize the circuit
-    # if simulator_type == 'statevector' or simulator_type == 'sv':
-    #     new_circ.set_statevector(state)
-    # elif simulator_type == 'density_matrix' or simulator_type == 'dm':
-    #     new_circ.set_density_matrix(state)
-    # else:
-    #     warnings.warn('Invalid simulator type, assuming density matrix.')
-    #     new_circ.set_density_matrix(state)
-
-    # # Append everything already in the circuit
-    # new_circ.append(circ, inplace=True)
-    # #dag = circuit_to_dag(circ)
-    # #for node in dag.op_nodes():
-    # #    new_circ.append(node.op, node.qargs, node.cargs)
-    
-    # return new_circ
 
 def split_circuit(circ, add_stop=True, **kwargs):
     """Splits up a single circuit into several. The splitting points must be
@@ -132,17 +106,3 @@ def add_split_marker(circ):
     circ.append(split_gate, circ.qubits, circ.clbits)
     return circ
 
-# TODO: Unfinished, not fully sure how I want it to work
-#def combine_syndromes(syndromes, syn_length=4):
-#    """Combines a list of syndromes into one full syndrome. Assumes syndromes
-#    are given in hexadecimal, beginning with '0x'. It also assumes that the 
-#    latest measurement (and latest entry in the syndrome list) is the most 
-#    significant number, following Qiskits convention."""
-#    
-#    if isinstance(syn_length, int):
-#        formatted_syndromes = [bin(int(syndrome,16))[2:].zfill(syn_length) 
-#                               for syndrome in syndromes]
-#        formatted_syndromes.reverse()
-#        full_syndrome = hex(int(''.join(formatted_syndromes),2))
-#    return full_syndrome
-#
