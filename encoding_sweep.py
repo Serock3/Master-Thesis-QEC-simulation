@@ -1,28 +1,18 @@
+"""
+Creates fig 4.2
+"""
+
 # Main file for all simulations of encoding fidelity
-# %% Import modules
-from types import resolve_bases
-import seaborn as sns
+#%%
 import matplotlib.pyplot as plt
 import numpy as np
-import itertools
+from matplotlib import colors
 from qiskit import *
 
-# Import from Qiskit Aer noise module
-from qiskit.providers.aer.noise import thermal_relaxation_error
-from qiskit.providers.aer.library import save_density_matrix, save_expectation_value
-
-from qiskit.quantum_info import partial_trace
-from qiskit.quantum_info import DensityMatrix
-from qiskit.quantum_info import state_fidelity
-
 # Our own files
-from simulator_program.custom_noise_models import (thermal_relaxation_model,
-                                                   thermal_relaxation_model_V2,
-                                                   WACQT_target_times,
-                                                   WACQT_demonstrated_times,
-                                                   standard_times)
+from simulator_program.custom_noise_models import standard_times
 from simulator_program.data_analysis_tools import *
-from matplotlib import colors
+
 default_colors = plt.get_cmap("tab10")
 # %%
 resolution = 15
@@ -55,7 +45,7 @@ cbar0 = fig.colorbar(HM, ax=ax, orientation='horizontal',
                      fraction=.1, pad=0.17)
 cbar0.set_label(r'Encoding success probability',
                 labelpad=0, y=1.20, rotation=0)
-
+plt.show()
 # %% imshow
 fig, ax = plt.subplots(1, 1, figsize=(7, 5))
 norm = colors.Normalize(vmin=fid_min, vmax=fid_max)
@@ -81,6 +71,7 @@ ax.set_ylabel(r'$T_2$ [$\mu s$]')
 # ax.spines["left"].set_visible(False)
 # ax.spines["bottom"].set_visible(False)
 # ax.grid(True, alpha = 0.3)
+plt.show()
 plt.savefig('encode_sweep.pdf')
 # %% T1 ~ T2
 T1 = 40e3
@@ -99,6 +90,7 @@ ax.set_ylabel(r'Fidelity [a.u.]')
 ax.set_yscale('log')
 # ax.set_yticks([0.9, 0.99, 0.999])
 # ax.get_yaxis().get_major_formatter().labelOnlyBase = False
+plt.show()
 # %% T1 ~ 1/T2
 T1 = 40e3
 T2 = 40e3
@@ -116,7 +108,7 @@ ax.set_ylabel(r'Fidelity [a.u.]')
 # ax.set_yscale('log')
 # ax.set_yticks([0.9, 0.99, 0.999])
 # ax.get_yaxis().get_major_formatter().labelOnlyBase = False
-
+plt.show()
 # %% varying T1>T2
 resolution = 10
 T1_min = 30e3
@@ -141,6 +133,7 @@ ax.set_xlabel(r'$T_1$ [$\mu s$]')
 ax.set_ylabel(r'Fidelity [a.u.]')
 ax.legend()
 # ax.set_yscale('log')
+plt.show()
 # %% plot T1~T2 ~ 1/gate times, works as expected
 T1 = 40e3
 T2 = 60e3
@@ -164,7 +157,7 @@ ax.plot(T1*scalings/1000, fids)
 ax.set_xlabel(r'$T_1=1.5 \cdot T_2$ [$\mu s$]')
 ax.set_ylabel(r'Fidelity [a.u.]')
 # ax.set_yscale('log')
-
+plt.show()
 # %% plot gate times
 T1 = 40e3
 T2 = 60e3
@@ -229,5 +222,5 @@ ax.set_yscale('logit')
 # ax.set_yticks([0.9, 0.99,0.999])
 # ax.set_yticklabels(['0.9', '0.99','0.999'])
 ax.set_xscale('log')
-
+plt.show()
 # %%

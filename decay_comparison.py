@@ -1,3 +1,10 @@
+""" 
+Author: Sebastian Holmin
+Makes fig 3.6
+Compares the decay of encoded logical states from continuous decoherence noise.
+(Run to get a lot of similar plots that didn't make it in)
+"""
+
 # %%
 import numpy as np
 from simulator_program.data_analysis_tools import fidelity_from_scratch
@@ -205,6 +212,7 @@ ax.plot(times, exp_0, label='<0|Z|0>')
 ax.plot(times, exp_1, label='<1|Z|1>')
 ax.plot(times, exp_plus, label='<+|X|+>')
 ax.legend()
+plt.show()
 # %% plot fid values
 fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 ax.plot(times, fid_0, 'b', label=r'$|0\rangle$')
@@ -216,6 +224,7 @@ ax.plot(times, 1/2+1/2 * np.exp(-times/T2),
 ax.legend()
 ax.set_xlabel('Time [ns]')
 ax.set_ylabel('Probability of initial value')
+plt.show()
 # %% Expectation values and fid encoded qubit
 res_0 = get_idle_encoded_513(times, snapshot_type=['exp', 'dm'], T1=T1, T2=T2)
 exp_0 = [res_0.data()['exp_'+str(index)]for index in range(n_datapoints)]
@@ -264,6 +273,7 @@ ax[1].plot(times, exp_plus_L, label=r'$|+_L\rangle$')
 ax[1].set_xlabel('Time [ns]')
 ax[1].set_ylabel(r'Projected $\langle Z_L\rangle$')
 ax[1].legend()
+plt.show()
 # %% plot <X>
 res_0 = get_idle_encoded_513(times, snapshot_type=['exp', 'dm'],pauliop='XXXXX', T1=T1, T2=T2)
 exp_0 = [res_0.data()['exp_'+str(index)]for index in range(n_datapoints)]
@@ -296,6 +306,7 @@ ax[1].plot(times, exp_plus_L, label=r'$|+_L\rangle$')
 ax[1].set_xlabel('Time [ns]')
 ax[1].set_ylabel(r'Projected $\langle X_L\rangle$')
 ax[1].legend()
+plt.show()
 # %% plot fid values
 p0 = (T1, 0) # start with values near those we expect
 pars, cov = scipy.optimize.curve_fit(monoExp, times[:60], fid_1[:60], p0)
@@ -320,6 +331,7 @@ ax.set_xlabel(r'Time $[\mu s]$')
 ax.set_ylabel(r'Prob. of initial state after projection')
 ax.legend()
 plt.tight_layout()
+plt.show()
 plt.savefig('decay_proj.pdf')
 # %% Test hypothesis of P_L * F_L = F_phys
 res_0 = get_idle_encoded_513(times, snapshot_type=['dm'], T1=T1, T2=T2)

@@ -12,7 +12,6 @@ from qiskit.providers.aer.noise import NoiseModel, QuantumError, ReadoutError
 from qiskit.providers.aer import noise
 import numpy as np
 import warnings
-import itertools
 
 # %%
 

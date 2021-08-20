@@ -385,7 +385,9 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
 
 
 def rebuild_circuit_up_to_barrier(circ, gate_times={}):
-    """Build a copy of a circuit up until (and inculding) the first barrier."""
+    """
+        DEPRECATED
+    Build a copy of a circuit up until (and inculding) the first barrier."""
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
