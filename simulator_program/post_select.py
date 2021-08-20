@@ -321,5 +321,5 @@ if __name__ == "__main__":
     ax2.set_ylabel(r'Post select fraction')
     ax2.legend()
     ax2.grid(linewidth=1)
-
+    plt.show()
 # %%

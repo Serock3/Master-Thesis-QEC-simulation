@@ -177,5 +177,6 @@ if __name__ == '__main__':
     ax2.legend()
     ax2.grid(linewidth=1)
     # ax2.set_yscale('log')
+    plt.show()
 
 # %%
