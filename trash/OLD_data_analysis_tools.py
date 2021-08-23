@@ -281,6 +281,26 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
             return av_fidelities
         fidelities = get_av_fidelities(get_states_and_counts(
             results, n_cycles, post_process=True, reset=reset), trivial, n_shots)
+        # fidelities = [1.0]
+        # for current_cycle in range(n_cycles):
+        #     #print("\nCycle ", current_cycle)
+        #     counts = get_subsystem_counts_up_to_cycle(
+        #         results.get_counts(), current_cycle+1)
+        #     fid = 0
+        #     count_sum = 0
+        #     # TODO: Retrieve the name from function instead
+        #     data = results.data()['dm_con_' + str(current_cycle+1)]
+        #     for memory in data.keys():
+        #         den_mat = data[memory]
+        #         #print("\n",memory)
+        #         fid += state_fidelity(trivial, post_process_den_mat(
+        #             den_mat, memory, current_cycle))*counts[int(memory, 16)]
+        #         count_sum += counts[int(memory, 16)]
+
+        #         #print(counts[int(memory, 16)])
+        #         #print(state_fidelity(trivial, post_process_den_mat(
+        #         #    den_mat, memory, current_cycle)))
+        #     fidelities.append(fid/n_shots)
         return fidelities, time
     else:
         print('Warning: No matching data_process_type')
@@ -479,6 +499,126 @@ def monoExp(t, T, c, A):
     return (A-c) * np.exp(-t/T) + c
 
 
+def _get_array_indexes(index, sweep_lengths):
+    """Returns a tuple of indexes for the error_array in sweep_parameter_space,
+    given a single index"""
+    indexes = np.zeros(len(sweep_lengths), dtype=int)
+    indexes[-1] = index
+    for i in reversed(range(len(sweep_lengths)-1)):
+        if indexes[i+1] >= sweep_lengths[i+1]:
+            indexes[i] = indexes[i+1] // sweep_lengths[i+1]
+            indexes[i+1] -= indexes[i] * sweep_lengths[i+1]
+    return tuple(indexes)
+
+
+def get_error_rate(fidelity, time=None):
+    """Calculates the logical error rate from a list of fidelities"""
+
+    n_cycles = len(fidelity)-1
+    x_D = np.ones((n_cycles, 2))
+    for i in range(n_cycles):
+        if time is not None:
+            try:
+                x_D[i][1] = time['exp_'+str(i+1)]*1e-3
+            except:
+                x_D[i][1] = time['dm_'+str(i+1)]*1e-3
+        else:
+            x_D[i][1] += i
+    y = np.log(np.reshape(np.asarray(fidelity[1:]), (n_cycles, 1)))
+    theta = np.dot(np.dot(np.linalg.inv(np.dot(x_D.T, x_D)), x_D.T), y)
+
+    MSE = 0.
+    for cycle in range(n_cycles):
+        y_pred = np.exp(theta[0]) * np.exp((cycle+1)*theta[1])
+        MSE += (y_pred-fidelity[cycle+1])**2
+
+    # TODO: Only return theta[1] maybe?
+    return theta, MSE
+
+
+def sweep_parameter_space(T1, T2, single_qubit_gate_time, two_qubit_gate_time,
+                          measure_time, feedback_time, n_cycles=8, n_shots=2048, single_qubit=False, save=None,
+                          time_axis=False, perfect_stab=False, **kwargs):
+    """
+    DEPRECATED
+    Use scripts/functions in T1T2_sweep.py or gate_times_test.py
+
+    Calculate the logical error rate across a variety of parameters
+    TODO: Add default values for n_cycles and n_shots that are reasonable
+    """
+
+    # Check for theta and phi in kwargs
+    try:
+        theta = kwargs['theta']
+        phi = kwargs['phi']
+    except:
+        theta = 0.
+        phi = 0.
+
+    # Make every noise parameter into list (if not already)
+    noise_parameters = [T1, T2, single_qubit_gate_time, two_qubit_gate_time,
+                        measure_time, feedback_time]
+    noise_parameters = [[param] if not isinstance(
+        param, list) else param for param in noise_parameters]
+
+    # Generate an array to store the data in
+    sweep_lengths = [len(param) for param in noise_parameters]
+    error_array = np.zeros(sweep_lengths)
+    var_array = np.zeros(sweep_lengths)
+
+    # Get all combinations of parameters
+    index = 0
+    for params in itertools.product(*noise_parameters):
+
+        gate_times = GateTimes(params[2], params[3],
+                               {'u1': 0, 'z': 0, 'measure': params[4], 'feedback': params[5]})
+
+        # Skip cases where T2 > 2*T1
+        if params[1] > 2*params[0]:
+            index += 1
+            continue
+
+        if single_qubit:
+            fid, time = fid_single_qubit(n_cycles, n_shots, T1=params[0],
+                                         T2=params[1], gate_times=gate_times, **kwargs)
+
+            # Normalize data if needed
+            # TODO: Better solution? Now it checks if input state is |+>
+            if theta == np.pi/2 and phi == np.pi/2:
+                for i in range(len(fid)):
+                    fid[i] = 2.*fid[i] - 1.
+        elif perfect_stab:
+            fid, time = perfect_stab_circuit(n_cycles, n_shots, gate_times=gate_times,
+                                             T1=params[0], T2=params[1], reset=True, snapshot_type='exp')
+        else:
+            fid, time = fidelity_from_scratch(n_cycles, n_shots, T1=params[0],
+                                              T2=params[1], gate_times=gate_times, **kwargs)
+
+        # From fidelities, estimate lifetime
+        # Old version
+        # if time_axis:
+        #    error_rate, MSE = get_error_rate(fid, time)
+        # else:
+        #    error_rate, MSE = get_error_rate(fid)
+        time_list = list(time.values())[1:-1]
+
+        p0 = (params[0], 0, 0.9)  # start with values near those we expect
+        pars, cov = scipy.optimize.curve_fit(monoExp, time_list, fid[1:], p0)
+        T, c, A = pars
+
+        array_indexes = _get_array_indexes(index, sweep_lengths)
+        error_array[array_indexes] = T
+        #error_array[array_indexes] = error_rate[1]
+        var_array[array_indexes] = cov[0][0]
+        index += 1
+
+    # Save results to file
+    # TODO: Save as txt instead? Make it both readable and have the parameters used
+    if save is not None:
+        np.save(save, error_array)
+        np.save(save+'_var', var_array)
+
+    return error_array, var_array
 
 
 def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
