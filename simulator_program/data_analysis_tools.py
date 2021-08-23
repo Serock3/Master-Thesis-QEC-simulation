@@ -147,9 +147,6 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     elif data_process_type == 'post_select':
         recovery = False
         conditional = True
-    elif data_process_type == 'empty_circuit':
-        recovery = False
-        conditional = False
     elif data_process_type == 'post_process':
         recovery = False
         conditional = True
@@ -180,7 +177,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     readout = ClassicalRegister(5, 'readout')
     registers = StabilizerRegisters(qb, an, cr, readout)
 
-    # Circuits
+    # Build the complete circuit
     circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
                                        recovery=recovery, flag=False,
                                        snapshot_type=snapshot_type,
@@ -190,35 +187,9 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                                        generator_snapshot=generator_snapshot,
                                        idle_snapshots=idle_snapshots,
                                        simulator_type=simulator_type, final_measure=False, **kwargs)
-
     if transpile:
         circ = shortest_transpile_from_distribution(circ, print_cost=False,
                                                     **device_properties)
-
-    # Get the correct (no errors) state
-    trivial = get_encoded_state(theta, phi, include_ancillas=None)
-
-    # Create empty encoded circuit
-    if data_process_type == 'empty_circuit':
-
-        # Prepare the circuit
-        time = get_circuit_time(circ, full_gate_times)
-        circ = get_empty_noisy_circuit_v3(circ, time, full_gate_times,
-                                          T1=T1, T2=T2)
-        results = default_execute(circ, n_shots)
-
-        # Calculate fidelity at each snapshot
-        fidelities = []
-        if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
-            for current_cycle in range(n_cycles+1):
-                state = results.data()['dm_' + str(current_cycle)]
-                fidelities.append(state_fidelity(state, trivial))
-        elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
-            for current_cycle in range(n_cycles+1):
-                fidelities.append(results.data()['exp_' + str(current_cycle)])
-        return fidelities, time
-
-    # Add idle noise (empty_circuit does this automatically)
     if idle_noise:
         circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
                                                T1=T1, T2=T2, return_time=True,
@@ -226,6 +197,8 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     else:
         time = get_circuit_time(circ=circ, gate_times=full_gate_times)
 
+    # Simulate the circuit
+    trivial = get_encoded_state(theta, phi, include_ancillas=None)
     results = default_execute(circ, n_shots)
 
     if data_process_type == 'recovery' or data_process_type == 'none':
@@ -476,7 +449,7 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
 
 # %%
 
-
+# TODO: Move to be defined locally?
 def monoExp(t, T, c, A):
     return (A-c) * np.exp(-t/T) + c
 
@@ -487,7 +460,8 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                          reset=True, data_process_type='recovery', snapshot_type='dm',
                          theta=0, phi=0, pauliop='ZZZZZ', include_barriers=True,
                          project=False):
-
+    """TODO: Fix docstring
+    """
     # Get gate times missing from input
     if isinstance(gate_times, dict):
         full_gate_times = standard_times.get_gate_times(

@@ -1,6 +1,6 @@
-# File containing functions for adding noise to idle qubits and measuring
-# circuit times. Also contains a dictionary of standard gate times which can
-# be called for related purposes, such as noise models.
+"""File containing functions for adding noise to idle qubits and measuring
+circuit times. 
+"""
 # %% Import modules
 from qiskit import QuantumCircuit
 from qiskit.providers.aer.noise import thermal_relaxation_error
@@ -13,6 +13,7 @@ if __package__:
                               get_empty_stabilizer_circuit)
     from . import custom_transpiler
     from .custom_noise_models import WACQT_gate_times, GateTimes, standard_times
+    from .data_analysis_tools import extend_standard_gate_times
 else:
     from stabilizers import (encode_input_v2,
                              get_empty_stabilizer_circuit)
@@ -28,32 +29,30 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
 
     Args:
         circ: Qiskit circuit object to be copied
-        gate_times: Dict/GateTimes object containing all gate times in ns. If left empty or 
-            missing elements, standard values will be added.
-        T1: T1 thermal relaxation time (ns).
-        T2: T2 thermal relaxation time (ns).
-        return_time: Optional boolean. If set to True, the function will return
-            the total time of the circuit in addition to regular outputs.
+        gate_times: Dict/GateTimes object containing all gate times in ns. If 
+            left empty or missing elements, standard values will be added.
+        T1: T1 thermal relaxation time (ns). Can be given as a list of values
+            for different T1 on each qubit. Defaults to 40e3.
+        T2: T2 thermal relaxation time (ns). Can be given as a list of values
+            for different T2 on each qubit. Defaults to 60e3.
+        return_time (bool): If set to True, the function will return
+            a dict of times at each snapshot and end. Defaults to False
         rename: Whether or not to replace the name 'kraus' with the 'Idle X ns' to show the idle 
         time in prints. If true, then circuit will not be runnable.
 
     Returns:
         new_circ: Copy of circ input, with added idle noise.
-        gate_times (optional): The total time of the new circuit (ns).
+        times_at_snapshots_and_end (optional): Dict of the circuit time at each
+                                               snapshot in the circuit, as well
+                                               as the total time at the end.
     """
     # Get gate times missing from input
-    if isinstance(gate_times, dict):
-        full_gate_times = standard_times.get_gate_times(
-            custom_gate_times=gate_times)
-    elif isinstance(gate_times, GateTimes):
-        full_gate_times = gate_times
-    else:
-        warnings.warn('Invalid gate times, assuming standard_times')
-        full_gate_times = standard_times
+    full_gate_times = extend_standard_gate_times(gate_times)
 
     # TODO: Fix this hack solution? I am really ashamed of having coded this
     # The label info on the delay custom unitaries cannot be obtained from nodes,
     # so here we scan through the entire circuit just to grab this info
+    # NOTE: Maybe the custom gates made for splitting can be utilized instead?
     delay_partitions = 1
     for dat in circ.data:
         inst = dat[0]
@@ -187,23 +186,15 @@ def get_circuit_time(circ, gate_times={}):
             missing elements, standard values will be added.
 
     Returns:
-        total_time: Total time in ns for running the full circuit
+        times_at_snapshots_and_end (optional): Dict of the circuit time at each
+                                               snapshot in the circuit, as well
+                                               as the total time at the end.
     """
     # Get gate times missing from input
-    if isinstance(gate_times, dict):
-        full_gate_times = standard_times.get_gate_times(
-            custom_gate_times=gate_times)
-    elif isinstance(gate_times, GateTimes):
-        full_gate_times = gate_times
-    else:
-        warnings.warn('Invalid gate times, assuming standard_times')
-        full_gate_times = standard_times
+    full_gate_times = extend_standard_gate_times(gate_times)
 
     # Covert circuit to DAG
     dag = circuit_to_dag(circ)
-
-    # For each operation, evolve the time for each qubit by gate time and
-    # possible qubit idle time.
 
     # Dictionary with the times for each snapshot
     time_at_snapshots_and_end = {}
@@ -211,6 +202,8 @@ def get_circuit_time(circ, gate_times={}):
     for reg in circ.qubits + circ.clbits:
         time_passed[reg] = 0
 
+    # For each operation, evolve the time for each qubit by gate time and
+    # possible qubit idle time.
     for node in dag.op_nodes():
         # Set cargs to entire classical conditional register if it exists, otherwise to the cargs
         cargs = node.condition[0] if node.condition else node.cargs
@@ -231,123 +224,4 @@ def get_circuit_time(circ, gate_times={}):
 
     return time_at_snapshots_and_end
 
-
-
-def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
-                               T1=40e3, T2=60e3):
-    """
-    CHECKED: ONLY REFERENCED IN fidelity_from_scratch OR TRASH/ SCRIPTS
-
-    Creates a circuit with only idle noise and snapshots that matches the
-    times from get_circuit_time. Assumes that all involved qubtits
-    are at the same time at snapshots.
-
-    Args:
-        circ: Qiskit circuit object to mimic.
-        snapshot_times (dict): The times for each snapshot to be added.
-        gate_times: Can be either a dict with some gate times (in ns), or a
-                    GateTimes object. If it is a dict, gate times not included 
-                    will be added from standard gate times.
-        T1 (float): T1 thermal relaxation in ns, defaults to 40e3.
-        T2 (float): T2 thermal relaxation in ns, defaults to 60e3.
-
-    Returns:
-        new_circ: Qiskit circuit object containing only the encoding and snap
-                  from the input circuit.
-    """
-
-    # Create the new circuit
-    new_circ = QuantumCircuit()
-    time_passed = 0
-    for reg in circ.qregs + circ.cregs:
-        new_circ.add_register(reg)
-
-    # Encode the logical qubit
-    new_circ += rebuild_circuit_up_to_encoding(circ)
-    time_passed = get_circuit_time(new_circ, gate_times=gate_times)['end']
-    new_circ = add_idle_noise_to_circuit(new_circ, gate_times)
-
-    # Create a list of all snapshots
-    dag = circuit_to_dag(circ)
-    snapshots = []
-    for node in dag.op_nodes():
-        if node.name == 'snapshot' or node.name.split('_')[0] == 'save':
-            snapshots.append(node)
-
-    # Add all snapshots from previous circuit, excluding post_encoding.
-    index = 0
-    for key in snapshot_times:
-        if key == 'end':
-            break
-        # TODO: Add functionality to include post_encoding by updating the time
-        # after rebuild_up_to_encdoding(). Note that an iswap is moved past the
-        # snapshot which messes up the permutation. Maybe some nice solution can
-        # fix this?
-        elif key == 'post_encoding' or key.split('_')[-1] == '0':
-            index += 1
-            continue  # Skip the post_encoding snapshot due to changes in encode
-        time_diff = snapshot_times[key]-time_passed
-        if time_diff > 0:
-            thrm_relax = thermal_relaxation_error(
-                T1, T2, time_diff).to_instruction()
-            for qubit in new_circ.qubits:
-                new_circ.append(thrm_relax, [qubit])
-        elif time_diff < 0:
-            print('Time difference less than zero, something might be wrong...')
-        new_circ.append(snapshots[index].op,
-                        snapshots[index].qargs, snapshots[index].cargs)
-        time_passed = snapshot_times[key]
-        index += 1
-    return new_circ
-
-
-def rebuild_circuit_up_to_encoding(circ):
-    """
-    CHECKED: ONLY REFERENCED IN get_empty_noise_circuit_V3
-    
-    Build a copy of a circuit up until (and inculding) final iSwap, plus the
-    following cz and u1 gates that are part of it. This function works as a
-    band-aid solution to extract only the encoding from a transpiled circuit.
-
-    It makes a fair amount of assumptions:
-    - Assume that the encoding is finished by a barrier. This barrier is moved
-    to after the final iswap.
-    - Assume that the second iSwap comes after
-    - Assume that the iswap+cz+u1 gates that makes the swap, are all adjacent
-    in the list of DAG nodes.
-    - Ignores any other gates between the barrier and second iSwap.
-
-    For a better solution, it is probably necessary to go further back and look
-    at either transpiling certain sections individually, or choosing a transpied
-    circuit and sticking to that (not transpiling a new one every round).
-    """
-
-    # Convert circuit to DAG
-    dag = circuit_to_dag(circ)
-
-    # New circuit to be generated
-    new_circ = QuantumCircuit()
-    for reg in circ.qregs + circ.cregs:
-        new_circ.add_register(reg)
-
-    # Rebuild up to the final iSwap
-    nodes = dag.op_nodes()
-    barrier_reached = False
-    for i in range(len(nodes)):
-        if nodes[i].name == 'barrier':
-            barrier_reached = True
-        if not barrier_reached:
-            new_circ.append(nodes[i].op, nodes[i].qargs, nodes[i].cargs)
-
-        # Find the next iSwap
-        if barrier_reached and nodes[i].name == 'iswap':
-            new_circ.append(nodes[i].op, nodes[i].qargs, nodes[i].cargs)
-            new_circ.append(nodes[i+1].op, nodes[i+1].qargs, nodes[i+1].cargs)
-            new_circ.append(nodes[i+2].op, nodes[i+2].qargs, nodes[i+2].cargs)
-            new_circ.append(nodes[i+3].op, nodes[i+3].qargs, nodes[i+3].cargs)
-            new_circ.barrier()
-            break
-
-    new_circ._layout = circ._layout
-    return new_circ
 
