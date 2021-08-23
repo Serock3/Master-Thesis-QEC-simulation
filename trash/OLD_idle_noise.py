@@ -231,6 +231,94 @@ def get_circuit_time(circ, gate_times={}):
 
     return time_at_snapshots_and_end
 
+# Crashes when transpile=True
+# Cannot handle transpiled circuits
+
+
+def get_empty_noisy_circuit(registers, snapshot_times, encode_logical=False,
+                            gate_times={}, T1=40e3, T2=60e3, transpile=False):
+    """
+    CHECKED: NO REFERENCES
+    DEPRECATED
+
+    Returns a circuit with only idle noise and snapshots that matches the
+    times from add_idle_noise_to_circuit. Assumes that all involved qubtits
+    are at the same time at snapshots.
+    """
+
+    if encode_logical:
+        circ = get_empty_stabilizer_circuit(registers)
+        circ += encode_input_v2(registers)
+
+    else:
+        circ = get_empty_stabilizer_circuit(registers)
+
+    # Add snapshots and idle noise
+    time_passed = get_circuit_time(circ, gate_times=gate_times)['end']
+    for key in snapshot_times:
+        time_diff = snapshot_times[key]-time_passed
+        if time_diff > 0:
+            thrm_relax = thermal_relaxation_error(
+                T1, T2, time_diff).to_instruction()
+            for qubit in circ.qubits:
+                circ.append(thrm_relax, [qubit])
+        circ.append(Snapshot(key, 'density_matrix', num_qubits=5),
+                    registers.QubitRegister)
+        time_passed = snapshot_times[key]
+
+    if transpile:
+        return custom_transpiler.shortest_transpile_from_distribution(circ, print_cost=False,
+                                                                      repeats=10, routing_method='sabre', initial_layout=None,
+                                                                      translation_method=None, layout_method='sabre',
+                                                                      optimization_level=1)
+    return circ
+
+# This one should work with transpilation when encode_logical=True
+
+
+def get_empty_noisy_circuit_v2(circ, snapshot_times, encode_logical=False,
+                               gate_times={}, T1=40e3, T2=60e3):
+    """
+    CHECKED: NO REFERENCES
+    DEPRECATED
+
+    Returns a circuit with only idle noise and snapshots that matches the
+    times from add_idle_noise_to_circuit. Assumes that all involved qubtits
+    are at the same time at snapshots.
+    """
+
+    new_circ = QuantumCircuit()
+    time_passed = 0
+    for reg in circ.qregs + circ.cregs:
+        new_circ.add_register(reg)
+
+    if encode_logical:
+        new_circ += rebuild_circuit_up_to_barrier(circ, gate_times=gate_times)
+        time_passed = snapshot_times['post_encoding']
+
+    # Append all snapshots from the circuit
+    dag = circuit_to_dag(circ)
+    snapshots = []
+    for node in dag.op_nodes():
+        if node.name == 'snapshot':
+            snapshots.append(node)
+
+    # Add all snapshots from previous circuit
+    index = 0
+    for key in snapshot_times:
+        if key == 'end':
+            break
+        time_diff = snapshot_times[key]-time_passed
+        if time_diff > 0:
+            thrm_relax = thermal_relaxation_error(
+                T1, T2, time_diff).to_instruction()
+            for qubit in new_circ.qubits:
+                new_circ.append(thrm_relax, [qubit])
+        new_circ.append(snapshots[index].op,
+                        snapshots[index].qargs, snapshots[index].cargs)
+        time_passed = snapshot_times[key]
+        index += 1
+    return new_circ
 
 
 def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
@@ -301,6 +389,39 @@ def get_empty_noisy_circuit_v3(circ, snapshot_times, gate_times={},
     return new_circ
 
 
+def rebuild_circuit_up_to_barrier(circ, gate_times={}):
+    """
+    CHECKED: ONLY REFERENCED IN DEPRECATED get_empty_noisy_circuit_V2    
+    DEPRECATED
+    Build a copy of a circuit up until (and inculding) the first barrier."""
+
+    # Get gate times missing from input
+    if isinstance(gate_times, dict):
+        full_gate_times = standard_times.get_gate_times(
+            custom_gate_times=gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
+
+    # Convert circuit to DAG
+    dag = circuit_to_dag(circ)
+
+    # New circuit to be generated
+    new_circ = QuantumCircuit()
+    for reg in circ.qregs + circ.cregs:
+        new_circ.add_register(reg)
+
+    for node in dag.op_nodes():
+        new_circ.append(node.op, node.qargs, node.cargs)
+        if node.name == 'barrier':
+            break
+
+    new_circ._layout = circ._layout
+    return new_circ
+
+
 def rebuild_circuit_up_to_encoding(circ):
     """
     CHECKED: ONLY REFERENCED IN get_empty_noise_circuit_V3
@@ -350,4 +471,42 @@ def rebuild_circuit_up_to_encoding(circ):
 
     new_circ._layout = circ._layout
     return new_circ
+
+
+# %% Internal testing with a standard stabilizer circuit
+if __name__ == '__main__':
+    from qiskit import execute, QuantumRegister, AncillaRegister, ClassicalRegister, Aer
+    from stabilizers import *
+    from custom_transpiler import *
+    from custom_noise_models import *
+
+    qb = QuantumRegister(3, 'code_qubit')
+    an = AncillaRegister(2, 'ancilla_qubit')
+    readout = ClassicalRegister(3, 'readout')
+
+    circ = QuantumCircuit(qb, an, readout)
+    circ.x(qb[0])
+    circ.x(qb[1])
+    circ.x(qb[1])
+    circ.x(qb[1])
+    circ.x(qb[1])
+    circ.x(qb[1])
+    circ.swap(qb[2], qb[1])
+    circ.swap(qb[0], qb[1])
+    circ.measure(qb[1], readout[1])
+    circ.measure(qb[0], readout[0])
+
+
+    new_circ, times = add_idle_noise_to_circuit(
+        circ, gate_times=standard_times, return_time=True, rename=False)
+    print(new_circ)
+
+    results = execute(
+        new_circ,
+        Aer.get_backend('qasm_simulator'),
+        noise_model=thermal_relaxation_model_V2(),
+        shots=1024*8
+    ).result()
+    print(results.get_counts())
+    # print(times)
 
