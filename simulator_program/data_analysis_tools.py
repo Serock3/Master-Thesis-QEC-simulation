@@ -96,7 +96,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                           reset=True, data_process_type='recovery', idle_noise=True, transpile=True,
                           snapshot_type='dm', device=None, device_properties=WACQT_device_properties,
                           encoding=True, theta=0, phi=0, pauliop='ZZZZZ', simulator_type='density_matrix',
-                          project=False, **kwargs):
+                          project=False, generator_snapshot=False,idle_snapshots=0, **kwargs):
     """TODO: Update this description
 
     Get the fidelity of a certain setup/configuration from only its
@@ -187,6 +187,8 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                                        conditional=conditional,
                                        encoding=encoding, theta=theta, phi=phi,
                                        pauliop=pauliop, device=device,
+                                       generator_snapshot=generator_snapshot,
+                                       idle_snapshots=idle_snapshots,
                                        simulator_type=simulator_type, final_measure=False, **kwargs)
 
     if transpile:
@@ -225,7 +227,7 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         time = get_circuit_time(circ=circ, gate_times=full_gate_times)
 
     results = default_execute(circ, n_shots)
-    
+
     if data_process_type == 'recovery' or data_process_type == 'none':
         fidelities = []  # If project = True, this contains F_L
         P_Ls = []
@@ -830,13 +832,14 @@ def project_dm_to_logical_subspace_V2(rho, return_P_L=False):
         return rho_L, P_L
     return rho_L
 
+
 def overlap_with_subspace(rho, basis):
     """Finds the overlap of rho with a subspace defined by the given basis vectors.
     This is equivalent to the proability of rho residing in the subspace.
 
     If basis is a single state, this is equivalent to the state_fidelity of it to rho.
     """
-    basis = basis if isinstance(basis,list) else [basis]
+    basis = basis if isinstance(basis, list) else [basis]
     P = 0
     for basis_vector in basis:
         P += state_fidelity(rho, basis_vector)
