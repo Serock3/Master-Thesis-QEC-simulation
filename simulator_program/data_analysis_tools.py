@@ -38,27 +38,14 @@ else:
                                      thermal_relaxation_model_V2,
                                      WACQT_target_times,
                                      WACQT_demonstrated_times,
-                                     standard_times)
+                                     standard_times,
+                                     extend_standard_gate_times)
     from custom_transpiler import *
     from stabilizers import *
     from post_select import *
     from post_process import *
-    from idle_noise import *
+    from idle_noise import add_idle_noise_to_circuit, get_circuit_time
 # %%
-
-
-def extend_standard_gate_times(gate_times={}):
-    # TODO: move this to custom_noise_model.py?
-    if isinstance(gate_times, dict):
-        full_gate_times = standard_times.get_gate_times(
-            custom_gate_times=gate_times)
-    elif isinstance(gate_times, GateTimes):
-        full_gate_times = gate_times
-    else:
-        warnings.warn('Invalid gate times, assuming standard_times')
-        full_gate_times = standard_times
-    return full_gate_times
-
 
 def default_execute(circ, shots=None, noise_model=None, gate_times={}, T1=40e3, T2=60e3, simulator_name='qasm_simulator', simulator_method='density_matrix'):
     """Execute with our standard settings. Use this to make sure that the noise model i applied to delays.

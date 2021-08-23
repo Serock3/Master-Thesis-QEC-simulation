@@ -116,6 +116,17 @@ standard_times_delay = GateTimes(
     custom_gate_times={'u1': 0, 'z': 0, 'measure': 300, 'feedback': 350, 'delay': 5000})
 # Define noise models
 
+def extend_standard_gate_times(gate_times={}):
+    if isinstance(gate_times, dict):
+        full_gate_times = standard_times.get_gate_times(
+            custom_gate_times=gate_times)
+    elif isinstance(gate_times, GateTimes):
+        full_gate_times = gate_times
+    else:
+        warnings.warn('Invalid gate times, assuming standard_times')
+        full_gate_times = standard_times
+    return full_gate_times
+
 
 def thermal_relaxation_model_V2(T1=40e3, T2=60e3, gate_times=WACQT_gate_times):
     """Noise model for thermal relaxation. All times are given

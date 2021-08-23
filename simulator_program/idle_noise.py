@@ -12,13 +12,15 @@ if __package__:
     from .stabilizers import (encode_input_v2,
                               get_empty_stabilizer_circuit)
     from . import custom_transpiler
-    from .custom_noise_models import WACQT_gate_times, GateTimes, standard_times
-    from .data_analysis_tools import extend_standard_gate_times
+    from .custom_noise_models import (WACQT_gate_times, 
+                                      GateTimes, 
+                                      standard_times,
+                                      extend_standard_gate_times)
 else:
     from stabilizers import (encode_input_v2,
                              get_empty_stabilizer_circuit)
     import custom_transpiler
-    from custom_noise_models import WACQT_gate_times, GateTimes, standard_times
+    from custom_noise_models import WACQT_gate_times, GateTimes, standard_times, extend_standard_gate_times
 # %%
 
 
@@ -149,24 +151,6 @@ def add_idle_noise_to_circuit(circ, gate_times={}, T1=40e3, T2=60e3,
 
         # Add the gate
         new_circ.append(node.op, node.qargs, node.cargs)
-
-        # Insert moved feedback delay
-        # if full_gate_times['delay'] > 0:
-
-        #     if node.name == 'save_density_matrix' or node.name == 'save_expval':
-        #         # Do not add any delay before the first cycle
-        #         if not passed_first_cycle:
-        #             passed_first_cycle = True
-        #             continue
-
-        #         thrm_relax = thermal_relaxation_error(
-        #             T1, T2, full_gate_times['delay']).to_instruction()
-        #         if rename:
-        #             time_diff = full_gate_times['delay']
-        #             thrm_relax.name = f'Idle {time_diff}ns'
-        #         for reg in new_circ.qubits:
-        #             new_circ.append(thrm_relax, [reg])
-        #             time_passed[reg] += full_gate_times['delay']
 
     time_at_snapshots_and_end['end'] = max(time_passed.values())
 
