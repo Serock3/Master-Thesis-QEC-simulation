@@ -1,31 +1,37 @@
+"""
+File for performing post-processing of errors. Set conditional=True and recovery=False in you simulation settings.
+For an example implementation see the end of this file.
+"""
+
 # %% Imports
 if __package__:
     from .post_select import get_subsystem_counts_up_to_cycle
-    from .stabilizers import get_snapshot_label
+    from .stabilizers import get_snapshot_label, syndrome_table
 else:
     from post_select import get_subsystem_counts_up_to_cycle
-    from stabilizers import get_snapshot_label
+    from stabilizers import get_snapshot_label, syndrome_table
 
 from qiskit.circuit.library import XGate, ZGate
 from qiskit import QuantumCircuit, execute, Aer
 import numpy as np
 # %%
-syndrome_table = [[],
-                  [(XGate, 1)],
-                  [(ZGate, 4)],
-                  [(XGate, 2)],
-                  [(ZGate, 2)],
-                  [(ZGate, 0)],
-                  [(XGate, 3)],
-                  [(XGate, 2), (ZGate, 2)],
-                  [(XGate, 0)],
-                  [(ZGate, 3)],
-                  [(ZGate, 1)],
-                  [(XGate, 1), (ZGate, 1)],
-                  [(XGate, 4)],
-                  [(XGate, 0), (ZGate, 0)],
-                  [(XGate, 4), (ZGate, 4)],
-                  [(XGate, 3), (ZGate, 3)]]
+# NOTE: Move to stabilizers.py
+# syndrome_table = [[],
+#                   [(XGate, 1)],
+#                   [(ZGate, 4)],
+#                   [(XGate, 2)],
+#                   [(ZGate, 2)],
+#                   [(ZGate, 0)],
+#                   [(XGate, 3)],
+#                   [(XGate, 2), (ZGate, 2)],
+#                   [(XGate, 0)],
+#                   [(ZGate, 3)],
+#                   [(ZGate, 1)],
+#                   [(XGate, 1), (ZGate, 1)],
+#                   [(XGate, 4)],
+#                   [(XGate, 0), (ZGate, 0)],
+#                   [(XGate, 4), (ZGate, 4)],
+#                   [(XGate, 3), (ZGate, 3)]]
 
 # Coversion of no-reset syndromes into reset equivalents
 conversion_table = [0, 3, 6, 5, 12, 15, 10, 9, 8, 11, 14, 13, 4, 7, 2, 1]
@@ -145,157 +151,88 @@ def get_states_and_counts(results, n_cycles, post_process=True, reset=True):
     for current_cycle in range(n_cycles+1):
         yield get_states_and_counts_in_cycle(results, current_cycle, post_process, reset)
 
-# %% Post processing statevectors
-def post_process_statevec(statevector, syndromes):
-    """Version two of post-processing. Takes one statevector and it corresponding syndrome,
-    applies post-processing and returns a corrected statevector.
+def get_av_fidelities(states_and_counts, correct_state, n_shots):
+    av_fidelities = []
+    for cycle in states_and_counts:
+        fid = 0
+        for state, counts in cycle:
+            fid += state_fidelity(state, correct_state)*counts
+        av_fidelities.append(fid/n_shots)
+    return av_fidelities
 
-    Processes the syndromes using XOR to find where new errors are introduced.
-
-    Args:
-        statevector (list): comples statevector
-        syndromes (list(int)): list of syndromes as integers ('0'th element corresponds to 'stabilizer_' etc)
-
-    Returns:
-        List[float]: the processed statevector
-    """
-    warnings.warn("Outdated. Use density matrix version.", DeprecationWarning)
-    # Convert to only new syndromes
-    syndromes = _get_new_syndromes(syndromes)
-
-    circ = QuantumCircuit(int(np.log2(statevector.shape[0])))
-    circ.initialize(statevector, [circ.qubits[i]
-                                  for i in range(7)])  # [2,3,4,5,6,0,1]
-
-    for syndrome in syndromes:
-        for correction_strategy in syndrome_table[syndrome]:
-            circ.append(correction_strategy[0](), [correction_strategy[1]])
-    results = execute(
-        circ,
-        Aer.get_backend('statevector_simulator'),
-    ).result()
-
-    return results.get_statevector()
-
-
-def post_process_statevec_all_shots(results, n_cycles):
-    """Wrapper for post_process_statvec that processes every statevector for a repeated stabilizer cycle
-    simulation with memory=True.
-
-    Args:
-        results (Results object): results from completed simulation
-        n_cycles (int): number of stabilizer cycles in simulated circuit
-
-    Returns:
-        List[List[float]]: List of corrected statvectors where first index indicates cycle, second shots
-    """
-    warnings.warn("Outdated. Use density matrix version.", DeprecationWarning)
-    # TODO: If this crashes a lot, make it yield instead of return? (Or just return fidelities instead)
-    mem = results.get_memory()
-    shots = len(mem)
-    statevector_dim = results.data(
-    )['snapshots']['statevector']['stabilizer_0'][0].shape[0]
-    # TODO: Make this format same as with in other places?
-    post_processed_states = np.empty(
-        (n_cycles, shots, statevector_dim), dtype=np.complex_)
-    for current_cycle in range(n_cycles):
-        statevectors = results.data(
-        )['snapshots']['statevector']['stabilizer_' + str(current_cycle)]
-        assert shots == len(statevectors)
-        for shot in range(shots):
-            # Convert the text format to integers. The order is from right to left, and the last entry is for final measurements ans should be removed
-            syndromes = [int(syn, 2) for syn in reversed(
-                mem[shot].split()[-(1+current_cycle):])]
-            post_processed_states[current_cycle][shot] = post_process_statevec(
-                statevectors[shot], syndromes)
-
-    return post_processed_states
-# %Code to test above, to be removed
+#%% Verify that post-processing is equivalent to normal QEC
 if __name__ == "__main__":
-    from qiskit import QuantumRegister, AncillaRegister
-    from stabilizers import *
-    from custom_noise_models import thermal_relaxation_model
-    from post_select import get_trivial_state
-    from qiskit.quantum_info import DensityMatrix
+    from matplotlib import pyplot as plt
+    from stabilizers import get_full_stabilizer_circuit, logical_states
+    from idle_noise import add_idle_noise_to_circuit
+    from data_analysis_tools import default_execute, fidelity_from_scratch
+    from qiskit.quantum_info.states.measures import state_fidelity
+    from post_select import get_trivial_post_select_den_mat, get_trivial_post_select_counts
+
     reset = True
     recovery = False
     flag = False
-    n_cycles = 3
-    qb = QuantumRegister(5, 'code_qubit')
-    an = AncillaRegister(2, 'ancilla_qubit')
-    # cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
-    cr = get_classical_register(n_cycles, reset=reset,
-                                recovery=recovery, flag=False)
-    readout = ClassicalRegister(5, 'readout')
+    n_cycles = 4
+    n_shots = 1024/2
 
-    registers = StabilizerRegisters(qb, an, cr, readout)
+    circ = get_full_stabilizer_circuit(n_cycles=n_cycles, reset=reset,
+                                    recovery=recovery, flag=False,
+                                    snapshot_type='dm',
+                                    conditional=True,
+                                    encoding=False, theta=0, phi=0)
 
-    # circ = get_empty_stabilizer_circuit(registers)
 
-    circ = encode_input_v2(registers)
-    circ.snapshot('post_encoding', 'density_matrix')
-    # Stabilizer
-    # circ.x(qb[3])
-    circ += unflagged_stabilizer_cycle(registers,
-                                       reset=reset,
-                                       recovery=recovery
-                                       )
-    # circ.barrier()
-    # circ.append(Snapshot('stabilizer_0', 'density_matrix', num_qubits=5), qb)
-    # circ.draw()
-    circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-                                       reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
+    # circ = shortest_transpile_from_distribution(circ, print_cost=False,
+    #                                             **WACQT_device_properties)
 
-    n_shots = 10
-    results = execute(
-        circ,
-        Aer.get_backend('qasm_simulator'),
-        noise_model=thermal_relaxation_model(),
-        shots=n_shots
-    ).result()
+    circ, time = add_idle_noise_to_circuit(circ, return_time=True)
+
+
+    p1given0 = 0.1
+    p0given1 = p1given0
+    # noise_model = thermal_relaxation_model_V2(
+    #     gate_times=standard_times)  # NoiseModel()#
+    # read_error = ReadoutError([[1 - p1given0, p1given0], [p0given1, 1 - p0given1]])
+    # noise_model.add_all_qubit_readout_error(read_error, ['measure'])
+    results = default_execute(
+        circ, n_shots)
 
     correct_state = logical_states(include_ancillas=None)[0]
-    running_fid = []
-    for current_cycle in range(n_cycles):
-        print("\nCycle ", current_cycle)
-        counts = get_subsystem_counts_up_to_cycle(
-            results.get_counts(), current_cycle)
-        fid = 0
-        count_sum = 0
-        for selected_state in results.data()['snapshots']['density_matrix']['stabilizer_' + str(current_cycle)]:
-            den_mat = selected_state['value']
-            memory = selected_state['memory']
-            fid += state_fidelity(correct_state, post_process_den_mat(
-                den_mat, memory, current_cycle))*counts[int(memory, 16)]
-            count_sum += counts[int(memory, 16)]
-            print(memory)
-            print(counts[int(memory, 16)])
-            print(state_fidelity(correct_state, post_process_den_mat(
-                den_mat, memory, current_cycle)))
-        running_fid.append(fid/n_shots)
-    # print(results.get_counts())
-    # print(results.data()['snapshots']['density_matrix']['stabilizer_0'])
-    # print(state_fidelity(correct_state, den_mat))
-    # print(state_fidelity(correct_state, post_process_den_mat(den_mat, memory, 0)))
-    # %
-    # fidelities = [state_fidelity(post_selected_state, correct_state) for post_selected_state
-    #               in get_trivial_post_select_den_mat(results, n_cycles)]
-    # select_counts = get_trivial_post_select_counts(
-    #     results.get_counts(), n_cycles)
-    from matplotlib import pylab as plt
+    fidelities_normal = get_av_fidelities(get_states_and_counts(
+        results, n_cycles, post_process=False), correct_state, n_shots)
+    fidelities_post_process = get_av_fidelities(get_states_and_counts(
+        results, n_cycles, post_process=True), correct_state, n_shots)
 
-    fig, axs = plt.subplots(1, figsize=(14, 10))
-    ax1 = axs
-    # ax2 = axs[1]
+    fidelities_select = [state_fidelity(post_selected_state, correct_state) for post_selected_state
+                        in get_trivial_post_select_den_mat(results, n_cycles)]
+    select_counts = get_trivial_post_select_counts(
+        results.get_counts(), n_cycles)
 
-    ax1.plot(range(n_cycles), running_fid, 'o-', label='No transpilation')
+    recovery = True
+
+    fidelities_QEC, times = fidelity_from_scratch(
+        n_cycles, n_shots, gate_times={'feedback': 0}, encoding=False, transpile=False)
+
+    fig, axs = plt.subplots(2, figsize=(14, 10))
+    ax1 = axs[0]
+    ax2 = axs[1]
+
+    ax1.plot(range(n_cycles+1), fidelities_normal, 'o-', label='No processing')
+    ax1.plot(range(n_cycles+1), fidelities_select, 'o-', label='Post select')
+    ax1.plot(range(n_cycles+1), fidelities_post_process,
+            'o-', label='Post process')
+    ax1.plot(range(n_cycles+1), fidelities_QEC, 'o-', label='QEC')
     ax1.set_xlabel(r'Error detection cycle $n$')
     ax1.set_ylabel('Post selected count')
+
     ax1.legend()
     ax1.grid(linewidth=1)
 
-    # ax2.plot(range(n_cycles), select_counts, 'o-', label='No transpilation')
-    # ax2.set_xlabel(r'Error detection cycle $n$')
-    # ax2.set_ylabel(r'Post select fraction')
-    # ax2.legend()
-    # ax2.grid(linewidth=1)
+
+    ax2.plot(range(n_cycles+1), select_counts, 'o-', label='No transpilation')
+    ax2.set_xlabel(r'Error detection cycle $n$')
+    ax2.set_ylabel(r'Post select count')
+    ax2.legend()
+    ax2.grid(linewidth=1)
+    plt.show()
+# %%
