@@ -205,13 +205,13 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
     cr = get_classical_register(
-        n_cycles, reset=reset, recovery=recovery, flag=False)
+        n_cycles, reset=reset, recovery=recovery)
     readout = ClassicalRegister(5, 'readout')
     registers = StabilizerRegisters(qb, an, cr, readout)
 
     # Build the complete circuit
     circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
-                                       recovery=recovery, flag=False,
+                                       recovery=recovery,
                                        snapshot_type=snapshot_type,
                                        conditional=conditional,
                                        encoding=encoding, theta=theta, phi=phi,
@@ -366,13 +366,13 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
     cr = get_classical_register(
-        n_cycles, reset=False, recovery=False, flag=False)
+        n_cycles, reset=False, recovery=False)
     readout = ClassicalRegister(5, 'readout')
     registers = StabilizerRegisters(qb, an, cr, readout)
 
     # Circuits
     circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=False,
-                                       recovery=False, flag=False,
+                                       recovery=False,
                                        snapshot_type=snapshot_type,
                                        conditional=False, **kwargs)
     circ = shortest_transpile_from_distribution(circ, print_cost=False)
@@ -413,7 +413,7 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
-    cr = get_classical_register(n_cycles=0, flag=False)
+    cr = get_classical_register(n_cycles=0)
     readout = ClassicalRegister(5, 'readout')
     registers = StabilizerRegisters(qb, an, cr, readout)
 
@@ -535,7 +535,7 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
     cr = get_classical_register(
-        n_cycles, reset=reset, recovery=recovery, flag=False)
+        n_cycles, reset=reset, recovery=recovery)
     readout = ClassicalRegister(5, 'readout')
     registers = StabilizerRegisters(qb, an, cr, readout)
 

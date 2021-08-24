@@ -36,13 +36,13 @@ noise_model = thermal_relaxation_model_V2(
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
 cr = get_classical_register(n_cycles, reset=reset,
-                            recovery=recovery, flag=False)
+                            recovery=recovery)
 readout = ClassicalRegister(5, 'readout')
 registers = StabilizerRegisters(qb, an, cr, readout)
 
 # Circuits
 circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
-                                   recovery=recovery, flag=False,
+                                   recovery=recovery,
                                    snapshot_type=['dm','exp'],
                                    conditional=conditional,
                                    encoding=encoding, theta=theta, phi=phi,
@@ -76,7 +76,7 @@ for current_cycle in range(n_cycles+1):
 #%%
 theta = np.pi
 circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
-                                   recovery=recovery, flag=False,
+                                   recovery=recovery,
                                    snapshot_type=['dm','exp'],
                                    conditional=conditional,
                                    encoding=encoding, theta=theta, phi=phi,

@@ -1,13 +1,12 @@
+"""This is an old version of the 'stabilizers.py' file, which contains removed
+functions regarding flagged circuits."""
+
 # This file contains all necessary functions for compiling and running the
 # [[5,1,3]] error correction code, both with or without flagging. Most functions
 # take optional arguments for whether to perform recovery, use flags, or reset
 # the ancilla qubit. An example of how to use the functions is shown at the
 # bottom.
 #
-# TODO:
-#   The advanced registers currently be used for recovery. Need to fix that,
-#   but it has the problem of flag-measurement being in a separate register
-#   and c_if can only be conditioned on one.
 
 # %% Import modules
 from IPython.display import display

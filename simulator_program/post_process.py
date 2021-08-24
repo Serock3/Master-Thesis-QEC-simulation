@@ -171,12 +171,11 @@ if __name__ == "__main__":
 
     reset = True
     recovery = False
-    flag = False
     n_cycles = 4
     n_shots = 1024/2
 
     circ = get_full_stabilizer_circuit(n_cycles=n_cycles, reset=reset,
-                                    recovery=recovery, flag=False,
+                                    recovery=recovery, 
                                     snapshot_type='dm',
                                     conditional=True,
                                     encoding=False, theta=0, phi=0)

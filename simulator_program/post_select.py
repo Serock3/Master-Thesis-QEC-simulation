@@ -202,13 +202,13 @@ if __name__ == "__main__":
     from stabilizers import encode_input_v2, get_repeated_stabilization, StabilizerRegisters, get_classical_register, logical_states, get_full_stabilizer_circuit
     reset = False
     recovery = True
-    flag = False
+    
     n_cycles = 15
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
     # cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
     cr = get_classical_register(n_cycles, reset=reset,
-                                recovery=recovery, flag=False)
+                                recovery=recovery)
     readout = ClassicalRegister(5, 'readout')
 
     registers = StabilizerRegisters(qb, an, cr, readout)
