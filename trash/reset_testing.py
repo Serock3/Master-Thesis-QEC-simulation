@@ -12,7 +12,7 @@ from qiskit.quantum_info import DensityMatrix
 from qiskit.quantum_info import state_fidelity
 
 # Our own files
-from simulator_program.custom_noise_models import thermal_relaxation_model
+from simulator_program.custom_noise_models import thermal_relaxation_model_V2
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 from simulator_program.post_select import *
@@ -410,7 +410,7 @@ def mod_unflagged_recovery(registers, reset=True, current_cycle=0, current_step=
     return circ
 
 def old_get_running_fidelity_data_den_mat(circ, n_cycles=15,n_shots=2048,
-        noise_model=thermal_relaxation_model(), post_select=True):
+        noise_model=thermal_relaxation_model_V2(), post_select=True):
     '''Inputs:
     circ: The circuit to be tested
     correct_state: The correct state for comparison
@@ -563,7 +563,7 @@ n_shots=512
 fid_rec_t = get_running_fidelity_data_den_mat(circ_rec_WACQT, 
     n_cycles=n_cycles,
     n_shots=n_shots,
-    noise_model=thermal_relaxation_model(),
+    noise_model=thermal_relaxation_model_V2(),
     post_select=False,
 )
 print('Check!')
@@ -571,7 +571,7 @@ print('Check!')
 fid_res_rec_t = get_running_fidelity_data_den_mat(circ_res_rec_WACQT, 
     n_cycles=n_cycles,
     n_shots=n_shots,
-    noise_model=thermal_relaxation_model(),
+    noise_model=thermal_relaxation_model_V2(),
     post_select=False,
 )
 print('Check!')
@@ -579,7 +579,7 @@ print('Check!')
 fid_mod_rec_t = old_get_running_fidelity_data_den_mat(circ_mod_rec_WACQT, 
     n_cycles=n_cycles,
     n_shots=n_shots,
-    noise_model=thermal_relaxation_model(),
+    noise_model=thermal_relaxation_model_V2(),
     post_select=False,
 )
 print('Check!')
@@ -588,7 +588,7 @@ print('Check!')
 fid_nob_rec_t = old_get_running_fidelity_data_den_mat(circ_nob_rec_WACQT, 
     n_cycles=n_cycles,
     n_shots=n_shots,
-    noise_model=thermal_relaxation_model(),
+    noise_model=thermal_relaxation_model_V2(),
     post_select=False,
 )
 print('Check!')
@@ -596,7 +596,7 @@ print('Check!')
 fid_bar_rec_t = old_get_running_fidelity_data_den_mat(circ_bar_rec_WACQT, 
     n_cycles=n_cycles,
     n_shots=n_shots,
-    noise_model=thermal_relaxation_model(),
+    noise_model=thermal_relaxation_model_V2(),
     post_select=False,
 )
 print('Check!')
@@ -671,7 +671,7 @@ for current_cycle in range(n_cycles):
 results = execute(
         circ_mod_rec,  
         Aer.get_backend('qasm_simulator'),
-        noise_model=thermal_relaxation_model(),
+        noise_model=thermal_relaxation_model_V2(),
         shots=n_shots
 ).result()
 
@@ -690,7 +690,7 @@ state_11 = np.array([0., 0., 0., 1.])
 
 circ = get_ancilla_snapshots(registers, n_cycles=n_cycles)
 circ_t = get_standard_transpilation(circ)
-noise_model=thermal_relaxation_model()
+noise_model=thermal_relaxation_model_V2()
 
 
 # Get correct state

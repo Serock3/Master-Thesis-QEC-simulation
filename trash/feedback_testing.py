@@ -2,16 +2,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from qiskit.quantum_info import partial_trace
-from qiskit.quantum_info import DensityMatrix
-from qiskit.quantum_info import state_fidelity
-
-# Our own files
-from simulator_program.custom_noise_models import (thermal_relaxation_model,
-                                                   thermal_relaxation_model_V2,
-                                                   WACQT_target_times,
-                                                   WACQT_demonstrated_times,
-                                                   standard_times)
 from simulator_program.data_analysis_tools import *
 
 

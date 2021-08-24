@@ -14,7 +14,7 @@ from qiskit.quantum_info import DensityMatrix
 from qiskit.quantum_info import state_fidelity
 
 # Our own files
-from simulator_program.custom_noise_models import (thermal_relaxation_model,
+from simulator_program.custom_noise_models import (thermal_relaxation_model_V2,
     thermal_relaxation_model_V2,
     WACQT_target_times,
     WACQT_demonstrated_times,

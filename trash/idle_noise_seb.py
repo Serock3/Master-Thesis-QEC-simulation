@@ -14,14 +14,12 @@
 # TODO: An easier fix might be to not create a new circuit, but instead update
 #       the old by adding noise into the DAG object. Check if this is possible
 # %% Import from Qiskit Aer noise module
-from qiskit.providers.aer.noise import NoiseModel
 from qiskit.providers.aer.noise import thermal_relaxation_error
 from qiskit.converters import circuit_to_dag, dag_to_circuit
 
 import numpy as np
 from qiskit import *
 
-from simulator_program.custom_noise_models import thermal_relaxation_model
 from qiskit.providers.aer.extensions.snapshot_density_matrix import *
 from simulator_program.custom_transpiler import shortest_transpile_from_distribution, WACQT_device_properties
 # %% Temporary circuit for testing

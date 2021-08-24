@@ -2,14 +2,10 @@
 # Import from Qiskit Aer noise module
 from qiskit.providers.aer.noise import (
     pauli_error,
-    depolarizing_error,
     thermal_relaxation_error,
-    amplitude_damping_error,
-    phase_damping_error,
-    phase_amplitude_damping_error,
+    phase_amplitude_damping_error
 )
-from qiskit.providers.aer.noise import NoiseModel, QuantumError, ReadoutError
-from qiskit.providers.aer import noise
+from qiskit.providers.aer.noise import NoiseModel
 import numpy as np
 import warnings
 
@@ -117,6 +113,15 @@ standard_times_delay = GateTimes(
 # Define noise models
 
 def extend_standard_gate_times(gate_times={}):
+    """Adds the specified gate times to a list of standard gate times.
+    TODO: Default argument should be None for stability reasons.
+
+    Args:
+        gate_times (dict, optional): List of gate (operation) times in ns, e.g. {'cz':200}. Defaults to {}.
+
+    Returns:
+        dict: Complete list of times for all gates.
+    """
     if isinstance(gate_times, dict):
         full_gate_times = standard_times.get_gate_times(
             custom_gate_times=gate_times)
@@ -278,7 +283,6 @@ def thermal_relaxation_model_per_qb(T1, T2, gate_times=WACQT_gate_times):
 
     return noise_damping
 
-
 def pauli_noise_model(p_gate1=0.0, p_meas=0.0, p_reset=0.0):
     '''Testing around with some Bit-flip noise'''
 
@@ -298,38 +302,6 @@ def pauli_noise_model(p_gate1=0.0, p_meas=0.0, p_reset=0.0):
         error_gate2, ["cx", "cz", "swap", "iswap"])
 
     return noise_bit_flip
-
-
-def thermal_relaxation_model(T1=40e3, T2=60e3, t_single=15, t_cz=300,
-                             t_measure=1000, t_reset=1000):
-    """Noise model for thermal relaxation. All times are given
-    in nanoseconds (ns).
-    """
-    warnings.warn(
-        "Use thermal_relaxation_model_V2 instead for more accurate gate times",
-        DeprecationWarning
-    )
-    # TODO: Add accurate times for reset/measurement. Current ones use
-    #       example from qiskit
-
-    # QuantumError objects
-    error_single = thermal_relaxation_error(T1, T2, t_single)
-    error_measure = thermal_relaxation_error(T1, T2, t_measure)
-    error_reset = thermal_relaxation_error(T1, T2, t_reset)
-    error_cz = thermal_relaxation_error(T1, T2, t_cz).expand(
-        thermal_relaxation_error(T1, T2, t_cz))
-
-    # Add errors to noise model
-    noise_damping = NoiseModel()
-    #noise_damping.add_all_qubit_quantum_error(error_measure, "measure")
-    #noise_damping.add_all_qubit_quantum_error(error_reset, "reset")
-    noise_damping.add_all_qubit_quantum_error(error_single,
-                                              ["x", "z", "h", "id", "u1", "u2", "u3"])
-    noise_damping.add_all_qubit_quantum_error(error_cz,
-                                              ["cx", "cz", "swap", "iswap"])
-
-    return noise_damping
-
 
 def phase_amplitude_model(T1=40e3, T2=60e3, t_single=15, t_cz=300,
                           t_measure=1000, t_reset=1000):
@@ -374,23 +346,4 @@ def phase_amplitude_model(T1=40e3, T2=60e3, t_single=15, t_cz=300,
 # https://qiskit.org/documentation/tutorials/simulators/3_building_noise_models.html
 
 
-# %%
-if __name__ == '__main__':
-    from qiskit import QuantumCircuit, execute, Aer
-    thermal_relaxation_model()
-
-    noise_model = pauli_noise_model(p_gate1=1)
-
-    circ = QuantumCircuit(3)
-    circ.x(0)
-    circ.swap(0, 1)
-    circ.measure_all()
-    print(circ)
-    results = execute(
-        circ,
-        Aer.get_backend('qasm_simulator'),
-        noise_model=noise_model,
-        shots=10
-    ).result()
-    print(results.get_counts())
 # %%
