@@ -15,7 +15,7 @@ from pytket.extensions.qiskit import qiskit_to_tk, tk_to_qiskit, AerBackend
 from qiskit.quantum_info import purity
 from qiskit.quantum_info.states.measures import state_fidelity
 from simulator_program.stabilizers import*
-from simulator_program.stabilizers import _unflagged_stabilizer_XZZXI
+from simulator_program.stabilizers import _get_stabilizer_XZZXI
 import numpy as np
 from IPython.display import display
 

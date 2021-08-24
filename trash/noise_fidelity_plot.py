@@ -38,7 +38,7 @@ recovery = False
 #     flag=flag,
 # )
 circ += encode_input_v2(registers)
-circ += unflagged_stabilizer_cycle(registers,
+circ += get_stabilizer_cycle(registers,
                                    reset=reset,
                                    recovery=recovery
                                    )
@@ -581,7 +581,7 @@ circ_rec += get_repeated_stabilization(registers, n_cycles=n_cycles,
 # Testing with only snapshotting the code qubits (No reset, recovery)
 circ_rec_new = encode_input_v2(registers)
 for current_cycle in range(n_cycles):
-    circ_rec_new += unflagged_stabilizer_cycle(registers,
+    circ_rec_new += get_stabilizer_cycle(registers,
                                                reset=False,
                                                recovery=True,
                                                current_cycle=current_cycle
@@ -897,7 +897,7 @@ recovery = False
 
 circ = encode_input_v2(registers)
 circ.barrier()
-circ += unflagged_stabilizer_cycle(registers,
+circ += get_stabilizer_cycle(registers,
                                    reset=reset,
                                    recovery=recovery
                                    )
@@ -905,7 +905,7 @@ circ.barrier()
 circ.append(Snapshot('stabilizer_0', 'density_matrix', num_qubits=5), qb)
 circ.append(Snapshot('measure_0', 'density_matrix', num_qubits=2), an)
 circ.barrier()
-circ += unflagged_stabilizer_cycle(registers,
+circ += get_stabilizer_cycle(registers,
                                    reset=reset,
                                    recovery=recovery
                                    )
@@ -974,7 +974,7 @@ registers = StabilizerRegisters(qb, an, cr, readout)
 # Circuit without reset, without recovery
 circ = encode_input_v2(registers)
 for current_cycle in range(n_cycles):
-    circ += unflagged_stabilizer_cycle(registers,
+    circ += get_stabilizer_cycle(registers,
                                        reset=False,
                                        recovery=False,
                                        current_cycle=current_cycle
@@ -987,7 +987,7 @@ for current_cycle in range(n_cycles):
 # Without reset, with recovery
 circ_rec = encode_input_v2(registers)
 for current_cycle in range(n_cycles):
-    circ_rec += unflagged_stabilizer_cycle(registers,
+    circ_rec += get_stabilizer_cycle(registers,
                                            reset=False,
                                            recovery=True,
                                            current_cycle=current_cycle
@@ -1000,7 +1000,7 @@ for current_cycle in range(n_cycles):
 # Circuit with reset, without recovery
 circ_res = encode_input_v2(registers)
 for current_cycle in range(n_cycles):
-    circ_res += unflagged_stabilizer_cycle(registers,
+    circ_res += get_stabilizer_cycle(registers,
                                            reset=True,
                                            recovery=False,
                                            current_cycle=current_cycle
@@ -1013,7 +1013,7 @@ for current_cycle in range(n_cycles):
 # Circuit with reset, with recovery
 circ_res_rec = encode_input_v2(registers)
 for current_cycle in range(n_cycles):
-    circ_res_rec += unflagged_stabilizer_cycle(registers,
+    circ_res_rec += get_stabilizer_cycle(registers,
                                                reset=True,
                                                recovery=True,
                                                current_cycle=current_cycle

@@ -7,27 +7,18 @@
 #import matplotlib.pyplot as plt
 import pickle
 import numpy as np
-import scipy
-import itertools
 from qiskit import *
 #from qiskit.visualization import plot_histogram
 
 # Import from Qiskit Aer noise module
 from qiskit.providers.aer.noise import thermal_relaxation_error
-from qiskit.providers.aer.library import save_density_matrix, save_expectation_value
-from qiskit.providers.aer import AerSimulator, QasmSimulator
-
-from qiskit.quantum_info import partial_trace
-from qiskit.quantum_info import DensityMatrix
 from qiskit.quantum_info import state_fidelity
 
 # Our own files
 if __package__:
     from .custom_noise_models import (thermal_relaxation_model_V2,
-                                      thermal_relaxation_model_per_qb,
-                                      WACQT_target_times,
-                                      WACQT_demonstrated_times,
-                                      standard_times)
+                                      standard_times,
+                                     extend_standard_gate_times)
     from .custom_transpiler import *
     from .stabilizers import *
     from .post_select import *
@@ -35,8 +26,6 @@ if __package__:
     from .idle_noise import *
 else:
     from custom_noise_models import (thermal_relaxation_model_V2,
-                                     WACQT_target_times,
-                                     WACQT_demonstrated_times,
                                      standard_times,
                                      extend_standard_gate_times)
     from custom_transpiler import *
@@ -45,6 +34,7 @@ else:
     from post_process import *
     from idle_noise import add_idle_noise_to_circuit, get_circuit_time
 # %%
+
 
 def default_execute(circ, shots=None, noise_model=None, gate_times={}, T1=40e3, T2=60e3, simulator_name='qasm_simulator', simulator_method='density_matrix'):
     """Execute with our standard settings. Use this to make sure that the noise model i applied to delays.
@@ -76,7 +66,8 @@ def default_execute(circ, shots=None, noise_model=None, gate_times={}, T1=40e3, 
 
     return simulator.run(circ, shots=shots).result()
 
-def default_simulate(kwargs, T1, T2, gate_times, noise_model = None):
+
+def default_simulate(kwargs, T1, T2, gate_times, n_shots=1024, noise_model=None):
     """
     Creates and simulates a circuit with idle noise applied.
     """
@@ -94,9 +85,24 @@ def default_simulate(kwargs, T1, T2, gate_times, noise_model = None):
         circ, n_shots, gate_times=gate_times, noise_model=noise_model)
     return results, times
 
-def default_simulate_persist_to_file(kwargs, T1, T2, gate_times, noise_model = None, file_name = 'decoding_data/cache.dat', overwrite=False):
-    """
-    Calls default_simulate
+
+def default_simulate_persist_to_file(kwargs, T1, T2, gate_times, n_shots=1024, noise_model=None, file_name='decoding_data/cache.dat', overwrite=False, save_to_file=True):
+    """Functionally the same as default_simulate, but loads data from file if it exists.
+    Otherwise, it saves it to file.
+
+    Args:
+        kwargs (dict): Dictionary of simulation options to feed to default simulate
+        T1 (int): noise param
+        T2 (int): noise param
+        gate_times (dict): dictionary of gate (and other operations) duration
+        n_shots (int, optional): simulation repetitions. Defaults to 1024.
+        noise_model (NoiseModel, optional):  Defaults to None.
+        file_name (str, optional): file to load from/save to. Defaults to 'decoding_data/cache.dat'.
+        overwrite (bool, optional): Whether to overwrite the current data for the specified settings with a new simulation. Defaults to False.
+        save_to_file (bool, optional): Whether to skip saving the data, and only loading if possible. Defaults to True.
+
+    Returns:
+        (Results, dict): Results object and times dictionary
     """
     try:
         cache = pickle.load(open(file_name, "rb"))
@@ -106,8 +112,10 @@ def default_simulate_persist_to_file(kwargs, T1, T2, gate_times, noise_model = N
     key = (frozenset(kwargs.items()), str(T1), str(
         T2), frozenset(gate_times.gate_times.items()))
     if key not in cache or overwrite:
-        cache[key] = default_simulate(kwargs, T1, T2, gate_times, noise_model)
-        pickle.dump(cache, open(file_name, "wb"))
+        cache[key] = default_simulate(
+            kwargs, T1, T2, gate_times, n_shots=n_shots, noise_model=noise_model)
+        if save_to_file:
+            pickle.dump(cache, open(file_name, "wb"))
     else:
         print('Loading simulation results from file')
     return cache[key]
@@ -118,17 +126,19 @@ def check_if_saved(kwargs, T1, T2, gate_times, file_name='decoding_data/cache.da
         T2), frozenset(gate_times.gate_times.items()))
     return key in pickle.load(open(file_name, "rb"))
 
-def print_saved_runs(file_name = 'decoding_data/cache.dat'):
+
+def print_saved_runs(file_name='decoding_data/cache.dat'):
     for key in pickle.load(open(file_name, "rb")):
         print(key[0])
         print(key[1])
         print(key[3], '\n')
 
+
 def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                           reset=True, data_process_type='recovery', idle_noise=True, transpile=True,
                           snapshot_type='dm', device=None, device_properties=WACQT_device_properties,
                           encoding=True, theta=0, phi=0, pauliop='ZZZZZ', simulator_type='density_matrix',
-                          project=False, generator_snapshot=False,idle_snapshots=0, **kwargs):
+                          project=False, generator_snapshot=False, idle_snapshots=0, **kwargs):
     """TODO: Update this description
 
     Get the fidelity of a certain setup/configuration from only its
@@ -482,10 +492,10 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
 # %%
 
 # TODO: Move to be defined locally?
+
+
 def monoExp(t, T, c, A):
     return (A-c) * np.exp(-t/T) + c
-
-
 
 
 def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
@@ -550,7 +560,7 @@ def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         circ.append(thrm_relax, [reg])
 
     for current_cycle in range(n_cycles):
-        circ.compose(unflagged_stabilizer_cycle(registers, reset=reset, recovery=recovery,
+        circ.compose(get_stabilizer_cycle(registers, reset=reset, recovery=recovery,
                                                 current_cycle=current_cycle, current_step=0,
                                                 include_barriers=include_barriers), inplace=True)
         add_snapshot_to_circuit(circ, snapshot_type=snapshot_type,

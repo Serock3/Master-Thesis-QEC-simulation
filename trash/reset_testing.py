@@ -17,10 +17,10 @@ from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 from simulator_program.post_select import *
 from simulator_program.stabilizers import(
-    _unflagged_stabilizer_IXZZX,
-    _unflagged_stabilizer_XIXZZ,
-    _unflagged_stabilizer_XZZXI,
-    _unflagged_stabilizer_ZXIXZ
+    _get_stabilizer_IXZZX,
+    _get_stabilizer_XIXZZ,
+    _get_stabilizer_XZZXI,
+    _get_stabilizer_ZXIXZ
     )
 #%% Modified stabilizer functions
 # These reset ancillas to 1 instead of 0 by adding a bit-flip directly after.
@@ -105,10 +105,10 @@ def barrier_unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
         anQb_list = [registers.AncillaRegister[n % num_ancillas]
                      for n in range(4)]
 
-    stabilizer_list = [_unflagged_stabilizer_XZZXI,
-                       _unflagged_stabilizer_IXZZX,
-                       _unflagged_stabilizer_XIXZZ,
-                       _unflagged_stabilizer_ZXIXZ]
+    stabilizer_list = [_get_stabilizer_XZZXI,
+                       _get_stabilizer_IXZZX,
+                       _get_stabilizer_XIXZZ,
+                       _get_stabilizer_ZXIXZ]
 
     # Create list of syndrome bits
     if isinstance(registers.SyndromeRegister, list):
@@ -133,7 +133,7 @@ def barrier_unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
 
     # Recovery
     if recovery is True:
-        circ += unflagged_recovery(registers, reset, current_cycle)
+        circ += get_recovery(registers, reset, current_cycle)
         circ.barrier
     return circ
 
@@ -483,7 +483,7 @@ def get_testing_circuit(registers, reset, n_cycles):
     qb = registers.QubitRegister
     for current_cycle in range(n_cycles):
         if reset == 0:
-            circ += unflagged_stabilizer_cycle(registers,
+            circ += get_stabilizer_cycle(registers,
                 reset=True,
                 recovery=True,
                 current_cycle=current_cycle
@@ -495,7 +495,7 @@ def get_testing_circuit(registers, reset, n_cycles):
                 current_cycle=current_cycle
             )
         else:
-            circ += unflagged_stabilizer_cycle(registers,
+            circ += get_stabilizer_cycle(registers,
                 reset=False,
                 recovery=True,
                 current_cycle=current_cycle
@@ -511,7 +511,7 @@ def get_ancilla_snapshots(registers, n_cycles):
     circ = encode_input_v2(registers)
     an = registers.AncillaRegister
     for current_cycle in range(n_cycles):
-        circ += unflagged_stabilizer_cycle(registers,
+        circ += get_stabilizer_cycle(registers,
             reset=False,
             recovery=True,
             current_cycle=current_cycle

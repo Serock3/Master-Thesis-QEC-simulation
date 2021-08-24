@@ -39,7 +39,8 @@ class StabilizerRegisters:
         self.SyndromeRegister = clReg
         self.ReadoutRegister = readout
 
-def get_registers(conditional=False, final_measure=False, n_cycles=0, reset=True, 
+
+def get_registers(conditional=False, final_measure=False, n_cycles=0, reset=True,
                   recovery=True, include_fifth_stabilizer=False):
     """Create a set of circuit registers based on a set of circuit parameters.
     """
@@ -48,7 +49,8 @@ def get_registers(conditional=False, final_measure=False, n_cycles=0, reset=True
 
     if conditional:
         # Advanced list of registers
-        crReg = get_classical_register(n_cycles, reset, recovery, include_fifth_stabilizer)
+        crReg = get_classical_register(
+            n_cycles, reset, recovery, include_fifth_stabilizer)
     else:
         crReg = ClassicalRegister(4, 'syndrome_bit')  # The typical register
     if final_measure:
@@ -57,6 +59,7 @@ def get_registers(conditional=False, final_measure=False, n_cycles=0, reset=True
     else:
         registers = StabilizerRegisters(qbReg, anReg, crReg, None)
     return registers
+
 
 def get_full_stabilizer_circuit(registers=None, n_cycles=1,
                                 reset=True, recovery=False,
@@ -119,14 +122,15 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
     Returns:
         circ: The resulting QuantumCircuit object
     """
-    
-    include_fifth_stabilizer=False
+
+    include_fifth_stabilizer = False
     if 'include_fifth_stabilizer' in kwargs:
         include_fifth_stabilizer = kwargs['include_fifth_stabilizer']
 
     # TODO: Make this compatible with other codes?
     if registers is None:
-        registers = get_registers(conditional, final_measure, n_cycles, reset, recovery, include_fifth_stabilizer)
+        registers = get_registers(
+            conditional, final_measure, n_cycles, reset, recovery, include_fifth_stabilizer)
 
     if not registers.AncillaRegister.size == 2 and not registers.AncillaRegister.size == 5:
         raise Exception('Ancilla register must be of size 2 or 5')
@@ -232,7 +236,7 @@ def get_repeated_stabilization(registers, n_cycles=1, reset=True, recovery=False
                                              current_cycle=current_cycle,
                                              ), inplace=True)
         else:
-            circ.compose(unflagged_stabilizer_cycle(registers,
+            circ.compose(get_stabilizer_cycle(registers,
                                                     reset=reset,
                                                     recovery=recovery,
                                                     current_cycle=current_cycle,
@@ -257,6 +261,7 @@ def get_repeated_stabilization(registers, n_cycles=1, reset=True, recovery=False
 
 # Mutable int object to serve as a global counter for the snapshot labels
 
+
 class Int(object):
     def __init__(self, value):
         self.value = value
@@ -278,6 +283,7 @@ label_counter = Int(0)
 # The same 'label_counter' will be used for every call of the function,
 # even if it is modified. This only works for mutable objects so
 # 'int' will not be shared, but 'Int' will.
+
 
 def add_snapshot_to_circuit(circ, snapshot_type, current_cycle=label_counter,
                             qubits=None, conditional=False,
@@ -382,16 +388,16 @@ def get_classical_register(n_cycles, reset=True, recovery=False,
                            five bits instead, if the settings require so.
     """
 
-    if recovery and not reset: # Needs an extra bit per register
+    if recovery and not reset:  # Needs an extra bit per register
         # A register of five bits per cycle
-        syndrome_register = [ClassicalRegister(5, 'syndrome_cycle_' + str(i)) 
+        syndrome_register = [ClassicalRegister(5, 'syndrome_cycle_' + str(i))
                              for i in range(n_cycles)]
         return syndrome_register
 
     else:
         # A register of four bits per cycle (or five if include_fifth_stabilizer)
         syndrome_register = [ClassicalRegister(4 + include_fifth_stabilizer,
-                            'syndrome_cycle_' + str(i)) for i in range(n_cycles)]
+                                               'syndrome_cycle_' + str(i)) for i in range(n_cycles)]
         return syndrome_register
 
 
@@ -774,9 +780,12 @@ syndrome_table = [[],
                   [(XGate, 3), (ZGate, 3)]]
 
 
-def get_weight_1_basis():
-    """Returns a basis set for every state with a distance one from |0>_L.
+def get_distance_1_basis():
+    """Returns a basis set for the subspace of states with a distance one from |0>_L.
     This is equivalent to a distance two from |1>_L.
+
+    The states are eigenvectors to the stabilizers with a syndrome that is given 
+    by their index+1 in binary.
     """
 
     logical_0 = Statevector(logical_states(None)[0])
@@ -791,9 +800,12 @@ def get_weight_1_basis():
     return weight_1
 
 
-def get_weight_2_basis():
-    """Returns a basis set for every state with a distance one from |0>_L.
+def get_distance_2_basis():
+    """Returns a basis set for the subspace of states with a distance one from |0>_L.
     This is equivalent to a distance two from |1>_L.
+
+    The states are eigenvectors to the stabilizers with a syndrome that is given 
+    by their index+1 in binary.
     """
     # TODO: Check the numbering here. What does it mean in terms of two-qubit errors?
     # The syndromes correspond to what single qubit recovery should be applied to go to |1>_L
@@ -810,10 +822,27 @@ def get_weight_2_basis():
     return weight_2
 
 
+def get_full_syndrome_basis():
+    """Returns a set of basis vectors for the entire  2^5=32 dimensional Hilbert
+    space that are eigenstates to the stabilizers.  
+
+    Index 0 gives |0>_L, 1-16 gives distance 1 states
+    Returns:
+        list[Statevector]: List of statevectors.
+    """
+    logical = logical_states(None)
+    weight_1 = get_distance_1_basis()
+    weight_2 = get_distance_2_basis()
+
+    # Calculate table of how each of the 32 different basis states (labeled by syndrome plus Z_L) map onto eachother from the 16 corrections
+    return [Statevector(logical[0]), *weight_1,
+            Statevector(logical[1]), *weight_2]
 # %% All unflagged stabilizers
-def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
+
+
+def get_stabilizer_cycle(registers, reset=True, recovery=False,
                                current_cycle=0, num_ancillas=None,
-                               include_barriers=True, pipeline=False, snapshot=True, 
+                               include_barriers=True, pipeline=False, snapshot=True,
                                snapshot_type='dm', conditional=False, pauliop='ZZZZZ',
                                include_fifth_stabilizer=False, **kwargs):
     """Run all four stabilizers, as well as an optional
@@ -833,7 +862,8 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
             anQb_list = [registers.AncillaRegister[1]]*num_stabilizers
         elif registers.AncillaRegister.size >= 4:
             # I don't like this really, we don't use the flagged circuit anymore so it shouldn't get the 0 spot by default
-            anQb_list = [registers.AncillaRegister[n] for n in np.arange(1, num_stabilizers+1)]
+            anQb_list = [registers.AncillaRegister[n]
+                         for n in np.arange(1, num_stabilizers+1)]
         else:
             Warning("Ancilla reg too small (this should never happen)")
     else:
@@ -847,23 +877,24 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
                            _pipeline_stabilizer_ZXIXZ]
     elif include_fifth_stabilizer:
         # TODO: Make this work with pipeline?
-        stabilizer_list = [_unflagged_stabilizer_XZZXI,
-                           _unflagged_stabilizer_IXZZX,
-                           _unflagged_stabilizer_XIXZZ,
-                           _unflagged_stabilizer_ZXIXZ,
-                           _unflagged_stabilizer_ZZXIX]
+        stabilizer_list = [_get_stabilizer_XZZXI,
+                           _get_stabilizer_IXZZX,
+                           _get_stabilizer_XIXZZ,
+                           _get_stabilizer_ZXIXZ,
+                           _get_stabilizer_ZZXIX]
     else:
-        stabilizer_list = [_unflagged_stabilizer_XZZXI,
-                           _unflagged_stabilizer_IXZZX,
-                           _unflagged_stabilizer_XIXZZ,
-                           _unflagged_stabilizer_ZXIXZ]
+        stabilizer_list = [_get_stabilizer_XZZXI,
+                           _get_stabilizer_IXZZX,
+                           _get_stabilizer_XIXZZ,
+                           _get_stabilizer_ZXIXZ]
 
     # Create list of syndrome bits
     if isinstance(registers.SyndromeRegister, list):
         syn_reg = registers.SyndromeRegister[current_cycle]
         syn_bit_list = [syn_reg[n] for n in range(num_stabilizers)]
     else:
-        syn_bit_list = [registers.SyndromeRegister[n] for n in range(num_stabilizers)]
+        syn_bit_list = [registers.SyndromeRegister[n]
+                        for n in range(num_stabilizers)]
 
     # Create circuit and run stabilizers
     circ = get_empty_stabilizer_circuit(registers)
@@ -896,12 +927,12 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
 
         if not include_barriers:  # Always put a barrier here, so add an extra one if there wasn't one after the last stabilzier
             circ.barrier()
-        circ.compose(unflagged_recovery(
+        circ.compose(get_recovery(
             registers, reset, current_cycle), inplace=True)
     return circ
 
 
-def _unflagged_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
+def _get_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular XZZXI stabilizer.
 
     Args:
@@ -954,7 +985,7 @@ def _unflagged_stabilizer_XZZXI(registers, anQb=None, syn_bit=None, reset=True):
     return circ
 
 
-def _unflagged_stabilizer_IXZZX(registers, anQb=None, syn_bit=None, reset=True):
+def _get_stabilizer_IXZZX(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular IXZZX stabilizer.
     """
 
@@ -996,7 +1027,7 @@ def _unflagged_stabilizer_IXZZX(registers, anQb=None, syn_bit=None, reset=True):
     return circ
 
 
-def _unflagged_stabilizer_XIXZZ(registers, anQb=None, syn_bit=None, reset=True):
+def _get_stabilizer_XIXZZ(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular XIXZZ stabilizer.
     """
     # Create a circuit
@@ -1038,7 +1069,7 @@ def _unflagged_stabilizer_XIXZZ(registers, anQb=None, syn_bit=None, reset=True):
     return circ
 
 
-def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
+def _get_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular ZXIXZ stabilizer.
     """
     # Create a circuit
@@ -1080,7 +1111,9 @@ def _unflagged_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
     return circ
 
 # NOTE: This is the fifth (superfluous) stabilizer generator that is not normally used
-def _unflagged_stabilizer_ZZXIX(registers, anQb=None, syn_bit=None, reset=True):
+
+
+def _get_stabilizer_ZZXIX(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular ZXIXZ stabilizer.
     """
     # Create a circuit
@@ -1121,7 +1154,9 @@ def _unflagged_stabilizer_ZZXIX(registers, anQb=None, syn_bit=None, reset=True):
 
     return circ
 
-#%% Double diamond stabilizer cycle
+# %% Double diamond stabilizer cycle
+
+
 def transpiled_dd_cycle(registers, current_cycle=0, reset=True,
                         recovery=False):
     """Gives the circuit for a full stabilizer cycle following the double 
@@ -1313,7 +1348,7 @@ def transpiled_dd_cycle(registers, current_cycle=0, reset=True,
     # Recovery
     if recovery is True:
         circ.barrier()
-        circ.compose(unflagged_recovery(
+        circ.compose(get_recovery(
             registers, reset, current_cycle), inplace=True)
         circ.barrier()
     return circ
@@ -1507,7 +1542,7 @@ def _pipeline_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
 # %% All recoveries
 
 
-def unflagged_recovery(registers, reset=True, current_cycle=0):
+def get_recovery(registers, reset=True, current_cycle=0):
     """Lookup table for recovery from a
     single qubit error on code qubits"""
 
