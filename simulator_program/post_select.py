@@ -2,9 +2,10 @@
 
 if __package__:
     from .stabilizers import get_snapshot_label
+    from .custom_noise_models import thermal_relaxation_model_V2
 else:
     from stabilizers import get_snapshot_label
-from simulator_program.custom_noise_models import thermal_relaxation_model_V2
+    from custom_noise_models import thermal_relaxation_model_V2
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister
 from matplotlib import pyplot as plt
 from qiskit import execute, Aer
