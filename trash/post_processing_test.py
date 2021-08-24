@@ -21,7 +21,7 @@ from qiskit.quantum_info import state_fidelity
 
 # Our own files
 from simulator_program.custom_noise_models import phase_amplitude_model
-from simulator_program.custom_noise_models import thermal_relaxation_model, pauli_noise_model
+from simulator_program.custom_noise_models import thermal_relaxation_model_V2, pauli_noise_model
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 
@@ -282,7 +282,7 @@ circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
 results = execute(
     circ,
     Aer.get_backend('qasm_simulator'),
-    noise_model=thermal_relaxation_model(),
+    noise_model=thermal_relaxation_model_V2(),
     shots=shots,
     memory=True
 ).result()

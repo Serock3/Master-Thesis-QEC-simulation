@@ -1,21 +1,11 @@
 # %% Import modules
-import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-import itertools
 from qiskit import *
 
-# Import from Qiskit Aer noise module
-from qiskit.providers.aer.noise import thermal_relaxation_error
-from qiskit.providers.aer.library import save_density_matrix, save_expectation_value                                        
-
-from qiskit.quantum_info import partial_trace
-from qiskit.quantum_info import DensityMatrix
-from qiskit.quantum_info import state_fidelity
 
 # Our own files
-from simulator_program.custom_noise_models import (thermal_relaxation_model,
-    thermal_relaxation_model_V2,
+from simulator_program.custom_noise_models import (
     WACQT_target_times,
     WACQT_demonstrated_times,
     standard_times)

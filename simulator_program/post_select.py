@@ -2,10 +2,10 @@
 
 if __package__:
     from .stabilizers import get_snapshot_label
-    from .custom_noise_models import thermal_relaxation_model
+    from .custom_noise_models import thermal_relaxation_model_V2
 else:
     from stabilizers import get_snapshot_label
-    from custom_noise_models import thermal_relaxation_model
+    from custom_noise_models import thermal_relaxation_model_V2
 from qiskit import QuantumRegister, AncillaRegister, ClassicalRegister
 from matplotlib import pyplot as plt
 from qiskit import execute, Aer
@@ -197,82 +197,6 @@ def get_trivial_state(circ):
             if int(state['memory'], 16) == 0][0]
 
 
-def get_running_fidelity_data_den_mat(circ, n_cycles, n_shots=2048,
-                                      noise_model=thermal_relaxation_model(), post_select=True):
-    '''
-    Deprecated
-    Inputs:
-    circ: The circuit to be tested
-    correct_state: The correct state for comparison
-    param_list: The error model parameters, currently only [T2, t_cz]
-    n_shots: Number of shots to average over
-    '''
-    warnings.warn(
-        "Not maintained, use exp. Also not updated to Aer 0.8.0", DeprecationWarning)
-    # Get correct state
-    results = execute(
-        circ,
-        Aer.get_backend('qasm_simulator'),
-        noise_model=None,
-        shots=1,
-    ).result()
-
-    # snapshots = reformat_density_snapshot(results)
-    # TODO: Make this work if circuit it permuted for later stabilizers
-    # TODO: More sophisticated key than '0x0'?
-    correct_state = [state['value'] for state in results.data(
-    )['snapshots']['density_matrix']['stabilizer_0'] if int(state['memory'], 16) == 0][0]
-
-    # Run the circuit
-    results = execute(
-        circ,
-        Aer.get_backend('qasm_simulator'),
-        noise_model=noise_model,
-        shots=n_shots
-    ).result()
-
-    # Post-selection
-    fidelities = []
-    # snapshots = reformat_density_snapshot(results)
-    select_fractions = []
-    if post_select:
-        for current_cycle in range(n_cycles):
-            try:
-                post_selection = [state['value'] for state in results.data()
-                                  ['snapshots']['density_matrix']['stabilizer_' + str(current_cycle)] if int(state['memory'], 16) == 0][0]
-
-                select_fraction = get_subsystem_counts_up_to_cycle(
-                    results.get_counts(), current_cycle)[0]
-                select_fractions.append(select_fraction)
-                fidelities.append(state_fidelity(
-                    post_selection, correct_state))
-            except:
-                print("No selectable states")
-                fidelities.append(-1)
-                select_fractions.append(0)
-        return fidelities, select_fractions
-
-    else:
-        cl_reg_size = len(list(results.get_counts().keys())[0].split()[1])
-        counts = results.get_counts()
-        snapshots = reformat_density_snapshot(results)  # TODO: remove this
-        for current_cycle in range(n_cycles):
-            fid = 0
-            for key in snapshots['stabilizer_'+str(current_cycle)]:
-                bin_string = bin(int(key, 16))[2:].zfill(
-                    cl_reg_size*(current_cycle+1))[-cl_reg_size*(current_cycle+1):]
-                current_state = snapshots['stabilizer_' +
-                                          str(current_cycle)][key]
-                for outcome in results.get_counts():
-                    formated_outcome = outcome.replace(
-                        ' ', '')[-cl_reg_size*(current_cycle+1):]
-                    if formated_outcome == bin_string:
-                        fid += state_fidelity(current_state,
-                                              correct_state)*counts[outcome]
-            fidelities.append(fid/n_shots)
-        return fidelities
-
-
 # %% Code to test above, to be removed
 if __name__ == "__main__":
     from stabilizers import encode_input_v2, get_repeated_stabilization, StabilizerRegisters, get_classical_register, logical_states, get_full_stabilizer_circuit
@@ -295,7 +219,7 @@ if __name__ == "__main__":
     results = execute(
         circ,
         Aer.get_backend('qasm_simulator'),
-        noise_model=thermal_relaxation_model(),
+        noise_model=thermal_relaxation_model_V2(),
         shots=n_shots
     ).result()
 

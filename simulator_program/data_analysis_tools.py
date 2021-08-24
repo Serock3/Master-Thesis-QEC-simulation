@@ -22,8 +22,7 @@ from qiskit.quantum_info import state_fidelity
 
 # Our own files
 if __package__:
-    from .custom_noise_models import (thermal_relaxation_model,
-                                      thermal_relaxation_model_V2,
+    from .custom_noise_models import (thermal_relaxation_model_V2,
                                       thermal_relaxation_model_per_qb,
                                       WACQT_target_times,
                                       WACQT_demonstrated_times,
@@ -34,8 +33,7 @@ if __package__:
     from .post_process import *
     from .idle_noise import *
 else:
-    from custom_noise_models import (thermal_relaxation_model,
-                                     thermal_relaxation_model_V2,
+    from custom_noise_models import (thermal_relaxation_model_V2,
                                      WACQT_target_times,
                                      WACQT_demonstrated_times,
                                      standard_times,
@@ -63,9 +61,8 @@ def default_execute(circ, shots=None, noise_model=None, gate_times={}, T1=40e3, 
     """
     if noise_model is None:
         full_gate_times = extend_standard_gate_times(gate_times)
-        if noise_model is None:
-            noise_model = thermal_relaxation_model_V2(
-                T1=T1, T2=T2, gate_times=full_gate_times)
+        noise_model = thermal_relaxation_model_V2(
+            T1=T1, T2=T2, gate_times=full_gate_times)
 
     simulator = Aer.get_backend(simulator_name)
 

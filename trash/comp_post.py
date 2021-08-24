@@ -7,7 +7,7 @@ if __package__:
     from .idle_noise import add_idle_noise_to_circuit
     from .custom_transpiler import WACQT_device_properties, shortest_transpile_from_distribution
     from .custom_noise_models import thermal_relaxation_model_V2
-    from .data_analysis_tools import fidelity_from_scratch
+    from .data_analysis_tools import fidelity_from_scratch, default_execute
 else:
     from post_process import *
     from post_select import *
@@ -16,9 +16,8 @@ else:
     from idle_noise import add_idle_noise_to_circuit
     from custom_transpiler import WACQT_device_properties, shortest_transpile_from_distribution
     from custom_noise_models import thermal_relaxation_model_V2
-    from data_analysis_tools import fidelity_from_scratch
+    from data_analysis_tools import fidelity_from_scratch, default_execute
 
-from qiskit.circuit.library import standard_gates
 from qiskit.quantum_info import state_fidelity
 import numpy as np
 from matplotlib import pyplot as plt
@@ -29,8 +28,8 @@ from qiskit.providers.aer.noise.noise_model import NoiseModel
 reset = True
 recovery = False
 flag = False
-n_cycles = 7
-n_shots = 1024
+n_cycles = 4
+n_shots = 1024/2
 
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
@@ -38,13 +37,6 @@ cr = get_classical_register(n_cycles, reset=reset,
                             recovery=recovery)
 readout = ClassicalRegister(5, 'readout')
 registers = StabilizerRegisters(qb, an, cr, readout)
-
-
-# circ = encode_input_v2(registers)
-# circ.snapshot('post_encoding', 'density_matrix')
-# # Stabilizer
-# circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-#                                 reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
 
 circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
                                    recovery=recovery,
@@ -56,20 +48,18 @@ circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
 # circ = shortest_transpile_from_distribution(circ, print_cost=False,
 #                                             **WACQT_device_properties)
 
-circ, time = add_idle_noise_to_circuit(circ, gate_times=standard_times, return_time=True)
+circ, time = add_idle_noise_to_circuit(circ, return_time=True)
 
-#%%
+
+# %%
 p1given0 = 0.1
 p0given1 = p1given0
-noise_model = thermal_relaxation_model_V2(gate_times=standard_times)  # NoiseModel()#
+noise_model = thermal_relaxation_model_V2(
+    gate_times=standard_times)  # NoiseModel()#
 read_error = ReadoutError([[1 - p1given0, p1given0], [p0given1, 1 - p0given1]])
 # noise_model.add_all_qubit_readout_error(read_error, ['measure'])
-results = execute(
-    circ,
-    Aer.get_backend('qasm_simulator'),
-    noise_model=noise_model,
-    shots=n_shots
-).result()
+results = default_execute(
+    circ, n_shots, noise_model)
 
 
 def get_av_fidelities(states_and_counts, correct_state, n_shots):
@@ -100,7 +90,8 @@ ax2 = axs[1]
 
 ax1.plot(range(n_cycles+1), fidelities_normal, 'o-', label='No processing')
 ax1.plot(range(n_cycles+1), fidelities_select, 'o-', label='Post select')
-ax1.plot(range(n_cycles+1), fidelities_post_process, 'o-', label='Post process')
+ax1.plot(range(n_cycles+1), fidelities_post_process,
+         'o-', label='Post process')
 ax1.set_xlabel(r'Error detection cycle $n$')
 ax1.set_ylabel('Post selected count')
 ax1.legend()
@@ -112,18 +103,20 @@ ax2.set_xlabel(r'Error detection cycle $n$')
 ax2.set_ylabel(r'Post select fraction')
 ax2.legend()
 ax2.grid(linewidth=1)
-
+plt.show()
 # %% With correction
 recovery = True
 
-fidelities_QEC, times = fidelity_from_scratch(n_cycles,n_shots,gate_times={'feedback':0},encoding=False,transpile=False)
+fidelities_QEC, times = fidelity_from_scratch(
+    n_cycles, n_shots, gate_times={'feedback': 0}, encoding=False, transpile=False)
 fig, axs = plt.subplots(2, figsize=(14, 10))
 ax1 = axs[0]
 ax2 = axs[1]
 
 ax1.plot(range(n_cycles+1), fidelities_normal, 'o-', label='No processing')
 ax1.plot(range(n_cycles+1), fidelities_select, 'o-', label='Post select')
-ax1.plot(range(n_cycles+1), fidelities_post_process, 'o-', label='Post process')
+ax1.plot(range(n_cycles+1), fidelities_post_process,
+         'o-', label='Post process')
 ax1.plot(range(n_cycles+1), fidelities_QEC, 'o-', label='QEC')
 ax1.set_xlabel(r'Error detection cycle $n$')
 ax1.set_ylabel('Fidelity')
@@ -136,4 +129,5 @@ ax2.set_xlabel(r'Error detection cycle $n$')
 ax2.set_ylabel(r'Post select count')
 ax2.legend()
 ax2.grid(linewidth=1)
+plt.show()
 # %%

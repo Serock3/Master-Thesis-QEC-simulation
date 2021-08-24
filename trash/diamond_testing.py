@@ -1,25 +1,13 @@
 # %% Import modules
-import seaborn as sns
-import matplotlib.pyplot as plt
 import numpy as np
 from qiskit import *
-from qiskit.visualization import plot_histogram
 
-# Import from Qiskit Aer noise module
-from qiskit.providers.aer.noise import pauli_error,depolarizing_error
-from qiskit.providers.aer.noise import (thermal_relaxation_error, 
-                                        amplitude_damping_error, 
-                                        phase_damping_error, 
-                                        phase_amplitude_damping_error
-                                        )
-
-from qiskit.quantum_info import partial_trace
 from qiskit.quantum_info import DensityMatrix
 from qiskit.quantum_info import state_fidelity
 
 # Our own files
 from simulator_program.custom_noise_models import phase_amplitude_model
-from simulator_program.custom_noise_models import thermal_relaxation_model
+from simulator_program.custom_noise_models import thermal_relaxation_model_V2
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 
@@ -99,7 +87,7 @@ print('Final 2qb- gates WACQT = ', circ_WACQT.num_nonlocal_gates())
 results = execute(
     circ,
     Aer.get_backend('qasm_simulator'),
-    noise_model=thermal_relaxation_model(),
+    noise_model=thermal_relaxation_model_V2(),
     memory=True,
     shots=10,
 ).result()

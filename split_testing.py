@@ -404,8 +404,8 @@ initial_state = logical_states(include_ancillas=None)[0]
 # %% Running simulations
 n_cycles = 10
 n_shots = int(1024/4)
-names = ['Standard', 'Redo 0100 1000 1100 ', 'Redo 0100 0110 1000 1100 1110',
-         'Redo 0010 0100 0110 1000 1010 1100 1110', 'Upper limit']
+names = ['Standard', "Repeat syndromes '0100', '1000' and '1100'", 'Repeat syndromes 0100 0110 1000 1100 1110',
+         'Repeat syndromes 0010 0100 0110 1000 1010 1100 1110', 'Upper limit']
 # %%
 standard_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
 branching_simulation(standard_res_dict, initial_state,
@@ -437,6 +437,8 @@ pickle.dump(runs_to_print_together, open(
 runs_to_print_together = pickle.load(
     open('split_data/runs_to_print_together.dat', "rb"))
 
+runs_to_print_together = np.array(runs_to_print_together)[(0,1,4),]
+names = np.array(names)[(0,1,4),]
 # %% Append every shot into array
 
 
@@ -513,7 +515,7 @@ def plot_by_cycle_errorbar(ax, times_full, fids_full, cycles_full, label='Groupe
         xerr[:, i] = np.abs(np.quantile(times_full[cycles_full == i], [
                             0.25, 0.75])/1000-times_cycle[i])
 
-    ax.errorbar(times_cycle, median_fid, yerr, xerr, 'o',
+    ax.errorbar(times_cycle, median_fid, yerr, xerr, '.',
                 color=color, label=label)
 
 
@@ -541,9 +543,9 @@ bins = n_cycles
 for i, run in enumerate(flattened_data):
     # plot_by_bins(ax, bins, *run, label=names[i], color='C'+str(i))
     pars, cov = plot_curvefit(
-        ax, *run, color='C'+str(i))
-    # plot_by_cycle_errorbar(ax, *run, label=names[i]+rf' $T_L ={pars[0]/1000:.1f}$', color='C'+str(i))
-    plot_by_cycle_mean(ax, *run, label=names[i], color='C'+str(i))
+        ax, *run, color='C'+str(i))#names[i]+rf', $T_L ={pars[0]/1000:.1f}$'
+    plot_by_cycle_errorbar(ax, *run, label=None, color='C'+str(i))
+    plot_by_cycle_mean(ax, *run, label=names[i]+rf', $T_L ={pars[0]/1000:.1f}$', color='C'+str(i))
 
 # # Old no-splitting results
 
@@ -562,17 +564,17 @@ def monoExp(t, T, c, A):
 # Plot settings
 ax.legend()
 ax.set_ylim([0.0, 1.05])
-ax.set_xlim([0.0, max([np.max(run[0]) for run in flattened_data])/1000])
+ax.set_xlim([0.0, 36])
 ax.set_xlabel('Time [μs]')
-ax.set_ylabel(r'Probability of remaining in initial state $F$')
+ax.set_ylabel(r'Fidelity $F$')
 plt.show()
-
+fig.savefig('repeat.pdf',transparent=True)
 # %% Plot scatter
 fig, ax = plt.subplots(1, 1, figsize=(7, 5))
 ax.set_ylim([0.0, 1.05])
 ax.set_xlim([0.0, max([np.max(run[0]) for run in flattened_data])/1000])
 ax.set_xlabel('Time [μs]')
-ax.set_ylabel(r'Probability of remaining in initial state $F$')
+ax.set_ylabel(r'Fidelity $F$')
 
 
 def reform_dict(big_dict):
@@ -606,7 +608,7 @@ def scatter_plot(ax, times, fids, cycles, counts, label, c='b', marker='o', alph
 for i in range(len(runs_to_print_together)):
     pars, cov = plot_curvefit(ax, *flattened_data[i], color='C'+str(i))
     scatter_plot(ax, *reform_dict(runs_to_print_together[i]), label = names[i]+rf' $T_L ={pars[0]/1000:.1f}$', c='C'+str(
-        i), marker=['o', '*', 'v', '>', '<'][i])
+        i), marker=['o', 'p', 's', '>', '<'][i])
     # plot_by_cycle_errorbar(ax, *flattened_data[i], label=names[i]+rf' $T_L ={pars[0]/1000:.1f}$', color='C'+str(i))
 
 ax.legend()

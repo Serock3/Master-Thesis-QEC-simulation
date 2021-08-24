@@ -20,7 +20,7 @@ from qiskit.quantum_info import state_fidelity
 
 # Our own files
 from simulator_program.custom_noise_models import phase_amplitude_model
-from simulator_program.custom_noise_models import thermal_relaxation_model
+from simulator_program.custom_noise_models import thermal_relaxation_model_V2
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 
@@ -748,7 +748,7 @@ circ += get_full_stabilizer_circuit(registers,
 results = execute(
     circ,
     Aer.get_backend('qasm_simulator'),
-    noise_model=thermal_relaxation_model(),
+    noise_model=thermal_relaxation_model_V2(),
     memory=True,
     shots=10,
 ).result()
@@ -931,7 +931,7 @@ for i in range(len(fid_T2)):
     results = execute(
         circ,
         Aer.get_backend('qasm_simulator'),
-        noise_model=thermal_relaxation_model(T2=T2, t_cz=200),
+        noise_model=thermal_relaxation_model_V2(T2=T2, t_cz=200),
         memory=True,
         shots=n_shots
     ).result()
@@ -1033,7 +1033,7 @@ circ.measure(qb, readout)
 results = execute(
     circ,
     Aer.get_backend('qasm_simulator'),
-    noise_model=thermal_relaxation_model(),
+    noise_model=thermal_relaxation_model_V2(),
     memory=True,
     shots=100,
 ).result()
@@ -1091,7 +1091,7 @@ def get_fidelity_data(circ, correct_state, param_list, n_shots=2048):
     results = execute(
         circ,
         Aer.get_backend('qasm_simulator'),
-        noise_model=thermal_relaxation_model(T2=T2, t_cz=t_cz),
+        noise_model=thermal_relaxation_model_V2(T2=T2, t_cz=t_cz),
         memory=True,
         shots=n_shots
     ).result()
