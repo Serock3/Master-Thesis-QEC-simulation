@@ -1,13 +1,6 @@
-# This file contains all necessary functions for compiling and running the
-# [[5,1,3]] error correction code, both with or without flagging. Most functions
-# take optional arguments for whether to perform recovery, use flags, or reset
-# the ancilla qubit. An example of how to use the functions is shown at the
-# bottom.
-#
-# TODO:
-#   The advanced registers currently be used for recovery. Need to fix that,
-#   but it has the problem of flag-measurement being in a separate register
-#   and c_if can only be conditioned on one.
+"""This file contains functions for building the circuits necessary for running
+the [[5,1,3]] QEC code.
+"""
 
 # %% Import modules
 from IPython.display import display
@@ -34,7 +27,7 @@ from qiskit.quantum_info.states.statevector import Statevector
 
 
 class StabilizerRegisters:
-
+    """Defines a set of registers for running the [[5,1,3]] QEC circuit."""
     def __init__(self,
                  qbReg=QuantumRegister(5, 'code_qubit'),
                  anReg=AncillaRegister(2, 'ancilla_qubit'),
@@ -57,8 +50,7 @@ def get_registers(conditional=False, final_measure=False, n_cycles=0, reset=True
         # Advanced list of registers
         crReg = get_classical_register(n_cycles, reset, recovery, include_fifth_stabilizer)
     else:
-        crReg = ClassicalRegister(
-            4, 'syndrome_bit')  # The typical register
+        crReg = ClassicalRegister(4, 'syndrome_bit')  # The typical register
     if final_measure:
         readout = ClassicalRegister(5, 'readout')
         registers = StabilizerRegisters(qbReg, anReg, crReg, readout)
@@ -70,11 +62,62 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
                                 reset=True, recovery=False,
                                 snapshot_type='density_matrix',
                                 include_barriers=True, conditional=True,
-                                initial_state=0, encoding=True, theta=0, phi=0,
+                                encoding=True, theta=0, phi=0,
                                 generator_snapshot=False, idle_snapshots=0, pauliop='ZZZZZ', device=None,
                                 simulator_type='density_matrix', final_measure=True, **kwargs):
-    """Returns the circuit for a full repeating stabilizer circuit, including encoding,
-    n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
+    """Returns the circuit for a full repeating stabilizer circuit, including 
+    encoding, n_cycles of repeated stabilizers and final measurement. All parts
+    of the cycle are optional and can be changed using different args.
+
+    Args:
+        registers: StabilizerRegisters object containing the necessary quantum-
+                   and classical registers for the circuit. If left empty, it
+                   defaults to standard registers based on circuit settings.
+        n_cycles (int): The number of stabilizer cycles to perform. Defaults to 1.
+        reset (bool): Whether to reset the ancilla qubit after measurements.
+                      Defaults to True.
+        recovery (bool): Whether to perform error correcion at the end of cycle,
+                         based on the cycles measurement outcomes. Defaults to False.
+        snapshot_type (str): The type of snapshots to save of the qubit state at
+                             certain points in the cycle. Valid options are
+                             'density_matrix' ('dm'), 'expectation_value ('exp')
+                             or 'expectation_value_variance' ('exp_var'). For
+                             the latter two, the operator to measure expectation
+                             value for must be specified using the keyword 
+                             pauliop. Defaults to 'density_matrix'.
+        include_barriers (bool): Whether to insert barriers between sections of
+                                 the circuit, preventing gates to be moved past
+                                 them. This may help with robustness. Defaults
+                                 to True.
+        conditional (bool): Whether to condition snapshots on previous qubit
+                            measurements. Defaults to True.
+        encoding (bool): Whether to perform the encoding of qubits at the start.
+                         If set to False, the logical state will instead be
+                         perfectly initialized.
+        theta (float): Zenith angle of the qubit state. Defaults to 0.
+        phi (float): Azimuthal angle of the qubit state. Defaults to 0.
+        generator_snapshot (bool): Whether to append a snapshot after each
+                                   stabilizer measurement. If set to False, it
+                                   will only take snapshots after each cycle.
+        idle_snapshots (int): The number of snapshots to append during an
+                              (optional) delay time between cycles. Default to 0.
+        pauliop (str): Five character string corresponding to the five-qubit
+                       expectation value to measure (if snapshot_type is set to
+                       expectation value or expectation value variance).
+                       Defaults to 'ZZZZZ'.
+        device: Whether to conform the circuit to a specific device layout. 
+                Available options are None or 'double_diamond'. If set to None,
+                it will assume full connectivity. Note that this can also be
+                taken care of through transpilation. But specifying a device
+                here might help with specific circuits. Defaults to None.
+        simulator_type (str): The type of simulation to run. Can be either
+                              'statevector' or 'density_matrix'. Defaults to
+                              'density_matrix'.
+        final_measure (bool): Whether to perform a final measurement of the 
+                              five-qubit state after all stabilizer cycles.
+                              Defaults to True.
+    Returns:
+        circ: The resulting QuantumCircuit object
     """
     
     include_fifth_stabilizer=False
@@ -92,8 +135,8 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
     circ = get_empty_stabilizer_circuit(registers)
 
     if encoding:
-        # TODO: Using rx and rz messes with the transpiler. Make a better fix
-        if initial_state != 0:
+        # TODO: Using rx and rz messes with the transpiler. Make a better fix?
+        if theta != 0 or phi != 0:
             circ.rx(theta, registers.QubitRegister[0])
             circ.rz(phi, registers.QubitRegister[0])
         circ.compose(encode_input_v2(registers), inplace=True)
@@ -124,24 +167,54 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
     return circ
 
 
-def get_repeated_stabilization(registers, n_cycles=1,
-                               reset=True, recovery=False,
-                               snapshot_type='density_matrix',
-                               include_barriers=True, conditional=True, generator_snapshot=True,
+def get_repeated_stabilization(registers, n_cycles=1, reset=True, recovery=False,
+                               snapshot_type='density_matrix', include_barriers=True, 
+                               conditional=True, generator_snapshot=True,
                                pauliop='ZZZZZ', device=None, idle_delay='after', 
                                idle_snapshots=0,  **kwargs):
-    """Generates a circuit for repeated stabilizers. Including recovery and
-    fault tolerant flagged circuits of selected.
+    """Generates a circuit of repeated stabilizer measurements.
 
     Args:
-        registers (Register): Register object containing all registers
-        n_cycles (int, optional): Number of stabilizer circuits. Defaults to 1.
-        reset (bool, optional): Whether or not to reset ancillas. Defaults to True.
-        recovery (bool, optional): Whether or not to apply recovery operations. Defaults to False.
-        snapshot_type (str, optional): Type of snapshot (None,'statevector' or 'density_matrix'). Defaults to 'statevector'.
-
+        registers: StabilizerRegisters object containing the necessary quantum-
+                   and classical registers for the circuit.
+        n_cycles (int): The number of stabilizer cycles to perform. Defaults to 1.
+        reset (bool): Whether to reset the ancilla qubit after measurements.
+                      Defaults to True.
+        recovery (bool): Whether to perform error correcion at the end of cycle,
+                         based on the cycles measurement outcomes. Defaults to False.
+        snapshot_type (str): The type of snapshots to save of the qubit state at
+                             certain points in the cycle. Valid options are
+                             'density_matrix' ('dm'), 'expectation_value ('exp')
+                             or 'expectation_value_variance' ('exp_var'). For
+                             the latter two, the operator to measure expectation
+                             value for must be specified using the keyword 
+                             pauliop. Defaults to 'density_matrix'.
+        include_barriers (bool): Whether to insert barriers between sections of
+                                 the circuit, preventing gates to be moved past
+                                 them. This may help with robustness. Defaults
+                                 to True.
+        conditional (bool): Whether to condition snapshots on previous qubit
+                            measurements. Defaults to True.
+        generator_snapshot (bool): Whether to append a snapshot after each
+                                   stabilizer measurement. If set to False, it
+                                   will only take snapshots after each cycle.
+        idle_snapshots (int): The number of snapshots to append during an
+                              (optional) delay time between cycles. Default to 0.
+        pauliop (str): Five character string corresponding to the five-qubit
+                       expectation value to measure (if snapshot_type is set to
+                       expectation value or expectation value variance).
+                       Defaults to 'ZZZZZ'.
+        device: Whether to conform the circuit to a specific device layout. 
+                Available options are None or 'double_diamond'. If set to None,
+                it will assume full connectivity. Note that this can also be
+                taken care of through transpilation. But specifying a device
+                here might help with specific circuits. Defaults to None.
+        idle_delay (str): Where to put (optional) idle delay in a cycle. Can be
+                          either 'before' or 'after'. Defaults to 'after'. Note
+                          that the delay must be introduced through a noise
+                          model, and will otherwise be 0 ns.
     Returns:
-        QuantumCircuit: The resulting circuit
+        circ: The resulting QuantumCircuit object
     """
 
     circ = get_empty_stabilizer_circuit(registers)
@@ -152,7 +225,7 @@ def get_repeated_stabilization(registers, n_cycles=1,
                              qubits=registers.QubitRegister, conditional=conditional,
                              pauliop=pauliop, include_barriers=include_barriers)
                              
-        elif device == 'double_diamond':
+        if device == 'double_diamond':
             circ.compose(transpiled_dd_cycle(registers,
                                              reset=reset,
                                              recovery=recovery,
@@ -269,10 +342,9 @@ def get_snapshot_label(snapshot_type, conditional, current_cycle):
 
 
 def get_empty_stabilizer_circuit(registers, final_measure=True):
-    """Create an empty qiskit circuit adapted for stabilizer circuits"""
+    """Create an empty Qiskit adapted for stabilizer circuits."""
 
     # Unpack registers
-    # qbReg, anReg, clReg, readout = registers
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
     clReg = registers.SyndromeRegister
@@ -290,7 +362,8 @@ def get_empty_stabilizer_circuit(registers, final_measure=True):
     return circ
 
 
-def get_classical_register(n_cycles, reset=True, recovery=False, include_fifth_stabilizer = False):
+def get_classical_register(n_cycles, reset=True, recovery=False, 
+                           include_fifth_stabilizer=False):
     """Generate lists of classical registers for storing all measurement data
     in a full stabilizer circuit.
 
@@ -324,7 +397,9 @@ def get_classical_register(n_cycles, reset=True, recovery=False, include_fifth_s
 
 # %% Delay
 
-def add_delay_marker(circ, registers, snapshots=0, snapshot_type='dm', qubits=None, conditional=False, pauliop='ZZZZZ', include_barriers=True):
+def add_delay_marker(circ, registers, snapshots=0, snapshot_type='dm', 
+                     qubits=None, conditional=False, pauliop='ZZZZZ', 
+                     include_barriers=True):
     """Add a custom gate that does nothing but mark where delay time should be inserted, which is picked up by the noise model.
     It can also divide this idle time into partitions and put a number of snapshots after each of them.
     """
@@ -335,9 +410,6 @@ def add_delay_marker(circ, registers, snapshots=0, snapshot_type='dm', qubits=No
     else:
         gate_name = 'delay'
 
-    # sub_circ = QuantumCircuit(1, name=gate_name)
-    # sub_circ.id(0)
-    # sub_inst = sub_circ.to_instruction()
 
     for _ in range(partitions):
         for qb in registers.QubitRegister:
@@ -388,8 +460,6 @@ def encode_input(registers):
 def encode_input_v2(registers, include_barriers=True):
     """Encode the input into logical 0 and 1 for the [[5,1,3]] code. This
     assumes that the 0:th qubit is the original state |psi> = a|0> + b|1>.
-
-    Alternate version Basudha found on stackoverflow.
     """
 
     qbReg = registers.QubitRegister
@@ -423,7 +493,18 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
     """Gives an encoding circuit following the connectivity of a hexagonal
     device, including swapping the ancilla into position afterwards. Note that
     this should be used with caution, as the iswaps are not 'tracked' as when
-    using a transpiler, and permutations are not undone at snapshots."""
+    using a transpiler, and permutations are not undone at snapshots.
+    
+    Args:
+        registers: StabilizerRegisters object.
+        include_barriers (bool): Whether to insert barriers between sections of
+                                 the circuit, preventing gates to be moved past
+                                 them. Defaults to True.
+        iswap (bool): Whether to use the iSWAP gate for swapping qubit position.
+                      If set to False, a series of 3 CZ gates is instead used.
+    Returns:
+        circ: QuantumCircuit object for the circuit.
+    """
 
     # Create a circuit
     qbReg = registers.QubitRegister
@@ -452,8 +533,6 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
         circ.u1(-np.pi/2, qbReg[3])
     else:
         # Swap without iSwap
-        #circ.u1(np.pi/2, qbReg[0])
-        #circ.u1(np.pi/2, qbReg[3])
         circ.h(qbReg[0])
         circ.h(qbReg[3])
         circ.cz(qbReg[0], qbReg[3])
@@ -463,8 +542,6 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
         circ.h(qbReg[0])
         circ.h(qbReg[3])
         circ.cz(qbReg[0], qbReg[3])
-        #circ.u1(-np.pi/2, qbReg[0])
-        #circ.u1(-np.pi/2, qbReg[3])
 
     circ.cz(qbReg[0], qbReg[2])
     circ.cz(qbReg[1], qbReg[2])
@@ -480,8 +557,6 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
         circ.u1(-np.pi/2, anReg[1])
     else:
         # Swap without iSwap
-        #circ.u1(np.pi/2, qbReg[0])
-        #circ.u1(np.pi/2, anReg[1])
         circ.h(qbReg[0])
         circ.h(anReg[1])
         circ.cz(qbReg[0], anReg[1])
@@ -491,8 +566,6 @@ def transpiled_encoding_WACQT(registers, include_barriers=True, iswap=True):
         circ.h(qbReg[0])
         circ.h(anReg[1])
         circ.cz(qbReg[0], anReg[1])
-        #circ.u1(-np.pi/2, qbReg[0])
-        #circ.u1(-np.pi/2, anReg[1])
     if include_barriers:
         circ.barrier()
     return circ
@@ -502,7 +575,19 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
     """Gives an encoding circuit following the connectiity of a square grid
     device, including swapping the ancilla into position afterwards. Note that
     this should be used with caution, as the iswaps are not 'tracked' as when
-    using a transpiler, and permutations are not undone at snapshots."""
+    using a transpiler, and permutations are not undone at snapshots.
+    
+    Args:
+        registers: StabilizerRegisters object.
+        include_barriers (bool): Whether to insert barriers between sections of
+                                 the circuit, preventing gates to be moved past
+                                 them. Defaults to True.
+        iswap (bool): Whether to use the iSWAP gate for swapping qubit position.
+                      If set to False, a series of 3 CZ gates is instead used.
+    Returns:
+        circ: QuantumCircuit object for the circuit.
+    """
+    
     # Create a circuit
     qbReg = registers.QubitRegister
     anReg = registers.AncillaRegister
@@ -526,8 +611,6 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.u1(-np.pi/2, qbReg[2])
     else:
         # Swap without iSwap
-        #circ.u1(np.pi/2, qbReg[0])
-        #circ.u1(np.pi/2, qbReg[2])
         circ.h(qbReg[0])
         circ.h(qbReg[2])
         circ.cz(qbReg[0], qbReg[2])
@@ -537,8 +620,6 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.h(qbReg[0])
         circ.h(qbReg[2])
         circ.cz(qbReg[0], qbReg[2])
-        #circ.u1(-np.pi/2, qbReg[0])
-        #circ.u1(-np.pi/2, qbReg[2])
 
     circ.cz(qbReg[0], qbReg[3])
     circ.cz(qbReg[2], qbReg[4])
@@ -550,8 +631,6 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.u1(-np.pi/2, qbReg[1])
     else:
         # Swap without iSwap
-        #circ.u1(np.pi/2, qbReg[0])
-        #circ.u1(np.pi/2, qbReg[1])
         circ.h(qbReg[0])
         circ.h(qbReg[1])
         circ.cz(qbReg[0], qbReg[1])
@@ -561,8 +640,6 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.h(qbReg[0])
         circ.h(qbReg[1])
         circ.cz(qbReg[0], qbReg[1])
-        #circ.u1(-np.pi/2, qbReg[0])
-        #circ.u1(-np.pi/2, qbReg[1])
 
     circ.cz(qbReg[3], qbReg[4])
     circ.h(qbReg[2])
@@ -579,8 +656,6 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.u1(-np.pi/2, anReg[1])
     else:
         # Swap without iSwap
-        #circ.u1(np.pi/2, qbReg[0])
-        #circ.u1(np.pi/2, anReg[1])
         circ.h(qbReg[0])
         circ.h(anReg[1])
         circ.cz(qbReg[0], anReg[1])
@@ -590,8 +665,7 @@ def transpiled_encoding_DD(registers, include_barriers=True, iswap=True):
         circ.h(qbReg[0])
         circ.h(anReg[1])
         circ.cz(qbReg[0], anReg[1])
-        #circ.u1(-np.pi/2, qbReg[0])
-        #circ.u1(-np.pi/2, anReg[1])
+
     if include_barriers:
         circ.barrier()
     return circ
@@ -663,6 +737,8 @@ def get_encoded_state(theta, phi, include_ancillas='back'):
     Args:
         theta (float): Zenith angle.
         phi (float): Azimuthal angle.
+        include_ancillas (str): Where and if to include any ancillas in the
+                                density matrix.
 
     Returns:
         The encoded state plus two ancilla in 0 state, as a 128x128 numpy array.
