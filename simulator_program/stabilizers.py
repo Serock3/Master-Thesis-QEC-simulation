@@ -68,7 +68,7 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
                                 snapshot_type='density_matrix',
                                 include_barriers=True, conditional=True,
                                 initial_state=0, encoding=True, theta=0, phi=0,
-                                generator_snapshot=True, pauliop='ZZZZZ', device=None,
+                                generator_snapshot=False, idle_snapshots=0, pauliop='ZZZZZ', device=None,
                                 simulator_type='density_matrix', final_measure=True, **kwargs):
     """Returns the circuit for a full repeating stabilizer circuit, including encoding,
     n_cycles of repeated stabilizers (with optional flags and recovery) and final measurement.
@@ -110,6 +110,7 @@ def get_full_stabilizer_circuit(registers=None, n_cycles=1,
                                             snapshot_type=snapshot_type,
                                             conditional=conditional,
                                             generator_snapshot=generator_snapshot,
+                                            idle_snapshots=idle_snapshots,
                                             include_barriers=include_barriers,
                                             pauliop=pauliop, device=device,
                                             **kwargs), inplace=True)
@@ -125,7 +126,7 @@ def get_repeated_stabilization(registers, n_cycles=1,
                                flag=False, snapshot_type='density_matrix',
                                include_barriers=True, conditional=True, generator_snapshot=True,
                                pauliop='ZZZZZ', device=None, idle_delay='after', 
-                               idle_snapshots=1,  **kwargs):
+                               idle_snapshots=0,  **kwargs):
     """Generates a circuit for repeated stabilizers. Including recovery and
     fault tolerant flagged circuits of selected.
 
