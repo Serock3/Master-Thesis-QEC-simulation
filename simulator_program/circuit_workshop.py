@@ -88,12 +88,11 @@ def verify_transpilation(circ, transpiled_circuit, n_cycles):
 # %% Transpile the (v2) encoding circuit for [[5,1,3]]
 n_cycles = 3
 reset = True
-flag = False
 recovery = True
 
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
-cr = get_classical_register(n_cycles, flag=flag) # Advanced list of registers
+cr = get_classical_register(n_cycles) # Advanced list of registers
 registers = StabilizerRegisters(qb, an, cr)
 # circ = QuantumCircuit()
 # circ += encode_input_v2(registers)

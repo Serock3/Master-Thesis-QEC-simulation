@@ -35,7 +35,7 @@ n_shots = 1024
 qb = QuantumRegister(5, 'code_qubit')
 an = AncillaRegister(2, 'ancilla_qubit')
 cr = get_classical_register(n_cycles, reset=reset,
-                            recovery=recovery, flag=False)
+                            recovery=recovery)
 readout = ClassicalRegister(5, 'readout')
 registers = StabilizerRegisters(qb, an, cr, readout)
 
@@ -47,7 +47,7 @@ registers = StabilizerRegisters(qb, an, cr, readout)
 #                                 reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
 
 circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=reset,
-                                   recovery=recovery, flag=False,
+                                   recovery=recovery,
                                    snapshot_type='dm',
                                    conditional=True,
                                    encoding=False, theta=0, phi=0)

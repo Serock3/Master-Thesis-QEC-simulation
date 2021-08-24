@@ -219,13 +219,13 @@ if __name__ == "__main__":
     from qiskit.quantum_info import DensityMatrix
     reset = True
     recovery = False
-    flag = False
+    
     n_cycles = 3
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
     # cr = ClassicalRegister(4, 'syndrome_bit') # The typical register
     cr = get_classical_register(n_cycles, reset=reset,
-                                recovery=recovery, flag=False)
+                                recovery=recovery)
     readout = ClassicalRegister(5, 'readout')
 
     registers = StabilizerRegisters(qb, an, cr, readout)
@@ -244,7 +244,7 @@ if __name__ == "__main__":
     # circ.append(Snapshot('stabilizer_0', 'density_matrix', num_qubits=5), qb)
     # circ.draw()
     circ += get_repeated_stabilization(registers, n_cycles=n_cycles,
-                                       reset=reset, recovery=recovery, flag=flag, snapshot_type='density_matrix')
+                                       reset=reset, recovery=recovery, snapshot_type='density_matrix')
 
     n_shots = 10
     results = execute(
