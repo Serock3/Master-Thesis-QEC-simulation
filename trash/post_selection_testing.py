@@ -71,7 +71,7 @@ def get_full_stabilizer_circuit(registers, n_cycles=1,
                                              current_cycle=current_cycle,
                                              )
         else:
-            circ += unflagged_stabilizer_cycle(registers,
+            circ += get_stabilizer_cycle(registers,
                                                reset=reset,
                                                recovery=recovery,
                                                current_cycle=current_cycle
@@ -244,28 +244,28 @@ def flagged_stabilizer_cycle(registers, reset=True, recovery=True,
 
     # === Step 1: XZZXI ===
     circ += _flagged_stabilizer_XZZXI(registers, reset, current_cycle)
-    circ += unflagged_stabilizer_cycle(registers, reset, recovery=False,
+    circ += get_stabilizer_cycle(registers, reset, recovery=False,
                                        current_cycle=current_cycle, current_step=0)
     if recovery:
         circ += full_recovery_XZZXI(registers, reset, current_cycle, 0)
 
     # === Step 2: IXZZX ===
     circ += _flagged_stabilizer_IXZZX(registers, reset, current_cycle)
-    circ += unflagged_stabilizer_cycle(registers, reset, recovery=False,
+    circ += get_stabilizer_cycle(registers, reset, recovery=False,
                                        current_cycle=current_cycle, current_step=1)
     if recovery:
         circ += full_recovery_IXZZX(registers, reset, current_cycle, 1)
 
     # === Step 3: XIXZZ ===
     circ += _flagged_stabilizer_XIXZZ(registers, reset, current_cycle)
-    circ += unflagged_stabilizer_cycle(registers, reset, recovery=False,
+    circ += get_stabilizer_cycle(registers, reset, recovery=False,
                                        current_cycle=current_cycle, current_step=2)
     if recovery:
         circ += full_recovery_XIXZZ(registers, reset, current_cycle, 2)
 
     # === Step 4: ZXIXZ ===
     circ += _flagged_stabilizer_ZXIXZ(registers, reset, current_cycle)
-    circ += unflagged_stabilizer_cycle(registers, reset, recovery=False,
+    circ += get_stabilizer_cycle(registers, reset, recovery=False,
                                        current_cycle=current_cycle, current_step=3)
     if recovery:
         circ += full_recovery_ZXIXZ(registers, reset, current_cycle, 3)
@@ -503,7 +503,7 @@ def _flagged_stabilizer_ZXIXZ(registers, reset=True, current_cycle=0):
 
 
 # %% All unflagged stabilizers
-def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
+def get_stabilizer_cycle(registers, reset=True, recovery=False,
                                current_cycle=0, current_step=0):
     """Run all four stabilizers without flags, as well as an optional
     recovery. The input current_step is only relevant for flagged cycles, and
@@ -512,23 +512,23 @@ def unflagged_stabilizer_cycle(registers, reset=True, recovery=False,
     # Create circuit and run stabilizers
     circ = get_empty_stabilizer_circuit(registers)
     # circ.x(qb[3])
-    circ += _unflagged_stabilizer_XZZXI(registers, reset=reset,
+    circ += _get_stabilizer_XZZXI(registers, reset=reset,
                                         current_cycle=current_cycle, current_step=current_step)
-    circ += _unflagged_stabilizer_IXZZX(registers, reset=reset,
+    circ += _get_stabilizer_IXZZX(registers, reset=reset,
                                         current_cycle=current_cycle, current_step=current_step)
-    circ += _unflagged_stabilizer_XIXZZ(registers, reset=reset,
+    circ += _get_stabilizer_XIXZZ(registers, reset=reset,
                                         current_cycle=current_cycle, current_step=current_step)
-    circ += _unflagged_stabilizer_ZXIXZ(registers, reset=reset,
+    circ += _get_stabilizer_ZXIXZ(registers, reset=reset,
                                         current_cycle=current_cycle, current_step=current_step)
 
     # Recovery
     if recovery is True:
-        circ += unflagged_recovery(registers, reset, current_cycle)
+        circ += get_recovery(registers, reset, current_cycle)
 
     return circ
 
 
-def _unflagged_stabilizer_XZZXI(registers, reset=True,
+def _get_stabilizer_XZZXI(registers, reset=True,
                                 current_cycle=0, current_step=0):
     """Gives the circuit for running the regular XZZXI stabilizer without flag.
     The current_step input should be set to zero unless running flagged cycles.
@@ -576,7 +576,7 @@ def _unflagged_stabilizer_XZZXI(registers, reset=True,
     return circ
 
 
-def _unflagged_stabilizer_IXZZX(registers, reset=True,
+def _get_stabilizer_IXZZX(registers, reset=True,
                                 current_cycle=0, current_step=0):
     """Gives the circuit for running the regular IXZZX stabilizer without flag.
     The current_step input should be set to zero unless running flagged cycles.
@@ -624,7 +624,7 @@ def _unflagged_stabilizer_IXZZX(registers, reset=True,
     return circ
 
 
-def _unflagged_stabilizer_XIXZZ(registers, reset=True,
+def _get_stabilizer_XIXZZ(registers, reset=True,
                                 current_cycle=0, current_step=0):
     """Gives the circuit for running the regular XIXZZ stabilizer without flag.
     The current_step input should be set to zero unless running flagged cycles.
@@ -670,7 +670,7 @@ def _unflagged_stabilizer_XIXZZ(registers, reset=True,
     return circ
 
 
-def _unflagged_stabilizer_ZXIXZ(registers, reset=True,
+def _get_stabilizer_ZXIXZ(registers, reset=True,
                                 current_cycle=0, current_step=0):
     """Gives the circuit for running the regular ZXIXZ stabilizer without flag.
     The current_step input should be set to zero unless running flagged cycles.
@@ -1022,7 +1022,7 @@ recovery = False
 
 circ.x(qb[0])
 circ += encode_input_v2(registers)
-circ += unflagged_stabilizer_cycle(registers,
+circ += get_stabilizer_cycle(registers,
                                    reset=reset,
                                    recovery=recovery
                                    )

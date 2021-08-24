@@ -25,7 +25,7 @@ from simulator_program.custom_noise_models import thermal_relaxation_model_V2, p
 from simulator_program.custom_transpiler import *
 from simulator_program.stabilizers import *
 
-from simulator_program.stabilizers import _unflagged_stabilizer_XZZXI
+from simulator_program.stabilizers import _get_stabilizer_XZZXI
 # %% =================  Testing noise model + stabilizer ======================
 # DEFINE AND TRANSPILE THE CIRCUIT
 
@@ -45,7 +45,7 @@ recovery = False
 
 circ = encode_input_v2(registers)
 circ.z(qb[3])  # Added manual error to correct, should induce syndrome 1
-circ += unflagged_stabilizer_cycle(registers,
+circ += get_stabilizer_cycle(registers,
                                    reset=reset,
                                    recovery=recovery
                                    )
@@ -123,7 +123,7 @@ for errors in syndrome_table:
     for ops in errors:
         # Added manual error to correct, should induce syndrome 1
         circ.append(ops[0](), [ops[1]])
-    circ += unflagged_stabilizer_cycle(registers,
+    circ += get_stabilizer_cycle(registers,
                                        reset=reset,
                                        recovery=recovery
                                        )
@@ -218,7 +218,7 @@ registers = StabilizerRegisters(qb, an, cr, readout)
 circ = encode_input_v2(registers)
 circ.z(qb[3])
 
-circ += unflagged_stabilizer_cycle(registers,
+circ += get_stabilizer_cycle(registers,
                                    reset=reset,
                                    recovery=recovery,
                                    current_cycle=0
@@ -228,7 +228,7 @@ circ.barrier()
 circ.append(Snapshot('stabilizer_0', 'statevector', num_qubits=5), qb)
 circ.barrier()
 circ.x(qb[4])
-circ += unflagged_stabilizer_cycle(registers,
+circ += get_stabilizer_cycle(registers,
                                    reset=reset,
                                    recovery=recovery,
                                    current_cycle=1
@@ -238,7 +238,7 @@ circ.barrier()
 circ.append(Snapshot('stabilizer_1', 'statevector', num_qubits=5), qb)
 circ.barrier()
 circ.x(qb[2])
-circ += unflagged_stabilizer_cycle(registers,
+circ += get_stabilizer_cycle(registers,
                                    reset=reset,
                                    recovery=recovery,
                                    current_cycle=2

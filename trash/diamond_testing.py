@@ -32,7 +32,7 @@ recovery=False
 #circ.x(qb[0])
 circ += encode_input_v2(registers)
 
-circ += unflagged_stabilizer_cycle(registers,
+circ += get_stabilizer_cycle(registers,
     reset=reset,
     recovery=recovery
 )

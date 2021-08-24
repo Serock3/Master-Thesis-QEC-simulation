@@ -58,7 +58,7 @@ for cycle in range(n_cycles):
         circ = get_empty_stabilizer_circuit(registers)
         circ.set_density_matrix(dm_with_an)
         #circ.set_density_matrix(get_encoded_state(0,0))
-        circ.compose(unflagged_stabilizer_cycle(registers),inplace=True)
+        circ.compose(get_stabilizer_cycle(registers),inplace=True)
         circ.draw(output='mpl')
         results = execute(
             circ,
@@ -73,7 +73,7 @@ for cycle in range(n_cycles):
 registers = StabilizerRegisters()
 circ = get_empty_stabilizer_circuit(registers)
 circ.set_density_matrix(dm_with_an)
-circ.compose(unflagged_stabilizer_cycle(registers),inplace=True)
+circ.compose(get_stabilizer_cycle(registers),inplace=True)
 circ.draw(output='mpl')
 
 

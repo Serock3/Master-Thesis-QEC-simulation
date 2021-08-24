@@ -425,7 +425,7 @@ def temp_dd_cycle(registers, current_cycle=0, current_step=0, reset=True,
     # Recovery
     if recovery is True:
         circ.barrier()
-        circ.compose(unflagged_recovery(
+        circ.compose(get_recovery(
             registers, reset, current_cycle), inplace=True)
         circ.barrier()
     return circ
@@ -1143,7 +1143,7 @@ for reg in circ.qubits:
     circ.append(thrm_relax, [reg])
 
 for current_cycle in range(n_cycles):
-    circ.compose(unflagged_stabilizer_cycle(registers, reset=reset, recovery=recovery,
+    circ.compose(get_stabilizer_cycle(registers, reset=reset, recovery=recovery,
                                             current_cycle=current_cycle, current_step=0,
                                             include_barriers=include_barriers), inplace=True)
     add_snapshot_to_circuit(circ, snapshot_type=snapshot_type, current_cycle=current_cycle+1,
