@@ -5,6 +5,7 @@
 # %% Import modules
 #import seaborn as sns
 #import matplotlib.pyplot as plt
+import pickle
 import numpy as np
 import scipy
 import itertools
@@ -75,6 +76,53 @@ def default_execute(circ, shots=None, noise_model=None, gate_times={}, T1=40e3, 
 
     return simulator.run(circ, shots=shots).result()
 
+def default_simulate(kwargs, T1, T2, gate_times, noise_model = None):
+    """
+    Creates and simulates a circuit with idle noise applied.
+    """
+    print('Simulating new data')
+    # Create circuit
+    circ = get_full_stabilizer_circuit(**kwargs)
+    circ, times = add_idle_noise_to_circuit(
+        circ, gate_times, T1=T1, T2=T2, return_time=True)
+
+    # Run it
+    if noise_model is None:
+        noise_model = thermal_relaxation_model_V2(
+            T1=T1, T2=T2, gate_times=gate_times)
+    results = default_execute(
+        circ, n_shots, gate_times=gate_times, noise_model=noise_model)
+    return results, times
+
+def default_simulate_persist_to_file(kwargs, T1, T2, gate_times, noise_model = None, file_name = 'decoding_data/cache.dat', overwrite=False):
+    """
+    Calls default_simulate
+    """
+    try:
+        cache = pickle.load(open(file_name, "rb"))
+    except (IOError, ValueError):
+        cache = {}
+
+    key = (frozenset(kwargs.items()), str(T1), str(
+        T2), frozenset(gate_times.gate_times.items()))
+    if key not in cache or overwrite:
+        cache[key] = default_simulate(kwargs, T1, T2, gate_times, noise_model)
+        pickle.dump(cache, open(file_name, "wb"))
+    else:
+        print('Loading simulation results from file')
+    return cache[key]
+
+
+def check_if_saved(kwargs, T1, T2, gate_times, file_name='decoding_data/cache.dat'):
+    key = (frozenset(kwargs.items()), str(T1), str(
+        T2), frozenset(gate_times.gate_times.items()))
+    return key in pickle.load(open(file_name, "rb"))
+
+def print_saved_runs(file_name = 'decoding_data/cache.dat'):
+    for key in pickle.load(open(file_name, "rb")):
+        print(key[0])
+        print(key[1])
+        print(key[3], '\n')
 
 def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                           reset=True, data_process_type='recovery', idle_noise=True, transpile=True,
