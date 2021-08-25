@@ -18,7 +18,7 @@ from qiskit.quantum_info import Statevector
 from qiskit.quantum_info.operators import Operator
 from qiskit.providers.aer.noise import kraus_error
 
-from .stabilizers import get_encoded_state_422
+from .stabilizers_422 import get_encoded_state_422
 #%% 
 def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3,
                           theta=0, phi=0, pauliop='Z'):
