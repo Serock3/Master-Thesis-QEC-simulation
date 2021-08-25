@@ -11,7 +11,7 @@
 
 # %% Import modules
 from IPython.display import display
-from qiskit.quantum_info import (state_fidelity, Pauli)
+from qiskit.quantum_info import Pauli
 import numpy as np
 from qiskit import (QuantumCircuit,
                     QuantumRegister,
@@ -20,6 +20,7 @@ from qiskit import (QuantumCircuit,
                     execute,
                     Aer
                     )
+# These imports need to be included even if they are unused, or you will get linter errors
 from qiskit.providers.aer.library import set_density_matrix, set_statevector
 from qiskit.circuit import measure, reset
 from qiskit.providers.aer.library import save_density_matrix, save_expectation_value
