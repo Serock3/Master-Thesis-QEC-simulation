@@ -56,13 +56,7 @@ def get_partial_stab_cycle(registers=None, stabilizers=[]):
         circ: QuantumCircuit object for the extra stabilizer run.
     """
     if registers is None:
-        registers = get_registers(conditional, final_measure)
-
-    # Define registers
-    #qbReg = QuantumRegister(5, 'code_qubit')
-    #anReg = AncillaRegister(2, 'ancilla_qubit')
-    # crReg = ClassicalRegister(len(stabilizers), 'syndrome_bit')  # The typical register
-    #registers = StabilizerRegisters(qbReg, anReg, crReg, None)
+        registers = get_registers()
     circ = get_empty_stabilizer_circuit(registers)
 
     stabilizer_list = [_get_stabilizer_XZZXI,
