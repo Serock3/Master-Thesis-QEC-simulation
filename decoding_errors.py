@@ -214,9 +214,6 @@ def plot_overlap(results, times, n_cycles, idle_snapshots, generator_snapshot, t
     plt.show()
     # fig.savefig('subspace.pdf', transparent=True)
 
-# %% Test plotting all keys in second cycle starting with a specific syndrome in the first cycle
-
-
 def plot_correction_matrix(results, previous_keys=None, backtrack_measurement=0, check_overlap_to_distance_1=False, print_fidelity = False, include_fifth_stabilizer=False, **kwargs):
     if previous_keys is None:
         previous_keys = []
@@ -225,8 +222,6 @@ def plot_correction_matrix(results, previous_keys=None, backtrack_measurement=0,
     num_stab_gens = 4 + include_fifth_stabilizer
     pre_recovery_index = get_cycle_indices(
         **kwargs)[overlap_cycle]-1 - backtrack_measurement
-    # counts = post_select.get_subsystem_counts_up_to_cycle(
-    #     results.get_counts(), overlap_cycle+1)
     counts = post_select.get_subsystem_counts_up_to_snapshot(
         results.get_counts(), num_stab_gens*(overlap_cycle+1)-backtrack_measurement)
     label = get_snapshot_label('dm', True, pre_recovery_index)
@@ -324,7 +319,9 @@ def plot_correction_matrix(results, previous_keys=None, backtrack_measurement=0,
     cbar0 = fig.colorbar(HM, ax=ax, orientation='horizontal',
                          fraction=.06, pad=0.25)
     fig.suptitle(
-        "Fidelity to the 32 basis states conditioned on stabilizer measurements\nSnapshot taken after measuring the stabilizers but before correction")
+        "Fidelity to the 32 basis states conditioned on stabilizer measurements\n\
+        Snapshot taken after measuring the stabilizers but before correction"\
+            +("\nPost-selecting previous syndrome(s) "+str(*previous_keys) if overlap_cycle > 0 else ""))
     ax.set_xlabel('Basis states, labeled by their eigenvalues to the stabilizers\n' +
                   r"Left: distance $\leq$ 1 from $|0\rangle$. Right: distance $\geq$ 2 from $|0\rangle$")
     ax.set_ylabel("Simulation state\n conditioned on stabilizer measurements")
@@ -332,9 +329,7 @@ def plot_correction_matrix(results, previous_keys=None, backtrack_measurement=0,
     plt.show()
     fig.savefig('matrix.png', transparent=True)
 
-# %% Plot how the 32 different basis states (labeled by syndrome plus Z_L) map onto eachother from the 16 corrections
-
-
+#  Plot how the 32 different basis states (labeled by syndrome plus Z_L) map onto eachother from the 16 corrections
 def plot_error_multiplication_table(plot_gradient=False):
     # Gives every basis state it's one gradient
     mappings = get_basis_mapping_table()
