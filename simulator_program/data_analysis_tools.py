@@ -3,35 +3,36 @@
 # more readable.
 
 # %% Import modules
+import warnings
 #import seaborn as sns
 #import matplotlib.pyplot as plt
 import pickle
 import numpy as np
-from qiskit import *
+from qiskit import Aer, execute, QuantumCircuit, QuantumRegister, AncillaRegister, ClassicalRegister
 #from qiskit.visualization import plot_histogram
 
 # Import from Qiskit Aer noise module
 from qiskit.providers.aer.noise import thermal_relaxation_error
-from qiskit.quantum_info import state_fidelity
+from qiskit.quantum_info import state_fidelity, Pauli
 
 # Our own files
 if __package__:
     from .custom_noise_models import (thermal_relaxation_model_V2,
                                       standard_times,
-                                     extend_standard_gate_times)
-    from .custom_transpiler import *
+                                      extend_standard_gate_times, 
+                                      GateTimes)
     from .stabilizers import *
-    from .post_select import *
-    from .post_process import *
-    from .idle_noise import *
+    from .post_select import get_trivial_post_select_counts, get_trivial_post_select_den_mat, get_trivial_exp_value
+    from .post_process import get_states_and_counts
+    from .idle_noise import add_idle_noise_to_circuit, get_circuit_time
 else:
     from custom_noise_models import (thermal_relaxation_model_V2,
                                      standard_times,
-                                     extend_standard_gate_times)
-    from custom_transpiler import *
+                                     extend_standard_gate_times, 
+                                     GateTimes)
     from stabilizers import *
-    from post_select import *
-    from post_process import *
+    from post_select import get_trivial_post_select_counts, get_trivial_post_select_den_mat, get_trivial_exp_value
+    from post_process import get_states_and_counts
     from idle_noise import add_idle_noise_to_circuit, get_circuit_time
 # %%
 
@@ -136,7 +137,7 @@ def print_saved_runs(file_name='decoding_data/cache.dat'):
 
 def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                           reset=True, data_process_type='recovery', idle_noise=True, transpile=True,
-                          snapshot_type='dm', device=None, device_properties=WACQT_device_properties,
+                          snapshot_type='dm', device=None, device_properties=None,
                           encoding=True, theta=0, phi=0, pauliop='ZZZZZ', simulator_type='density_matrix',
                           project=False, generator_snapshot=False, idle_snapshots=0, **kwargs):
     """TODO: Update this description
@@ -230,7 +231,13 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                                        idle_snapshots=idle_snapshots,
                                        simulator_type=simulator_type, final_measure=False, **kwargs)
     if transpile:
-        circ = shortest_transpile_from_distribution(circ, print_cost=False,
+        if __package__:
+            from . import custom_transpiler
+        else:
+            import custom_transpiler 
+        if device_properties == None:
+            device_properties = custom_transpiler.WACQT_device_properties
+        circ = custom_transpiler.shortest_transpile_from_distribution(circ, print_cost=False,
                                                     **device_properties)
     if idle_noise:
         circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
@@ -385,7 +392,7 @@ def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
                                        recovery=False,
                                        snapshot_type=snapshot_type,
                                        conditional=False, **kwargs)
-    circ = shortest_transpile_from_distribution(circ, print_cost=False)
+    circ = custom_transpiler.shortest_transpile_from_distribution(circ, print_cost=False)
     circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
                                            return_time=True)
 
