@@ -36,12 +36,14 @@ else:
 # %%
 
 
-def default_execute(circ, shots=None, noise_model=None, gate_times={}, T1=40e3, T2=60e3, simulator_name='qasm_simulator', simulator_method='density_matrix'):
-    """Execute with our standard settings. Use this to make sure that the noise model i applied to delays.
+def default_execute(circ, shots=None, noise_model=None, gate_times={}, T1=40e3, T2=60e3,
+                    simulator_name='qasm_simulator', simulator_method='density_matrix'):
+    """Run simulation with our standard settings.
 
     Args:
-        circ (Circuit): circuit
-        noise_model (NoiseMode, optional): defaults to thermal_relaxation_model_V2.
+        circ (Circuit): QuantumCircuit object to run.
+        shots (int): Number of runs to perform.
+        noise_model (NoiseModel, optional): defaults to thermal_relaxation_model_V2.
         gate_times (dict, optional)
         T1 ([type], optional): Defaults to 40e3.
         T2 ([type], optional):  Defaults to 60e3.
@@ -64,7 +66,14 @@ def default_execute(circ, shots=None, noise_model=None, gate_times={}, T1=40e3, 
         print('Invalid simulator type, defaulting to density_matrix')
         simulator.set_option('method', 'density_matrix')
 
-    return simulator.run(circ, shots=shots).result()
+    # Run simulation
+    results = simulator.run(circ, shots=shots).result()
+    if results.success:
+        return results
+    else:
+        print('WARNING: simulator.run() failed, attempting execute instead.')
+        results = execute(circ, simulator, noise_model=noise_model,shots=shots).result()
+        return results
 
 
 def default_simulate(kwargs, T1, T2, gate_times, n_shots=1024, noise_model=None):
@@ -86,7 +95,8 @@ def default_simulate(kwargs, T1, T2, gate_times, n_shots=1024, noise_model=None)
     return results, times
 
 
-def default_simulate_persist_to_file(kwargs, T1, T2, gate_times, n_shots=1024, noise_model=None, file_name='decoding_data/cache.dat', overwrite=False, save_to_file=True):
+def default_simulate_persist_to_file(kwargs, T1, T2, gate_times, n_shots=1024, noise_model=None, 
+                                     file_name='decoding_data/cache.dat', overwrite=False, save_to_file=True):
     """Functionally the same as default_simulate, but loads data from file if it exists.
     Otherwise, it saves it to file.
 
@@ -196,21 +206,6 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
         recovery = False
         conditional = False
 
-    # TODO: Delete these
-    # Noise model
-    # noise_model = thermal_relaxation_model_V2(
-    #     T1=T1, T2=T2, gate_times=full_gate_times)
-    # The code below is used to experiment with the nois model
-    # noise_model = thermal_relaxation_model_per_qb(
-    #     T1=[T1]*7, T2=[T2]*7, gate_times=full_gate_times)
-    # This remove
-    # noise_model = thermal_relaxation_model_per_qb(
-    #     T1=[T1]*5+[10000000000,10000000000], T2=[T2]*5+[10000000000,10000000000], gate_times=full_gate_times)
-    # noise_model = thermal_relaxation_model_per_qb(
-    #     T1=[T1]*5+[1,1], T2=[T2]*5+[1,1], gate_times=full_gate_times)
-    # noise_model = thermal_relaxation_model_per_qb(
-    #     T1=[1,1]*7, T2=[1,1]*7, gate_times=full_gate_times)
-
     # Registers
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
@@ -305,110 +300,12 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
     return []
 
 
-def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3,
-                          theta=0, phi=0, pauliop='Z'):
-    """Generates a single qubit-circuit initialized in the |1> state with
-    snapshots at given times
-
-    Args:
-        snapshot_times (dict): The times in the circuit to add snapshots.
-        T1 (float): T1 thermal relaxation, given in ns.
-        T2 (float): T2 relaxation, given in ns.
-
-    Returns:
-        circ: Qiskit circuit object of a single qubit, with snapshots at given
-              times and thermal relaxation in between.
-    """
-    qb = QuantumRegister(1, 'qubit')
-    circ = QuantumCircuit(qb)
-    circ.rx(theta, qb)
-    circ.rz(phi, qb)
-    circ.save_density_matrix(qb, label='start')
-    time_passed = 0
-    index = 0
-    for key in snapshot_times:
-
-        time_diff = snapshot_times[key]-time_passed
-        if time_diff > 0:
-            thrm_relax = thermal_relaxation_error(
-                T1, T2, time_diff).to_instruction()
-            circ.append(thrm_relax, [qb[0]])
-        if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
-            circ.save_density_matrix(qb, label='snap_'+str(index))
-        elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
-            circ.save_expectation_value(
-                Pauli(pauliop), qb, label='snap_'+str(index))
-        time_passed = snapshot_times[key]
-        index += 1
-    return circ
-
-
-def fid_single_qubit(n_cycles, n_shots, gate_times={}, snapshot_type='dm',
-                     T1=40e3, T2=60e3, theta=0, phi=0, pauliop='Z', **kwargs):
-    """Calculate the fidelity of a single qubit decay at certain times in a
-    circuit corresponding to the [[5,1,3]] code.
-
-    Args:
-        n_cycles (int): The number of corresponding stabilizer cycles. After
-                        each cycle a snapshot is performed.
-        n_shots (int): The number of runs for the circuit to measure over
-        gate_times: Can be either a dict with some gate times (in ns), or a
-                    GateTimes object. If it is a dict, gate times not included 
-                    will be added from standard gate times.
-        T1 (float): T1 thermal relaxation, given in ns, defaults to 40e3.
-        T2 (float): T2 thermal relaxation, given in ns, defaults to 60e3.
-
-    Returns:
-        fid_single (list): The fidelity after each snapshot in the circuit.
-    """
-
-    # Get gate times missing from input
-    if isinstance(gate_times, dict):
-        full_gate_times = standard_times.get_gate_times(
-            custom_gate_times=gate_times)
-    elif isinstance(gate_times, GateTimes):
-        full_gate_times = gate_times
-    else:
-        warnings.warn('Invalid gate times, assuming standard_times')
-        full_gate_times = standard_times
-
-    # Registers
-    qb = QuantumRegister(5, 'code_qubit')
-    an = AncillaRegister(2, 'ancilla_qubit')
-    cr = get_classical_register(
-        n_cycles, reset=False, recovery=False)
-    readout = ClassicalRegister(5, 'readout')
-    registers = StabilizerRegisters(qb, an, cr, readout)
-
-    # Circuits
-    circ = get_full_stabilizer_circuit(registers, n_cycles=n_cycles, reset=False,
-                                       recovery=False,
-                                       snapshot_type=snapshot_type,
-                                       conditional=False, **kwargs)
-    circ = shortest_transpile_from_distribution(circ, print_cost=False)
-    circ, time = add_idle_noise_to_circuit(circ, gate_times=full_gate_times,
-                                           return_time=True)
-
-    circ_single = get_idle_single_qubit(time, snapshot_type, T1, T2,
-                                        theta=theta, phi=phi, pauliop=pauliop)
-    results = execute(circ_single, Aer.get_backend('qasm_simulator'),
-                      noise_model=None, shots=n_shots).result()
-    fidelities = [1.0]  # The initial state
-
-    if snapshot_type == 'dm' or snapshot_type == 'density_matrix':
-        trivial = results.data()['start']
-        for i in range(len(time)-2):
-            current_state = results.data()['snap_'+str(i+1)]
-            fidelities.append(state_fidelity(current_state, trivial))
-    elif snapshot_type == 'exp' or snapshot_type == 'expectation_value':
-        for i in range(len(time)-2):
-            fidelities.append(results.data()['snap_'+str(i+1)])
-    return fidelities, time
-
 
 def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
                       idle_noise=True, theta=0., phi=0., iswap=True,
                       snapshot_type='dm', device=None, pauliop='ZZZZZ', project=False):
+    """Determines the circuit fidelity of an encoding scheme for the [[5,1,3]]
+    code."""
 
     # Get gate times missing from input
     if isinstance(gate_times, dict):
@@ -492,8 +389,6 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
 # %%
 
 # TODO: Move to be defined locally?
-
-
 def monoExp(t, T, c, A):
     return (A-c) * np.exp(-t/T) + c
 
