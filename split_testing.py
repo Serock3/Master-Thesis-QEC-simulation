@@ -30,17 +30,17 @@ from simulator_program.splitting_circuits import (add_start_to_circuit,
                                                   add_stop_to_circuit,
                                                   split_circuit)
 # Local files
-from simulator_program.stabilizers import (_unflagged_stabilizer_IXZZX,
-                                           _unflagged_stabilizer_XIXZZ,
-                                           _unflagged_stabilizer_XZZXI,
-                                           _unflagged_stabilizer_ZXIXZ,
-                                           _unflagged_stabilizer_ZZXIX,
+from simulator_program.stabilizers import (_get_stabilizer_IXZZX,
+                                           _get_stabilizer_XIXZZ,
+                                           _get_stabilizer_XZZXI,
+                                           _get_stabilizer_ZXIXZ,
+                                           _get_stabilizer_ZZXIX,
                                            get_empty_stabilizer_circuit,
                                            get_full_stabilizer_circuit,
                                            get_registers,
                                            get_repeated_stabilization,
-                                           get_weight_1_basis,
-                                           get_weight_2_basis, label_counter,
+                                           get_distance_1_basis,
+                                           get_distance_2_basis, label_counter,
                                            logical_states, syndrome_table)
 
 # %% Correction strategies
@@ -65,11 +65,11 @@ def get_partial_stab_cycle(registers=None, stabilizers=[]):
     #registers = StabilizerRegisters(qbReg, anReg, crReg, None)
     circ = get_empty_stabilizer_circuit(registers)
 
-    stabilizer_list = [_unflagged_stabilizer_XZZXI,
-                       _unflagged_stabilizer_IXZZX,
-                       _unflagged_stabilizer_XIXZZ,
-                       _unflagged_stabilizer_ZXIXZ,
-                       _unflagged_stabilizer_ZZXIX]
+    stabilizer_list = [_get_stabilizer_XZZXI,
+                       _get_stabilizer_IXZZX,
+                       _get_stabilizer_XIXZZ,
+                       _get_stabilizer_ZXIXZ,
+                       _get_stabilizer_ZZXIX]
     syn_bit_list = [registers.SyndromeRegister[n]
                     for n in range(len(stabilizers))]
 
@@ -187,8 +187,8 @@ def get_partial_recovery(registers, syndrome):
 
 # %% Iteration function
 logical = logical_states(None)
-weight_1 = get_weight_1_basis()
-weight_2 = get_weight_2_basis()
+weight_1 = get_distance_1_basis()
+weight_2 = get_distance_2_basis()
 basis = [Statevector(logical[0]), *weight_1,
          Statevector(logical[1]), *weight_2]
 basis_mapping_table = np.zeros((16, 32), dtype=int)
