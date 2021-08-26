@@ -345,6 +345,7 @@ with open('data/all_gates_test_data.npy', 'rb') as f:
 
 import matplotlib.transforms as mtransforms
 fig, ax = plt.subplots(1,2, figsize=(10, 4))
+def_colors = plt.get_cmap("tab10")
 
 # Calculate cycle times
 times_all = []

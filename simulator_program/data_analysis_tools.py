@@ -72,7 +72,11 @@ def default_execute(circ, shots=None, noise_model=None, gate_times={}, T1=40e3, 
     if results.success:
         return results
     else:
-        print('WARNING: simulator.run() failed, attempting execute instead.')
+        print('WARNING: simulator.run() failed, attempting execute instead. ' \
+              '\nExecute cannot handle delay markers (no noise applied) and will '\
+              'automatically transpile iSWAP into four CX gates. For more info, see: '\
+              '\nhttps://qiskit.org/documentation/tutorials/simulators/4_custom_gate_noise.html'
+             )
         results = execute(circ, simulator, noise_model=noise_model,shots=shots).result()
         return results
 
