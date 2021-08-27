@@ -54,16 +54,16 @@ def get_subsystem_counts_up_to_cycle(counts, cycle, hex_keys=False):
     return subsys_counts
 
 
-def get_subsystem_counts_up_to_snapshot(counts, snapshot_index, hex_keys=False):
+def get_subsystem_counts_up_to_bit(counts, bit, hex_keys=False):
     """ Does the same as get_subsystem_counts_up_to_cycle but consideres each bit
-    of the measurements indivilually instead of in groups of one cycle.
+    of the measurements individually instead of in groups of one cycle.
     """
 
     subsys_counts = {}
     for outcome in counts:
         trimmed_outcome = outcome.replace(" ", "")
         formated_outcome = int(
-            trimmed_outcome[len(trimmed_outcome)-snapshot_index:].zfill(1), 2)
+            trimmed_outcome[len(trimmed_outcome)-bit:].zfill(1), 2)
         if hex_keys:
             formated_outcome = hex(formated_outcome)
         if formated_outcome in subsys_counts:
@@ -102,7 +102,7 @@ def get_trivial_post_select_counts_V2(counts, stab_datapoints, num_snapshots):
     """
     trivial_counts = np.zeros(num_snapshots)
     # TODO: [0] refers to the trivial key. Implement support for other trivial keys?
-    counts_at_stab = np.array([get_subsystem_counts_up_to_snapshot(counts, stab)[0] for stab in range(len(stab_datapoints)+1)])
+    counts_at_stab = np.array([get_subsystem_counts_up_to_bit(counts, stab)[0] for stab in range(len(stab_datapoints)+1)])
     
     current_stab = 0
     for i in range(num_snapshots):
