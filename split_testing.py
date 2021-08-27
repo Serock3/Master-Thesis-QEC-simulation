@@ -6,6 +6,8 @@
 #   - Pre-define all circuits (with idle noise & feedback)
 #   - use .compose(circ) for add_start_to_circuit
 # %% Import modules
+from matplotlib.colors import to_rgb
+from matplotlib import colors as clrs  # TODO: Fix
 import pickle
 
 import matplotlib.pyplot as plt
@@ -185,17 +187,7 @@ weight_1 = get_distance_1_basis()
 weight_2 = get_distance_2_basis()
 basis = [Statevector(logical[0]), *weight_1,
          Statevector(logical[1]), *weight_2]
-basis_mapping_table = np.zeros((16, 32), dtype=int)
-for basis_index in range(32):
-    overlap = np.empty(16)
-    for correction in range(16):
-        state = basis[basis_index]
-        for syndrome in syndrome_table[correction]:
-            state = state.evolve(syndrome[0](), [syndrome[1]])
-        for i in range(32):
-            if state_fidelity(state, basis[i]):
-                basis_mapping_table[correction, basis_index] = i
-                break
+
 
 def branching_simulation(big_dict, rho, cycle, n_cycles, start_time, circ_std_cycle, special_recoveries):
     """Recursive function to iterate through and simulate a full syndrome tree.
@@ -398,8 +390,8 @@ initial_state = logical_states(include_ancillas=None)[0]
 # %% Running simulations
 n_cycles = 10
 n_shots = int(1024/4)
-names = ['Standard', "Repeat syndromes '0100', '1000' and '1100'", 'Repeat syndromes 0100 0110 1000 1100 1110',
-         'Repeat syndromes 0010 0100 0110 1000 1010 1100 1110', 'Upper limit']
+names = ['Standard', "Remeasure syndromes '0100', '1000' and '1100'", 'Repeat syndromes 0100 0110 1000 1100 1110',
+         "Remeasure syndromes '0010', '0100', '0110',\n '1000', '1010', '1100' and '1110'", 'Upper limit']
 # %%
 standard_res_dict = {'counts': n_shots, 'time': 0, 'fid': initial_fid}
 branching_simulation(standard_res_dict, initial_state,
@@ -431,8 +423,8 @@ pickle.dump(runs_to_print_together, open(
 runs_to_print_together = pickle.load(
     open('split_data/runs_to_print_together.dat', "rb"))
 
-runs_to_print_together = np.array(runs_to_print_together)[(0,1,4),]
-names = np.array(names)[(0,1,4),]
+runs_to_print_together = np.array(runs_to_print_together)[(0, 1,3, 4), ]
+names = np.array(names)[(0, 1,3, 4), ]
 # %% Append every shot into array
 
 
@@ -490,8 +482,27 @@ def plot_curvefit(ax, times_full, fids_full, cycles_full, color='C1'):
         idealExp, T-time_after_first_cycle, F_L, p0)
     print('P_L =', np.mean(P_L), '+-', np.std(P_L))
     x = np.linspace(time_after_first_cycle, max(times_full), 200)
-    ax.plot(x/1000, idealExp(x-time_after_first_cycle, *pars_full)*np.mean(P_L), ':', color=color, zorder=15)
-            #label=rf'Curve fit, $T_L ={pars_full[0]/1000:.1f}$ μs')
+    ax.plot(x/1000, idealExp(x-time_after_first_cycle, *pars_full)
+            * np.mean(P_L), ':', color=color, zorder=15)
+    # label=rf'Curve fit, $T_L ={pars_full[0]/1000:.1f}$ μs')
+    return pars_full, cov_full
+
+
+def plot_curvefit_V2(ax, time, fid, color='C2'):
+    def PLExp(t, T, P_L):
+        return (0.5 * np.exp(-t/T) + 0.5)*P_L
+    p0 = (40e3,0.8)  # start with values near those we expect
+
+    # Set up variabled defined outiside t = 0
+
+    time_after_first_cycle = time[1]
+    pars_full, cov_full = scipy.optimize.curve_fit(
+        PLExp, time[1:]-time_after_first_cycle, fid[1:], p0)
+
+    x = np.linspace(time_after_first_cycle, max(time), 200)
+    ax.plot(x/1000, PLExp(x-time_after_first_cycle,
+                          *pars_full), ':', color=color, zorder=15)
+    # label=rf'Curve fit, $T_L ={pars_full[0]/1000:.1f}$ μs')
     return pars_full, cov_full
 
 
@@ -513,7 +524,7 @@ def plot_by_cycle_errorbar(ax, times_full, fids_full, cycles_full, label='Groupe
                 color=color, label=label)
 
 
-def plot_by_cycle_mean(ax, times_full, fids_full, cycles_full, label='Grouped by cycle', color='C0'):
+def plot_by_cycle_mean(ax, times_full, fids_full, cycles_full, label='Grouped by cycle', color='C0', marker = 'o'):
     cycles = int(max(cycles_full)+1)
     fid_cycle = np.zeros(cycles)
     times_cycle = np.zeros(cycles)
@@ -524,29 +535,50 @@ def plot_by_cycle_mean(ax, times_full, fids_full, cycles_full, label='Grouped by
         fid_cycle[i] += np.mean(fids_full[cycles_full == i, 0])
         times_cycle[i] += np.mean(times_full[cycles_full == i])
 
-    ax.plot(times_cycle/1000, fid_cycle, 'o',
+    ax.plot(times_cycle/1000, fid_cycle, marker,
             color=color, label=label)
 
 
+# %% Load data from the script part of decoding_errors.py
+with open('data/decoding_strategies.npy', 'rb') as f:
+    time_decoding = np.load(f)
+    total_fid_lookup_list = np.load(f)
+    total_fid_lookup_last_cycle_list = np.load(f)
+    total_fid_best_single_qb_list = np.load(f)
+    total_fid_best_unitary_list = np.load(f)
 # %% Testing plots
 
+markers=['o', 'p', 's', '>', '<','D']
 
-fig, ax = plt.subplots(1, 1, figsize=(7, 5))
+fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 bins = n_cycles
 
 for i, run in enumerate(flattened_data):
     # plot_by_bins(ax, bins, *run, label=names[i], color='C'+str(i))
     pars, cov = plot_curvefit(
-        ax, *run, color='C'+str(i))#names[i]+rf', $T_L ={pars[0]/1000:.1f}$'
-    plot_by_cycle_errorbar(ax, *run, label=None, color='C'+str(i))
-    plot_by_cycle_mean(ax, *run, label=names[i]+rf', $T_L ={pars[0]/1000:.1f}$', color='C'+str(i))
+        ax, *run, color='C'+str(i))  # names[i]+rf', $T_L ={pars[0]/1000:.1f}$'
+    # plot_by_cycle_errorbar(ax, *run, label=None, color='C'+str(i))
+    plot_by_cycle_mean(
+        ax, *run, label=names[i]+rf', $T_L ={pars[0]/1000:.1f}$', color='C'+str(i), marker = markers[i])
 
 # # Old no-splitting results
 
 
 def monoExp(t, T, c, A):
     return (A-c) * np.exp(-t/T) + c
+
+i += 1
 # t = np.linspace(0, max([np.max(run[0]) for run in flattened_data]),100)
+pars, cov = plot_curvefit_V2(ax, time_decoding, total_fid_best_single_qb_list, color='C'+str(i))
+ax.plot(time_decoding/1000, total_fid_best_single_qb_list, markers[i], color='C'+str(i),
+        label=rf'Best possible correction, $T_L ={pars[0]/1000:.1f}$ μs')
+# ax.plot(time_decoding/1000, total_fid_lookup_list, 's', color='C6',
+#         label=rf'standard v2, $T_L ={0/1000:.1f}$ μs')
+i+=1
+ax.plot(time_decoding/1000, total_fid_lookup_last_cycle_list, markers[i], color='C'+str(i),
+        label=rf'Correct using only last syndrome')
+# ax.plot(time_decoding/1000, total_fid_best_unitary_list, 's', color='C8',
+#         label=rf'Best possible unitary, $T_L ={0/1000:.1f}$ μs')
 # ax.plot(t_hex/1000, fid_hex, 's', color='C5',
 #         label=rf'Hexagonal, $T_L ={pars_hex[0]/1000:.1f}$ μs')
 # ax.plot(t_hex_d/1000, fid_hex_d, 'D', color='C6',
@@ -562,7 +594,7 @@ ax.set_xlim([0.0, 36])
 ax.set_xlabel('Time [μs]')
 ax.set_ylabel(r'Fidelity $F$')
 plt.show()
-fig.savefig('repeat.pdf',transparent=True)
+fig.savefig('repeat.png', transparent=True)
 # %% Plot scatter
 fig, ax = plt.subplots(1, 1, figsize=(7, 5))
 ax.set_ylim([0.0, 1.05])
@@ -590,30 +622,33 @@ def reform_dict(big_dict):
     append_shots(big_dict, 0)
     return times, fids, cycles, counts
 
-from matplotlib.colors import to_rgb
 
 def scatter_plot(ax, times, fids, cycles, counts, label, c='b', marker='o', alpha=0.5):
     r, g, b = to_rgb(c)
     c = [(r, g, b, alpha) for alpha in np.sqrt(np.array(counts)/n_shots)]
-    ax.scatter(np.array(times)/1000, np.array(fids) 
+    ax.scatter(np.array(times)/1000, np.array(fids)
                [:, 0], label=label, s=counts, c=c, marker=marker)
-            #    [:, 0], label=label, s=np.sqrt(counts)*10, c=c, marker=marker,alpha=alpha)
+    #    [:, 0], label=label, s=np.sqrt(counts)*10, c=c, marker=marker,alpha=alpha)
+
 
 for i in range(len(runs_to_print_together)):
     pars, cov = plot_curvefit(ax, *flattened_data[i], color='C'+str(i))
-    scatter_plot(ax, *reform_dict(runs_to_print_together[i]), label = names[i]+rf' $T_L ={pars[0]/1000:.1f}$', c='C'+str(
+    scatter_plot(ax, *reform_dict(runs_to_print_together[i]), label=names[i]+rf' $T_L ={pars[0]/1000:.1f}$', c='C'+str(
         i), marker=['o', 'p', 's', '>', '<'][i])
     # plot_by_cycle_errorbar(ax, *flattened_data[i], label=names[i]+rf' $T_L ={pars[0]/1000:.1f}$', color='C'+str(i))
 
 ax.legend()
 plt.show()
-#%% Plot histograms
+# %% Plot histograms
 dataset = 0
-plt.hist(flattened_data[dataset][1][flattened_data[dataset][2]==10,0], bins= 10)
+plt.hist(flattened_data[dataset][1]
+         [flattened_data[dataset][2] == 10, 0], bins=10)
 plt.show()
 # %% Old code
 
 # Plot Many lines
+
+
 def lines_plot(ax, big_dict, times, fids, current_cycle):
     times_new_branch = times
     times_new_branch[current_cycle] = big_dict['time']
@@ -623,14 +658,14 @@ def lines_plot(ax, big_dict, times, fids, current_cycle):
     # counts_new_branch = counts
     # counts_new_branch[current_cycle] = big_dict['counts']
     if current_cycle == n_cycles-1:
-        ax.plot(times, fids, color='b', alpha=
-            np.sqrt(big_dict['counts']/n_shots),
-            linewidth=np.sqrt(big_dict['counts']))
+        ax.plot(times, fids, color='b', alpha=np.sqrt(big_dict['counts']/n_shots),
+                linewidth=np.sqrt(big_dict['counts']))
     else:
         for key in big_dict:
             if not(key == 'counts' or key == 'time' or key == 'fid'):
                 lines_plot(ax, big_dict[key], times_new_branch,
                            fids_new_branch, current_cycle + 1)
+
 
 times = [0]*n_cycles
 fids = [0]*n_cycles
@@ -640,6 +675,7 @@ dataset = 0
 fig, ax = plt.subplots(1, 1, figsize=(7, 5))
 lines_plot(ax, runs_to_print_together[dataset], times, fids, 0)
 plt.show()
+
 
 def scatter_plot_v2(ax, big_dict, c='b', marker='o'):
     ax.scatter(big_dict['time']/1000, big_dict['fid'][0],
@@ -700,7 +736,6 @@ fid_hex[1:] = fid_L_hex[1:]*np.mean(P_L_hex[1:])
 fid_hex_d[1:] = fid_L_hex_d[1:]*np.mean(P_L_hex_d[1:])
 
 # %%
-from matplotlib import colors as clrs  # TODO: Fix
 dataset = 3
 previuous_keys = []  # Post select
 state_dict = runs_to_print_together[dataset]['0x0']['0x2']
@@ -718,7 +753,7 @@ for key in state_dict:
         # Int version of the part of the key corresponding to the overlap_cycle
         key_int = int(key, 16)
         # Int version of the full key up to the current cycle
-        # TODO: Should be unecceray to cut of end? 
+        # TODO: Should be unecceray to cut of end?
         key_up_to_cycle = int(key, 16)
 
         overlap = np.zeros(33)
@@ -745,7 +780,7 @@ total_fid_best_single_qb /= total_counts
 # TODO: these don't seem to give quite the right result when conditioning
 print('Fidelity if using standard lookup table', total_fid_lookup)
 print('Fidelity if using optimal single qubit correction',
-        total_fid_best_single_qb)
+      total_fid_best_single_qb)
 
 fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 HM = ax.imshow(overlaps, interpolation='none')
@@ -759,13 +794,13 @@ ax.set_yticks(y_ticks)
 ax.set_yticklabels([bin(key)[2:].zfill(4) for key in y_ticks])
 
 plt.setp(ax.get_xticklabels(), rotation=90, ha="right",
-            rotation_mode="anchor")
+         rotation_mode="anchor")
 cbar0 = fig.colorbar(HM, ax=ax, orientation='horizontal',
-                        fraction=.06, pad=0.25)
+                     fraction=.06, pad=0.25)
 fig.suptitle(
     "Fidelity to the 32 basis states conditioned on stabilizer measurements\n red squares show where fid<0.5 (is that meaningful?)")
 ax.set_xlabel('Basis states, labeled by their eigenvalues to the stabilizers\n' +
-                r"Left: distance $\leq$ 1 from $|0\rangle$. Right: distance $\geq$ 2 from $|0\rangle$")
+              r"Left: distance $\leq$ 1 from $|0\rangle$. Right: distance $\geq$ 2 from $|0\rangle$")
 ax.set_ylabel("Simulation state\n conditioned on stabilizer measurements")
 fig.tight_layout()
 plt.show()
