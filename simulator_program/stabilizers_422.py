@@ -1,3 +1,10 @@
+""" Functions for running the [[4,2,2]] steane code, mainly on a 5qb plus-shaped
+chip. Most functions here have an equivalent one in stabilizers.py, for
+the [[5,1,3]] code, which has better documentation. The functions here are
+primarily used in 422_code_summary.ipynb, and is referred to for a rundown of the
+code.
+"""
+
 
 # Disable error which gives false positives in this file
 # pylint: disable=E1101

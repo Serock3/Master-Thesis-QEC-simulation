@@ -15,6 +15,11 @@ import numpy as np
 import warnings
 # %%
 """
+This file contains various functions for processing simulation data, mainly for
+the purpose of post-selection (removing certain runs based on measurement outcomes).
+
+To utilize this, set conditional=True and (optional) recovery=False in simulation.
+
 TODO:
 1. Make selection work for every syndrome
 1b. Return selection fraction for every syndrome

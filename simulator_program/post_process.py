@@ -14,27 +14,9 @@ else:
 from qiskit.circuit.library import XGate, ZGate
 from qiskit import QuantumCircuit, execute, Aer
 import numpy as np
-# %%
-# NOTE: Move to stabilizers.py
-# syndrome_table = [[],
-#                   [(XGate, 1)],
-#                   [(ZGate, 4)],
-#                   [(XGate, 2)],
-#                   [(ZGate, 2)],
-#                   [(ZGate, 0)],
-#                   [(XGate, 3)],
-#                   [(XGate, 2), (ZGate, 2)],
-#                   [(XGate, 0)],
-#                   [(ZGate, 3)],
-#                   [(ZGate, 1)],
-#                   [(XGate, 1), (ZGate, 1)],
-#                   [(XGate, 4)],
-#                   [(XGate, 0), (ZGate, 0)],
-#                   [(XGate, 4), (ZGate, 4)],
-#                   [(XGate, 3), (ZGate, 3)]]
 
-# Coversion of no-reset syndromes into reset equivalents
-conversion_table = [0, 3, 6, 5, 12, 15, 10, 9, 8, 11, 14, 13, 4, 7, 2, 1]
+
+
 # %% Misc functions
 
 def _get_new_syndromes(syndromes):
@@ -47,7 +29,8 @@ def _get_new_syndromes(syndromes):
     return [([0]+syndromes)[i] ^ syndromes[i]
                              for i in range(0, len(syndromes))]
 
-
+# Coversion of no-reset syndromes into reset equivalents
+conversion_table = [0, 3, 6, 5, 12, 15, 10, 9, 8, 11, 14, 13, 4, 7, 2, 1]
 def _remap_syndromes(syndromes):
     """Remaps the syndromes of no-reset onto their reset equivalence."""
     # Remap syndromes as if previous cycle always ended in |0> (Still without reset)
@@ -169,65 +152,60 @@ if __name__ == "__main__":
     from qiskit.quantum_info.states.measures import state_fidelity
     from post_select import get_trivial_post_select_den_mat, get_trivial_post_select_counts
 
+    # Simulation settings
     reset = True
     recovery = False
     n_cycles = 4
     n_shots = 1024/2
 
+    # Build a stabilizer circuit
     circ = get_full_stabilizer_circuit(n_cycles=n_cycles, reset=reset,
                                     recovery=recovery, 
                                     snapshot_type='dm',
                                     conditional=True,
                                     encoding=False, theta=0, phi=0)
-
-
-    # circ = shortest_transpile_from_distribution(circ, print_cost=False,
-    #                                             **WACQT_device_properties)
-
     circ, time = add_idle_noise_to_circuit(circ, return_time=True)
 
-
-    p1given0 = 0.1
-    p0given1 = p1given0
-    # noise_model = thermal_relaxation_model_V2(
-    #     gate_times=standard_times)  # NoiseModel()#
-    # read_error = ReadoutError([[1 - p1given0, p1given0], [p0given1, 1 - p0given1]])
-    # noise_model.add_all_qubit_readout_error(read_error, ['measure'])
+    # Run simulation
     results = default_execute(
         circ, n_shots)
 
+    # Post-process the reuslts
     correct_state = logical_states(include_ancillas=None)[0]
     fidelities_normal = get_av_fidelities(get_states_and_counts(
         results, n_cycles, post_process=False), correct_state, n_shots)
     fidelities_post_process = get_av_fidelities(get_states_and_counts(
         results, n_cycles, post_process=True), correct_state, n_shots)
 
+    # Post-select the results
     fidelities_select = [state_fidelity(post_selected_state, correct_state) for post_selected_state
                         in get_trivial_post_select_den_mat(results, n_cycles)]
     select_counts = get_trivial_post_select_counts(
         results.get_counts(), n_cycles)
 
+    # Rerun simulation with recovery=True to demonstrate active error correction
     recovery = True
-
     fidelities_QEC, times = fidelity_from_scratch(
         n_cycles, n_shots, gate_times={'feedback': 0}, encoding=False, transpile=False)
 
+    # Plotting results
     fig, axs = plt.subplots(2, figsize=(14, 10))
     ax1 = axs[0]
     ax2 = axs[1]
 
+    # Plot 1: Average fidelity as a function of # stabilizer cycles
     ax1.plot(range(n_cycles+1), fidelities_normal, 'o-', label='No processing')
     ax1.plot(range(n_cycles+1), fidelities_select, 'o-', label='Post select')
     ax1.plot(range(n_cycles+1), fidelities_post_process,
             'o-', label='Post process')
     ax1.plot(range(n_cycles+1), fidelities_QEC, 'o-', label='QEC')
     ax1.set_xlabel(r'Error detection cycle $n$')
-    ax1.set_ylabel('Post selected count')
+    ax1.set_ylabel('Average state fidelity')
 
     ax1.legend()
     ax1.grid(linewidth=1)
 
-
+    # Plot 2: The number of remaining runs with post-selection.
     ax2.plot(range(n_cycles+1), select_counts, 'o-', label='No transpilation')
     ax2.set_xlabel(r'Error detection cycle $n$')
     ax2.set_ylabel(r'Post select count')

@@ -1,5 +1,9 @@
-# Functions for running the [[7,1,3]] steane code, mainly on the 10qb chip
-# Stabi
+""" Functions for running the [[7,1,3]] steane code, mainly on a triangular
+10qb chip. Most functions here have an equivalent one in stabilizers.py, for
+the [[5,1,3]] code, which has better documentation.
+NOTE: The code in this file is not fully maintained. It should be functional but
+lacks many capabilities that stabilizers.py or stabililzers_422.py may have.
+"""
 
 # TODO: Add recovery
 # TODO: Remove dependence of having 3 ancillas

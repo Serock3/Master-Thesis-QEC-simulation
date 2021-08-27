@@ -1,5 +1,5 @@
-# Code intended to reproduce the experiment/simulation done by Delft (Logical-qubit operations in an error-detecting surface code)
-# and/or (Repeated quantum error detection in a surface code) on the distance 2 stabilizer code with post selection.
+""" Code intended to reproduce the experiment/simulation done by Delft (Logical-qubit operations in an error-detecting surface code)
+and/or (Repeated quantum error detection in a surface code) on the distance 2 stabilizer code with post selection."""
 
 # %% Import modules
 import numpy as np
