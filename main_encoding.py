@@ -1,4 +1,6 @@
-# Main file for all simulations of encoding fidelity
+"""Code in this file is used for determining encoding fidelity, with a variety
+of setups. Generates Table 4.2 
+"""
 # %% Import modules
 import numpy as np
 from qiskit import *
