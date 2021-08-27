@@ -7,7 +7,7 @@ from matplotlib import colors as clrs  # TODO: Fix
 from matplotlib import pyplot as plt
 from qiskit.quantum_info.states.measures import state_fidelity
 
-from simulator_program import post_select
+from simulator_program import post_select, post_process
 from simulator_program.data_analysis_tools import (default_simulate_persist_to_file,
                                                    check_if_saved,
                                                    print_saved_runs,
@@ -65,8 +65,8 @@ def reduce_key(key: str, current_snapshot: int, measurements_per_snapshot=1):
 
 
 def extract_syndrome(key, cycle, num_stab_gens=4):
-    """Extracts the 4-bit syndrome that would normally be used to perform correction
-    out of the key.
+    """Extracts the 4-bit string that corresponds to the syndrome of a specific cycle for the given key.
+    That is, the one that would normally be used to perform correction in the given cycle.
 
     E.g. 
     cycle = 0, num_stab_gens = 5, key = 24 = int('11000',2) -> 8 = int('1000',2)
@@ -214,18 +214,22 @@ def plot_overlap(results, times, n_cycles, idle_snapshots, generator_snapshot, t
     plt.show()
     # fig.savefig('subspace.pdf', transparent=True)
 
-def plot_correction_matrix(results, previous_keys=None, backtrack_measurement=0, check_overlap_to_distance_1=False, print_fidelity = False, include_fifth_stabilizer=False, **kwargs):
+
+def plot_correction_matrix(results, previous_keys=None, overlap_cycle=None, backtrack_measurement=0, check_overlap_to_distance_1=False, print_fidelity=False, include_fifth_stabilizer=False, **kwargs):
     if previous_keys is None:
         previous_keys = []
 
-    overlap_cycle = len(previous_keys)
+    if overlap_cycle is None:
+        overlap_cycle = len(previous_keys)
+
     num_stab_gens = 4 + include_fifth_stabilizer
     pre_recovery_index = get_cycle_indices(
-        **kwargs)[overlap_cycle]-1 - backtrack_measurement
-    counts = post_select.get_subsystem_counts_up_to_snapshot(
+        **kwargs)[overlap_cycle]-0 - backtrack_measurement
+    counts = post_select.get_subsystem_counts_up_to_bit(
         results.get_counts(), num_stab_gens*(overlap_cycle+1)-backtrack_measurement)
     label = get_snapshot_label('dm', True, pre_recovery_index)
-    num_keys = 2**(num_stab_gens*(1))  # len(results.data()[label])
+    # len(results.data()[label])
+    num_keys = 2**(num_stab_gens*(1+overlap_cycle-len(previous_keys)))
     overlaps = np.zeros((num_keys, 34))+np.infty
 
     # resulting (average) fidelity if applying the 'normal' lookup table definition
@@ -236,17 +240,20 @@ def plot_correction_matrix(results, previous_keys=None, backtrack_measurement=0,
     total_fid_best_unitary = 0
 
     for key in results.data()[label]:
-        for i in range(overlap_cycle):
+        for i in range(len(previous_keys)):
             if extract_syndrome(int(key, 16), i, num_stab_gens) != int(previous_keys[i], 2):
                 break
         else:
             # Int version of the part of the key corresponding to the overlap_cycle
-            key_int = extract_syndrome(
+            key_at_cycle = extract_syndrome(
                 int(key, 16), overlap_cycle, num_stab_gens)
             # Int version of the full key up to the current cycle
-            # TODO: Should be unecceray to cut of end?
+            # TODO: Should be unnecessary to cut of end?
             key_up_to_cycle = int(key, 16) % (
                 2**(num_stab_gens*(overlap_cycle))*2**4)
+            # TODO: write
+            key_segment = (int(key, 16) % (
+                2**(num_stab_gens*(overlap_cycle))*2**4))//2**(num_stab_gens*len(previous_keys))
             rho = results.data()[label][key]
 
             overlap = np.zeros(34)
@@ -260,10 +267,10 @@ def plot_correction_matrix(results, previous_keys=None, backtrack_measurement=0,
                         rho, [basis[j] for j in get_basis_mapping_table()[:16, i]])
                 overlap[32] = np.sum(np.linalg.eigvalsh(rho)[-16:])
             overlap[33] = counts[key_up_to_cycle]
-            overlaps[key_int, :] = overlap
+            overlaps[key_segment, :] = overlap
 
             if print_fidelity:
-                fid_lookup = overlap[key_int]
+                fid_lookup = overlap[key_at_cycle]
                 fid_best_single_qb = np.max(overlap[:32])
                 fid_best_arbitrary_gate = overlap[32]
 
@@ -279,7 +286,7 @@ def plot_correction_matrix(results, previous_keys=None, backtrack_measurement=0,
 
     total_counts = np.sum(overlaps[:, 33][overlaps[:, 33] != np.infty])
     overlaps[:, 33] /= total_counts
-    
+
     if print_fidelity:
         total_fid_lookup /= total_counts
         total_fid_best_single_qb /= total_counts
@@ -288,8 +295,9 @@ def plot_correction_matrix(results, previous_keys=None, backtrack_measurement=0,
         # TODO: these don't seem to give quite the right result when conditioning
         print('Fidelity if using standard lookup table', total_fid_lookup)
         print('Fidelity if using optimal single qubit correction',
-            total_fid_best_single_qb)
-        print('Fidelity if using optimal arbitrary unitary', total_fid_best_unitary)
+              total_fid_best_single_qb)
+        print('Fidelity if using optimal arbitrary unitary',
+              total_fid_best_unitary)
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
     aspect = 16/num_keys
@@ -320,17 +328,100 @@ def plot_correction_matrix(results, previous_keys=None, backtrack_measurement=0,
                          fraction=.06, pad=0.25)
     fig.suptitle(
         "Fidelity to the 32 basis states conditioned on stabilizer measurements\n\
-        Snapshot taken after measuring the stabilizers but before correction"\
-            +("\nPost-selecting previous syndrome(s) "+str(*previous_keys) if overlap_cycle > 0 else ""))
+        Snapshot taken after measuring the stabilizers but before correction"
+        + ("\nPost-selecting previous syndrome(s) "+str(*previous_keys) if overlap_cycle > 0 else ""))
     ax.set_xlabel('Basis states, labeled by their eigenvalues to the stabilizers\n' +
-                  r"Left: distance $\leq$ 1 from $|0\rangle$. Right: distance $\geq$ 2 from $|0\rangle$")
+                  r"Left: distance $\leq$ 1 from $|0\rangle_L$. Right: distance $\geq$ 2 from $|0\rangle_L$.")
     ax.set_ylabel("Simulation state\n conditioned on stabilizer measurements")
     fig.tight_layout()
     plt.show()
-    fig.savefig('matrix.png', transparent=True)
+
+
+def get_best_correction(results, n_cycles, backtrack_measurement=0, check_overlap_to_distance_1=False, include_fifth_stabilizer=False, **kwargs):
+
+    num_stab_gens = 4 + include_fifth_stabilizer
+
+    total_fid_lookup_list = np.empty(n_cycles+1)
+    total_fid_lookup_last_cycle_list = np.empty(n_cycles+1)
+    total_fid_best_single_qb_list = np.empty(n_cycles+1)
+    total_fid_best_unitary_list = np.empty(n_cycles+1)
+    for overlap_cycle in range(n_cycles+1):
+        pre_recovery_index = np.append([0], get_cycle_indices(n_cycles,
+                                                              **kwargs))[overlap_cycle] - backtrack_measurement
+        # counts = post_select.get_subsystem_counts_up_to_bit(
+        #     results.get_counts(), num_stab_gens*(overlap_cycle)-backtrack_measurement)
+        counts = post_select.get_subsystem_counts_up_to_cycle(
+            results.get_counts(), overlap_cycle)
+        label = get_snapshot_label('dm', True, pre_recovery_index)
+
+        basis_mapping_table = get_basis_mapping_table()
+        # resulting (average) fidelity if applying the 'normal' lookup table definition
+        total_fid_lookup = 0
+        # resulting (average) fidelity if applying the correction for the last syndrome only
+        total_fid_lookup_last_cycle = 0
+        # resulting (average) fidelity if applying the best single qubit correction
+        total_fid_best_single_qb = 0
+        # resulting (average) fidelity if applying the best arbitrary unitary
+        total_fid_best_unitary = 0
+
+        total_counts = 0
+        for key in results.data()[label]:
+            # Int version of the full key up to the current cycle
+            # TODO: Should be unnecessary to cut of end?
+            key_up_to_cycle = int(key, 16) % (
+                2**(num_stab_gens*(overlap_cycle)))
+            rho = results.data()[label][key]
+
+            overlap = np.zeros(33)
+            if check_overlap_to_distance_1 == False:
+                for i in range(32):
+                    overlap[i] = state_fidelity(basis[i], rho)
+                overlap[32] = np.linalg.eigvalsh(rho)[-1]
+            elif check_overlap_to_distance_1 == True:
+                for i in range(32):
+                    overlap[i] = overlap_with_subspace(
+                        rho, [basis[j] for j in basis_mapping_table[:16, i]])
+                overlap[32] = np.sum(np.linalg.eigvalsh(rho)[-16:])
+            total_counts += counts[key_up_to_cycle]
+
+            combined_error = 0
+            for new_syndrome in post_process.get_syndromes_den_mat(key, overlap_cycle, reset=True):
+                combined_error = basis_mapping_table[new_syndrome,
+                                                     combined_error]
+            #     print(bin(extract_syndrome(
+            #         int(key, 16), cycle, num_stab_gens)))
+            # print('Becomes',bin(key_at_cycle),'\n')
+            fid_lookup = overlap[combined_error]
+            key_at_cycle = extract_syndrome(
+                int(key, 16), overlap_cycle-1, num_stab_gens) if overlap_cycle > 0 else 0
+            fid_lookup_last_cycle = overlap[key_at_cycle]
+            fid_best_single_qb = np.max(overlap[:32])
+            fid_best_arbitrary_gate = overlap[32]
+
+            total_fid_lookup += fid_lookup*counts[key_up_to_cycle]
+            total_fid_lookup_last_cycle += fid_lookup_last_cycle * \
+                counts[key_up_to_cycle]
+            total_fid_best_single_qb += fid_best_single_qb * \
+                counts[key_up_to_cycle]
+            total_fid_best_unitary += fid_best_arbitrary_gate * \
+                counts[key_up_to_cycle]
+
+        total_fid_lookup /= total_counts
+        total_fid_lookup_last_cycle /= total_counts
+        total_fid_best_single_qb /= total_counts
+        total_fid_best_unitary /= total_counts
+
+        total_fid_lookup_list[overlap_cycle] = total_fid_lookup
+        total_fid_lookup_last_cycle_list[overlap_cycle] = total_fid_lookup_last_cycle
+        total_fid_best_single_qb_list[overlap_cycle] = total_fid_best_single_qb
+        total_fid_best_unitary_list[overlap_cycle] = total_fid_best_unitary
+        print('cycle', overlap_cycle, 'done')
+    return total_fid_lookup_list, total_fid_lookup_last_cycle_list, total_fid_best_single_qb_list, total_fid_best_unitary_list
 
 #  Plot how the 32 different basis states (labeled by syndrome plus Z_L) map onto eachother from the 16 corrections
-def plot_error_multiplication_table(plot_gradient=False):
+
+
+def plot_error_multiplication_table(different_gradient_for_each_state=False):
     # Gives every basis state it's one gradient
     mappings = get_basis_mapping_table()
     colored_mappings = np.zeros((16, 32))
@@ -342,13 +433,13 @@ def plot_error_multiplication_table(plot_gradient=False):
             elif mappings[correction, basis_index] < 16:
                 overlap[correction] = 0.5 + \
                     (mappings[correction,
-                              basis_index]-1)/30*plot_gradient
+                              basis_index]-1)/30*different_gradient_for_each_state
             elif mappings[correction, basis_index] == 16:
                 overlap[correction] = 3
             else:
                 overlap[correction] = 2.5 - \
                     (mappings[correction,
-                              basis_index]-17)/30*plot_gradient
+                              basis_index]-17)/30*different_gradient_for_each_state
             # if state_fidelity(state, logical[0]):
             #     overlap[correction] = 0
         colored_mappings[:, basis_index] = overlap
@@ -367,11 +458,11 @@ def plot_error_multiplication_table(plot_gradient=False):
              rotation_mode="anchor")
     # cbar0 = fig.colorbar(HM, ax=ax, orientation='horizontal',
     #             fraction=.06, pad=0.25)
-    fig.suptitle("Which subspace each basis gets mapped to by each correction operation\n" +
-                 r"Purple: $|0\rangle_L$"+"\nBlue: weight-1"+"\nGreen: weight-2\n"+r"Yellow: $|1\rangle_L$")
+    fig.suptitle("Which subspace each basis state gets mapped to by each correction operation\n" +
+                 r"Dark blue: $|0\rangle_L$"+"\nLight blue: distance-1"+"\nOrange: distance-2\n"+r"Red: $|1\rangle_L$")
     ax.set_xlabel('Basis states, labeled by their eigenvalues to the stabilizers\n' +
-                  r"Left: distance $\leq$ 1. Right: distance $\geq$ 2")
-    ax.set_ylabel("Correction operation, ordered by syndrome")
+                  r"Left: distance $\leq$ 1 from $|0\rangle_L$. Right: distance $\geq$ 2 from $|0\rangle_L$.")
+    ax.set_ylabel("Correction operations, ordered by syndrome")
     fig.tight_layout()
     plt.show()
 
@@ -383,17 +474,17 @@ if __name__ == '__main__':
 
     file_name = 'decoding_data/cache.dat'
     print_saved_runs(file_name)
-    # kwargs = {k:v for k,v in {('idle_delay', 'before'), ('include_barriers', True), ('include_fifth_stabilizer', False), ('n_cycles', 3), ('generator_snapshot', True), ('encoding', False), ('reset', True), ('idle_snapshots', 2), ('conditional', False), ('recovery', True), ('final_measure', False)}}
+    # kwargs = {k:v for k,v in {('reset', True), ('include_barriers', True), ('recovery', False), ('conditional', True), ('include_fifth_stabilizer', False), ('idle_snapshots', 2), ('generator_snapshot', True), ('encoding', False), ('n_cycles', 3), ('idle_delay', 'before'), ('final_measure', False)}}
 
     kwargs = {
-        'n_cycles': 2,
+        'n_cycles': 12,
         'reset': True,
         'recovery': False,
         'encoding': False,
         'conditional': True,
         'include_barriers': True,
-        'generator_snapshot': True,
-        'idle_snapshots': 2,
+        'generator_snapshot': False,
+        'idle_snapshots': 0,
         'final_measure': False,
         'idle_delay': 'before',
         'include_fifth_stabilizer': False}
@@ -406,7 +497,7 @@ if __name__ == '__main__':
     gate_times = standard_times  # .get_gate_times({'feedback':0})
     # gate_times = GateTimes(0, 0, {'delay': 3310})
 
-    n_shots = 1024/2
+    n_shots = 1024*4
 
     print('Is a run with these settings saved?', check_if_saved(
         kwargs, T1, T2, gate_times, file_name=file_name))
@@ -417,20 +508,31 @@ if __name__ == '__main__':
     overwrite = False
 
     results, times = default_simulate_persist_to_file(
-        kwargs, T1, T2, gate_times, file_name=file_name, overwrite=overwrite, save_to_file=save_to_file)
+        kwargs, T1, T2, gate_times, n_shots, file_name=file_name, overwrite=overwrite, save_to_file=save_to_file)
+    time = np.empty(kwargs['n_cycles']+1)
+    for cycle, snap_index in enumerate(np.append([0], get_cycle_indices(**kwargs))):
+        time[cycle] = times[get_snapshot_label('dm', True, snap_index)]
 
     plot_overlap(results, times, **kwargs)
 
-    previous_keys = ['0100']  # Post select
+    previous_keys = []  # Post select
     backtrack_measurement = 0
     # If this is enabled, check the overlap to the distance <= 1 subspace instead of just |0_L>
     check_overlap_to_distance_1 = False
-
+    overlap_cycle = None
     if kwargs['conditional']:
         plot_correction_matrix(
-            results, previous_keys, backtrack_measurement, check_overlap_to_distance_1, **kwargs)
+            results, previous_keys, overlap_cycle, backtrack_measurement, check_overlap_to_distance_1, print_fidelity=True, **kwargs)
+        total_fid_lookup_list, total_fid_lookup_last_cycle_list, total_fid_best_single_qb_list, total_fid_best_unitary_list = get_best_correction(
+            results, **kwargs)
+        with open('data/decoding_strategies.npy', 'wb') as f:
+            np.save(f, time)
+            np.save(f, total_fid_lookup_list)
+            np.save(f, total_fid_lookup_last_cycle_list)
+            np.save(f, total_fid_best_single_qb_list)
+            np.save(f, total_fid_best_unitary_list)
     else:
-        print('NO CONDITIONAL!')
+        print('Not conditional')
 
     # %% Look at the proportion of states that get projected to |0>_L from w1 and to |1>_L from w2, are they the same?
     conditional = True if 'dm_con_0' in results.data() else False
@@ -471,5 +573,6 @@ if __name__ == '__main__':
             print('')
         print('Given no decoding errors these should be equal')
 
-    plot_error_multiplication_table(plot_gradient=False)
+    plot_error_multiplication_table(different_gradient_for_each_state=False)
+
 # %%
