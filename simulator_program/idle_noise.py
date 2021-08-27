@@ -5,22 +5,11 @@ circuit times.
 from qiskit import QuantumCircuit
 from qiskit.providers.aer.noise import thermal_relaxation_error
 from qiskit.converters import circuit_to_dag
-import numpy as np
-import warnings
 
 if __package__:
-    from .stabilizers import (encode_input_v2,
-                              get_empty_stabilizer_circuit)
-    from . import custom_transpiler
-    from .custom_noise_models import (WACQT_gate_times, 
-                                      GateTimes, 
-                                      standard_times,
-                                      extend_standard_gate_times)
+    from .custom_noise_models import (extend_standard_gate_times)
 else:
-    from stabilizers import (encode_input_v2,
-                             get_empty_stabilizer_circuit)
-    import custom_transpiler
-    from custom_noise_models import WACQT_gate_times, GateTimes, standard_times, extend_standard_gate_times
+    from custom_noise_models import extend_standard_gate_times
 # %%
 
 
