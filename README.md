@@ -18,6 +18,12 @@ The main question we investigate is how to best measure our stabilizers and deco
 This problem is (to an extent) limited to a seven-qubit device with triangular connectivity. 
 To run the [[5,1,3]] code, the stabilizers must then be measured in series. Errors are then likely to occur between these measurements, and the syndromes may be incorrect.
 
+
+## Project Status
+**WIP**
+For a thourough rundown of the results and underlying theory of this project, refer to the thesis report [1]. 
+
+
 ## How to use
 All code is written in Python (or Jupyter Notebooks), and simulations are based on the Qiskit module by IBM (see [2] for installation). 
 Here, we will not go into detail how to use Qiskit, nor the principles of quantum computing and QEC.
@@ -67,13 +73,6 @@ Data files used for later runs of so-called 'splitting circuits'. Results of thi
 
 ### /trash
 Old files which are unused, rewritted, or deprecated. These scripts are not necessarily runnable as the code is not maintained. Additionally, their import statements still assume they are placed in the main folder.
-
-
-
-## Project Status
-**WIP**
-For a thourough rundown of the results and underlying theory of this project, refer to the thesis report [1]. 
-
 
 ## Sources
 [1] Masters thesis report: https://hdl.handle.net/20.500.12380/302690
