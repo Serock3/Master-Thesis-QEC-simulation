@@ -1,15 +1,10 @@
-# This file is meant as the final version of most functions from
-# 'plotting_expval.py', in order to separate different parts and make the code
-# more readable.
-
+"""This file contains a variety of tools for running a variety of simulations and
+analyzing the results."""
 # %% Import modules
 import warnings
-#import seaborn as sns
-#import matplotlib.pyplot as plt
 import pickle
 import numpy as np
 from qiskit import Aer, execute, QuantumCircuit, QuantumRegister, AncillaRegister, ClassicalRegister
-#from qiskit.visualization import plot_histogram
 
 # Import from Qiskit Aer noise module
 from qiskit.providers.aer.noise import thermal_relaxation_error
@@ -154,45 +149,74 @@ def fidelity_from_scratch(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                           snapshot_type='dm', device=None, device_properties=None,
                           encoding=True, theta=0, phi=0, pauliop='ZZZZZ', simulator_type='density_matrix',
                           project=False, generator_snapshot=False, idle_snapshots=0, **kwargs):
-    """TODO: Update this description
-
-    Get the fidelity of a certain setup/configuration from only its
+    """Get the fidelity of a certain setup/configuration from only its
     parameters.
 
     Args:
         n_cycles (int): The number of stabilizer cycles to be performed.
-        noise_model: The noise model to be used for simulations. If no noise is
-                     to be present, use noise_model=None.
-        n_shots (int): The number of runs of the circuit.
-        gate_times: Can be either a dict with some gate times (in ns), or a
-                    GateTimes object. If it is a dict, gate times not included 
-                    will be added from standard gate times.
+        n_shots (int): The number of runs of the stabilizer circuit.
+        gate_times (dict): The gate times for a circuit, used for thermal relaxation
+                           noise. If left empty or partially filled, remaining
+                           gate times default to standard_times. Can also be given
+                           as a GateTimes object.
+        T1 (float): T1 thermal relaxation parameter, given in ns. Defaults to 40e3.
+        T2 (float): T2 thermal relaxation parameter, given in ns. Defaults to 60e3.
         reset (bool): Whether or not to reset ancilla between measurements.
-                      defaults to True if left empty.
-        recovery (bool): Whether or not to perform error correction after each
-                         stabilizer cycle. Defaults to true if left empty.
-        post_select (bool): Whether or not to use post-selection after runs,
-                            discarding runs which gave a -1 eigenvalue from 
-                            stabilizers. Note that this will not be performed if
-                            recovery=True. Defaults to False if left empty.
-        post_process (bool): Whether or not to post_process the results after
-                             runs, "correcting" errors as it would have been
-                             done with recovery. Note that this will not be 
-                             performed if recovery or post_select are set to 
-                             True. Defaults to False if left empty.
+                      defaults to True.
+        data_process_type (str): How to process the results from simulation. Valid
+                                 options are 'recovery' (Standard QEC), 'post_select',
+                                 and 'post_process'.
         idle_noise (bool): Whether or not to add noise to idle qubits. This
-                           assumes thermal relaxation with T1=40e3 and T2=60e3. 
-                           Defaults to True if left empty.
-        empty_circuit (bool): Whether to create an empty circuit instead,
-                              essentially only containing the encoding and
-                              snapshots at times matching that of a 'normal'
-                              stabilizer circuit with given gate times. Defaults
-                              to False if left empty.
-
+                           assumes thermal relaxation. Defaults to True.
+        transpile (bool): Whether to transpile the circuit to fit a specific
+                          connectivity and gate set. Specific device properties
+                          can be set with other args, otherwise if follows the
+                          hexagonal layout. Defaults to True.
+        snapshot_type (str): The type of snapshots to save of the qubit state at
+                             certain points in the cycle. Valid options are
+                             'density_matrix' ('dm'), 'expectation_value ('exp')
+                             or 'expectation_value_variance' ('exp_var'). For
+                             the latter two, the operator to measure expectation
+                             value for must be specified using the keyword 
+                             pauliop. Defaults to 'density_matrix'.
+        device: Whether to conform the circuit to a specific device layout. 
+                Available options are None or 'double_diamond'. If set to None,
+                it will assume full connectivity. Note that this can also be
+                taken care of through transpilation. But specifying a device
+                here might help with specific circuits. Defaults to None.
+        device_properties: Connectivity and gate set to transpile circuit to.
+        encoding (bool): Whether to perform the encoding of qubits at the start.
+                         If set to False, the logical state will instead be
+                         perfectly initialized.
+        theta (float): Zenith angle of the qubit state. Defaults to 0.
+        phi (float): Azimuthal angle of the qubit state. Defaults to 0.
+        pauliop (str): Five character string corresponding to the five-qubit
+                       expectation value to measure (if snapshot_type is set to
+                       expectation value or expectation value variance).
+                       Defaults to 'ZZZZZ'.
+        simulator_type (str): The type of simulation to run. Can be either
+                              'statevector' or 'density_matrix'. Defaults to
+                              'density_matrix'.
+        project (bool): Whether to project the density matrix to the code space
+                        when analyzing the results. This will split the fidelity
+                        into two parameters: The logical fidelity F_L and the
+                        probability of being in the code space P_L. Fidelity
+                        can then be calculated as F = F_L * P_L. Defaults to False.
+        generator_snapshot (bool): Whether to append a snapshot after each
+                                   stabilizer measurement. If set to False, it
+                                   will only take snapshots after each cycle.
+        idle_snapshots (int): The number of snapshots to append during an
+                              (optional) delay time between cycles. Default to 0.
+                       
     Returns:
-        fid (list): The average fidelity after each stabilizer cycle.
+        fid (list): The average fidelity after each stabilizer cycle. If project=True,
+                    this is instead the logical fidelity.
+        P_L (list, optional): The probability of being in the code space. Only
+                              returned if project=True.
         select_counts (list, optional): The remaining runs after each cycle,
-            only returned if using post_select=True.
+            only returned if using data_process_type='post_select'.
+        time (dict): Contains the time of each snapshot in the circuit. Keys
+                     correspond to the label of its snapshot.
     """
 
     full_gate_times = extend_standard_gate_times(gate_times)
@@ -397,19 +421,31 @@ def encoding_fidelity(n_shots, gate_times={}, T1=40e3, T2=60e3,
     # P_L = np.trace(state@I_L)
     return fidelities, circ, time['end']
 
-# %%
-
-# TODO: Move to be defined locally?
-def monoExp(t, T, c, A):
-    return (A-c) * np.exp(-t/T) + c
 
 
 def perfect_stab_circuit(n_cycles, n_shots, gate_times={}, T1=40e3, T2=60e3,
                          reset=True, data_process_type='recovery', snapshot_type='dm',
                          theta=0, phi=0, pauliop='ZZZZZ', include_barriers=True,
                          project=False):
-    """TODO: Fix docstring
+    """Calculates the fidelity for a circuit using so-called perfect stabilizers.
+    In practice, this corresponds to moving all noise in a cycle to an idle time
+    before, followed by perfectly measuring them. This always gives the correct
+    syndrome, and can be seen as an (unreachable) upper limit of the circuit.
+
+    Args:
+        See fidelity_from_scratch for detailed docstring.
+
+    Returns:
+        fid (list): The average fidelity after each stabilizer cycle. If project=True,
+                    this is instead the logical fidelity.
+        P_L (list, optional): The probability of being in the code space. Only
+                              returned if project=True.
+        select_counts (list, optional): The remaining runs after each cycle,
+            only returned if using data_process_type='post_select'.
+        time (dict): Contains the time of each snapshot in the circuit. Keys
+                     correspond to the label of its snapshot.  
     """
+
     # Get gate times missing from input
     if isinstance(gate_times, dict):
         full_gate_times = standard_times.get_gate_times(
@@ -630,4 +666,3 @@ def overlap_with_subspace(rho, basis):
     for basis_vector in basis:
         P += state_fidelity(rho, basis_vector)
     return P
-# %%

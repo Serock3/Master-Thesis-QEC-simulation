@@ -1,3 +1,7 @@
+"""Contains the necessary functions to transpile a circuit to a given connectivity
+and gate set, as well as the properties for such devices.
+"""
+
 #%%
 from qiskit.compiler import transpile
 from qiskit.transpiler import PassManager, CouplingMap, Layout
@@ -13,8 +17,12 @@ import warnings
 
 #%% Device transpiling properties
 
-# WACQT 7 qb
-basis_gates = ['id', 'u1', 'u2', 'u3', 'iswap', 'cz']
+# Set of basis gates us in all transpilations here
+basis_gates = ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy', 'iswap', 'cz',
+    'save_expval', 'save_density_matrix', 'set_density_matrix', 'save_expval_var',
+    'unitary', 'split']
+
+# WACQT 7-qb hexagonal chip
 couplinglist = [[0, 1], [0, 6], [1, 6], [2, 3],
                 [2, 6], [3, 6], [4, 5], [4, 6], [5, 6]]
 reverse_couplinglist = [[y, x] for [x, y] in couplinglist]
@@ -22,18 +30,11 @@ coupling_map = CouplingMap(
     couplinglist=couplinglist+reverse_couplinglist,
     description='A hexagonal 7qb code with two ancillas')
 
-# Dict with device properties of the WACQT QC to be used for transpilation.
-WACQT_device_properties_old = {
-    "basis_gates": basis_gates, "coupling_map": coupling_map}
-
-# WACQT 7 qb UPDATED BASIS
-basis_gates = ['id', 'u1', 'x', 'y', 'z', 'sx', 'sy', 'iswap', 'cz',
-    'save_expval', 'save_density_matrix', 'set_density_matrix', 'save_expval_var',
-    'unitary', 'split']
+# Dict with device properties of the hexagonal chip for transpilation.
 WACQT_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map}
 
-# Diamond 7 qb
+# Diamond 7 qb chip (Shaped as an '8' or two squares/diamonds) 
 diamond_couplinglist = [[0, 2], [0, 3], [1, 3], [1, 4], [2, 5], [3, 5],
                         [3, 6], [4, 6]]
 reverse_diamond_couplinglist = [[y, x] for [x, y] in diamond_couplinglist]
@@ -45,7 +46,7 @@ diamond_coupling_map = CouplingMap(
 diamond_device_properties = {
     "basis_gates": basis_gates, "coupling_map": diamond_coupling_map}
 
-# Triangle 10 qb
+# Triangular 10 qb chip. Useful for [[7,1,3]] code, but difficult to realize experimentally
 couplinglist_triangle = [[0, 4], [0, 1], [1, 4], [1, 5], [1, 2], [2, 5], [2, 6], [2, 3],
                          [3, 6], [4, 7], [4, 5], [5, 7], [5, 8], [5, 6], [6, 8], [7, 8], [7, 9], [8, 9]]
 reverse_triangle_couplinglist = [[y, x] for [x, y] in couplinglist_triangle]
@@ -57,7 +58,7 @@ coupling_map_triangle = CouplingMap(
 triangle_device_properties = {
     "basis_gates": basis_gates, "coupling_map": coupling_map_triangle}
 
-# Cross-shape 5 qb
+# Cross-shape 5 qb chip, used for the [[4,2,2]] code.
 cross_couplinglist = [[0, 4], [1, 4], [2, 4], [3, 4]]
 reverse_cross_couplinglist = [[y, x] for [x, y] in cross_couplinglist]
 cross_coupling_map = CouplingMap(
@@ -123,7 +124,7 @@ def shortest_transpile_from_distribution(circuit,
 def _add_custom_device_equivalences():
     """ Adds custom gate equivalences to the SessionEquivalenceLibrary for transpilation. 
     Is run automatically on running file.
-    NOTE: One needs to be run once!
+    NOTE: Only needs to be run once!
     """
     print('Adding custom device equivalences')
     q = QuantumRegister(2, 'q')

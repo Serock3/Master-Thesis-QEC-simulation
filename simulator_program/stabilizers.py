@@ -1,5 +1,6 @@
 """This file contains functions for building the circuits necessary for running
-the [[5,1,3]] QEC code.
+the [[5,1,3]] QEC code. The main function here is get_full_stabilizer_circuit,
+and a majority of other functions are accessed by it.
 """
 
 # %% Import modules
@@ -261,8 +262,6 @@ def get_repeated_stabilization(registers, n_cycles=1, reset=True, recovery=False
     return circ
 
 # Mutable int object to serve as a global counter for the snapshot labels
-
-
 class Int(object):
     def __init__(self, value):
         self.value = value
@@ -279,7 +278,6 @@ class Int(object):
 
 
 label_counter = Int(0)
-
 # Here, I utilize a quirk of how standard args in functions work.
 # The same 'label_counter' will be used for every call of the function,
 # even if it is modified. This only works for mutable objects so
@@ -910,7 +908,9 @@ def get_stabilizer_cycle(registers, reset=True, recovery=False,
 
         if include_barriers and not snapshot:
             circ.barrier()
-    # Add an extra measurement to the next syndrome register
+
+    # Add an extra measurement to the next syndrome register. Only needed if
+    # ancilla is not reset between cycles (by default it DOES reset)
     # TODO: Make this compatible with using more than 1 ancilla
     if recovery and not reset:
         if current_cycle < len(registers.SyndromeRegister)-1:
@@ -1112,8 +1112,6 @@ def _get_stabilizer_ZXIXZ(registers, anQb=None, syn_bit=None, reset=True):
     return circ
 
 # NOTE: This is the fifth (superfluous) stabilizer generator that is not normally used
-
-
 def _get_stabilizer_ZZXIX(registers, anQb=None, syn_bit=None, reset=True):
     """Gives the circuit for running the regular ZXIXZ stabilizer.
     """
@@ -1552,7 +1550,7 @@ def get_recovery(registers, reset=True, current_cycle=0):
     clReg = registers.SyndromeRegister
     circ = get_empty_stabilizer_circuit(registers)
 
-    # Unpack registers
+    # Select the correct syndrome register
     if isinstance(clReg, list):
         syndrome_reg = clReg[current_cycle]
     else:
@@ -1641,7 +1639,8 @@ if __name__ == "__main__":
         'generator_snapshot': True,
         'idle_snapshots': 1,
         'final_measure': True}
-    # Define our registers (Maybe to be written as function?)
+
+    # Define our registers
     qb = QuantumRegister(5, 'code_qubit')
     an = AncillaRegister(2, 'ancilla_qubit')
     cr = ClassicalRegister(4, 'syndrome_bit')  # The typical register

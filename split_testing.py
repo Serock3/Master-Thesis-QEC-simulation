@@ -1,3 +1,9 @@
+"""This script runs simulations with 'pausing' a circuit after each stabilizer cycle,
+which allows for more advanced QEC schemes to be implemented as real-time error correction.
+Currently it has a few methods implemented, centered around rerunning a set of stabilizers
+if their outcome is uncertain. For more details on the topic, see decoding_errors.ipynb
+"""
+
 # Disable pylinter giving false positives of error.
 # pylint: disable=E1101
 #

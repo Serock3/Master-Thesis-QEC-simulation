@@ -1,3 +1,7 @@
+"""File containing functions for building different noise models to be applied
+in simulations. For an introduction to noise in Qiskit, see
+https://qiskit.org/documentation/tutorials/simulators/3_building_noise_models.html
+"""
 # %%
 # Import from Qiskit Aer noise module
 from qiskit.providers.aer.noise import (
@@ -90,7 +94,8 @@ class GateTimes:
         return "GateTimes object with times (ns)\n" + self.gate_times.__str__()
 
 
-# TODO: Here we can define e.g. WACQT_targeted_gate_times, and other versions
+# Some various setups of different gate times. In practice, Z-gate (or U1) is
+# instant as it can be embedded into adjacent gates as an added phase.
 WACQT_gate_times = GateTimes(
     single_qubit_default=20, two_qubit_default=200,
     custom_gate_times={'u1': 0, 'z': 0, 'measure': 500})
@@ -98,10 +103,6 @@ WACQT_gate_times = GateTimes(
 WACQT_target_times = GateTimes(
     single_qubit_default=20, two_qubit_default=100,
     custom_gate_times={'u1': 0, 'z': 0, 'measure': 300})
-
-WACQT_demonstrated_times = GateTimes(
-    single_qubit_default=20, two_qubit_default=300,
-    custom_gate_times={'u1': 0, 'z': 0, 'measure': 2300})
 
 standard_times = GateTimes(
     single_qubit_default=20, two_qubit_default=100,
@@ -284,7 +285,7 @@ def thermal_relaxation_model_per_qb(T1, T2, gate_times=WACQT_gate_times):
     return noise_damping
 
 def pauli_noise_model(p_gate1=0.0, p_meas=0.0, p_reset=0.0):
-    '''Testing around with some Bit-flip noise'''
+    """Testing around with some Bit-flip noise"""
 
     # QuantumError objects
     error_reset = pauli_error([('X', p_reset), ('I', 1 - p_reset)])
@@ -306,8 +307,10 @@ def pauli_noise_model(p_gate1=0.0, p_meas=0.0, p_reset=0.0):
 def phase_amplitude_model(T1=40e3, T2=60e3, t_single=15, t_cz=300,
                           t_measure=1000, t_reset=1000):
     """Noise model for amplitude and phase damping. All times are given
-    in nanoseconds (ns).
+    in nanoseconds (ns) This is equivalent to the thermal_relaxation model.
     """
+    warnings.warn('DEPRECATED, use thermal_relaxation_model_V2 instead', DeprecationWarning)
+    
     # TODO: Add accurate times for reset/measurement. Current ones use
     #       example from qiskit
 
@@ -342,8 +345,3 @@ def phase_amplitude_model(T1=40e3, T2=60e3, t_single=15, t_cz=300,
 
     return noise_damping
 
-# Check this link for reference
-# https://qiskit.org/documentation/tutorials/simulators/3_building_noise_models.html
-
-
-# %%

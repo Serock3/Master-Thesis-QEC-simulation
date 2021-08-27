@@ -1,5 +1,6 @@
-# This file creates circuits for simulating decays for encoded and single qubits
-
+""" This file creates circuits for simulating decays for encoded and single qubits.
+Functions are mainly used in active_qec.ipynb and 422_code_summary.ipynb
+"""
 #%% Imports
 import numpy as np
 from simulator_program.data_analysis_tools import fidelity_from_scratch
@@ -54,6 +55,11 @@ def get_idle_single_qubit(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3,
 
 def get_idle_encoded_513(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3,
                          theta=0, phi=0, pauliop='ZZZZZ'):
+    """Initializes a logical qubit in the desired state and lets it decay under
+    thermal relaxation noise. Takes snapshots of the density matrix (or an
+    expectation value) at specified times.
+    """
+    
     logical_0, logical_1 = logical_states(include_ancillas=None)
     circ = QuantumCircuit(5)
     initial_state = np.cos(theta/2)*logical_0 + \
@@ -80,6 +86,11 @@ def get_idle_encoded_513(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3,
 
 def get_idle_encoded_422(snapshot_times, snapshot_type='dm', T1=40e3, T2=60e3,
                          initial_state=[1., 0., 0., 0.], pauliop='ZZZZZ'):
+    """Initializes a logical qubit in the desired state and lets it decay under
+    thermal relaxation noise. Takes snapshots of the density matrix (or an
+    expectation value) at specified times.
+    """
+
     circ = QuantumCircuit(4)
     initial_state = get_encoded_state_422(initial_state, include_ancillas=None)
     circ.set_density_matrix(initial_state)
