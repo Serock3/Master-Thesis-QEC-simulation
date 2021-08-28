@@ -1,11 +1,10 @@
 # Master_thesis_QEC_simulation
 Authors: Alexander Andersson and Sebastian Holmin
-This repository contains the code for simulating quantum error correction (QEC), primarily for the [[5,1,3]] QEC code, using IBM's Qiskit.
+This repository contains the code for simulating quantum error correction (QEC), primarily for the [[5,1,3]] code, using IBM's Qiskit.
 The project was in the form of a Masters thesis [1] as well as a six-week continuation of the project.
 
 ## Introduction
-Quantum computers are much more noisy than their classical counterparts. To preserve any quantum information, quantum error correction must then actively be performed.
-This is done by encode a single *logical* qubit into many *physical* qubits, creating redundant information. 
+Quantum computers are much more noisy than their classical counterparts. To realize the many proposed quantum algorithms believed to grant substantial speedups this noise has to be surpressed through quantum error correction. This is done by encoding the information of *logical* qubits into a larger amount of *physical* qubits, creating redundant information. 
 These physical qubits can then be measured through an extra *ancillary* qubit through so-called *stabilizers*, which detects whether an error has occured.
 Given these measurements a correction can then be applied to recover the initial state.
 There exists a large variety of stabilizer codes, the one mainly explored in this project is the [[5,1,3]] code.
