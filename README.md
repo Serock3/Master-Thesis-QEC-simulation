@@ -4,30 +4,26 @@ This repository contains the code for simulating quantum error correction (QEC),
 The project was in the form of a Masters thesis [1] as well as a six-week continuation of the project.
 
 ## Introduction
-Quantum computers are much more noisy than their classical counterparts. To realize the many proposed quantum algorithms believed to grant substantial speedups this noise has to be surpressed through quantum error correction. This is done by encoding the information of *logical* qubits into a larger amount of *physical* qubits, creating redundant information. 
-These physical qubits can then be measured through an extra *ancillary* qubit through so-called *stabilizers*, which detects whether an error has occured.
-Given these measurements a correction can then be applied to recover the initial state.
+Quantum computers are much more noisy than their classical counterparts. To realize the many proposed quantum algorithms believed to grant substantial speedups, this noise has to be suppressed through quantum error correction. This is done by encoding the information of *logical* qubits into a larger amount of *physical* qubits, creating redundant information. 
+By entangling the physical qubits with extra *ancillary* ones, so-called *stabilizers* observables can be measured without affecting the logical qubit.
+The measurement results give information about any error that has occurred, which can be used to apply a correction procedure mapping the qubits back to their initial state.
 There exists a large variety of stabilizer codes, the one mainly explored in this project is the [[5,1,3]] code.
-It is the smallest code which can detect *any* single qubit error. But if two or more occur, the information is lost.
+It is the smallest code which can correct *any* single qubit error. But if two or more occur, the errors cannot be uniquely identified.
 
-The problem at hand is that all these operations are themselves noisy.
-Errors occur during measurements giving us the wrong information or by the time all measurements are finished, a new error could occur.
-The main question we investigate is how to best measure our stabilizers and decode their syndrome, given as a bit-string (i.e. 10101000) to preserve the quantum information as long as possible.
-
-This problem is (to an extent) limited to a seven-qubit device with triangular connectivity. 
-To run the [[5,1,3]] code, the stabilizers must then be measured in series. Errors are then likely to occur between these measurements, and the syndromes may be incorrect.
+The problem at hand is that the error correction is itself noisy, and will only produce an overall net reduction in errors if the substituent physical qubits are stable enough. 
+This project is (mainly) limited to a device with seven-qubits laid out in an hexagonal pattern with triangular gate connectivity. This graph is well suited for the [[5,1,3]] code as the center qubit has connectivity with every other qubit. Every stabilizer requires the ancillary qubit to be entangled with four data qubits. Thus, to realize the [[5,1,3]] code, we measure the stabilizers in a series, reusing the center qubit as the ancilla each time. Errors are then likely to occur between the stabilizers, and the syndromes may be incorrect.
 
 
 ## Project Status
 **WIP**
-For a thourough rundown of the results and underlying theory of this project, refer to the thesis report [1]. 
+For a thorough rundown of the results and underlying theory of this project, refer to the thesis report [1]. 
 
 
 ## How to use
 All code is written in Python (or Jupyter Notebooks), and simulations are based on the Qiskit module by IBM (see [2] for installation). 
 Here, we will not go into detail how to use Qiskit, nor the principles of quantum computing and QEC.
 For an introduction of Qiskit, refer to their excellent tutorials[2].
-On the topic of quantum computing, the relevant theory is summarized in [1], for more robust litterature on the topic, refer to 'Quantum Computation and Quantum Information' by M. A. Nielsen and I. L. Chuang [3]
+On the topic of quantum computing, the relevant theory is summarized in [1], for more robust literature on the topic, refer to 'Quantum Computation and Quantum Information' by M. A. Nielsen and I. L. Chuang [3]
 
 To get started with this repository, it is recommended to start through one of the notebooks, and work your way into its dependencies/imports and their use there.
 A couple of examples of where to start could be:
@@ -36,7 +32,7 @@ A couple of examples of where to start could be:
 - *decoding_errors.ipynb* describes the topics mostly worked on after the report, and can be used to get into the unanswered or most relevant questions in this project.
 
 The code is primarily centered around the [[5,1,3]] QEC code and its primary functions can be divided into three parts:
-1. **Building the circuits.** This includes constructing specific circuits, both to contain all neccessary gates and instructions, but also to compile it to a specific layout 
+1. **Building the circuits.** This includes constructing specific circuits, both to contain all necessary gates and instructions, but also to compile it to a specific layout 
 (i.e. not all qubits can interact with each other.)
 This functionality is generally contained within the following files:
 * simulator_program/stabilizers.py - Functions to create a stabilizer circuit, including encoding of the state and snapshots of intermediate results.
@@ -71,7 +67,7 @@ Contains general functions used across different script files. These should not 
 Data files used for later runs of so-called 'splitting circuits'. Results of this data can be seen in split_testing.py or decoding_errors.ipynb.
 
 ### /trash
-Old files which are unused, rewritted, or deprecated. These scripts are not necessarily runnable as the code is not maintained. Additionally, their import statements still assume they are placed in the main folder.
+Old files which are unused, rewritten, or deprecated. These scripts are not necessarily runnable as the code is not maintained. Additionally, their import statements still assume they are placed in the main folder.
 
 ## Sources
 [1] Masters thesis report: https://hdl.handle.net/20.500.12380/302690
