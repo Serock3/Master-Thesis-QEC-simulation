@@ -1,0 +1,3 @@
+[submodule "surface_code"]
+	path = surface_code
+	url = https://github.com/shraggy/qiskit_surface_codes-1
